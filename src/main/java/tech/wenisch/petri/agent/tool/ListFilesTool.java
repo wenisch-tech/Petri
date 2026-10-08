@@ -13,9 +13,11 @@ public class ListFilesTool implements AgentTool {
       "List files and directories below a relative worktree path without reading Git metadata.",
       ToolSchemas.object(
           Map.of(
-              "path", ToolSchemas.string("Relative directory path; defaults to the worktree root."),
-              "maxDepth", ToolSchemas.integer("Maximum traversal depth.", 1, 20)),
-          List.of()));
+              "path", ToolSchemas.nullableString(
+                  "Relative directory path; null selects the worktree root."),
+              "maxDepth", ToolSchemas.nullableInteger(
+                  "Maximum traversal depth; null selects the default.", 1, 20)),
+          List.of("path", "maxDepth")));
 
   private final WorktreeLocator worktrees;
   private final WorkspaceFileService files;

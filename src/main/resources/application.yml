@@ -40,3 +40,8 @@ petri:
     max-search-results: ${PETRI_MAX_SEARCH_RESULTS:200}
     test-command-timeout: ${PETRI_TEST_COMMAND_TIMEOUT:10m}
     max-test-output-bytes: ${PETRI_MAX_TEST_OUTPUT_BYTES:2000000}
+  agent:
+    open-ai-base-url: ${PETRI_OPENAI_BASE_URL:https://api.openai.com/v1}
+    model-request-timeout: ${PETRI_MODEL_REQUEST_TIMEOUT:2m}
+    max-model-response-bytes: ${PETRI_MAX_MODEL_RESPONSE_BYTES:2000000}
+    max-output-tokens: ${PETRI_MODEL_MAX_OUTPUT_TOKENS:4096}

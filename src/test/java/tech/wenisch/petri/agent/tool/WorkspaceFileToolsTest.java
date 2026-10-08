@@ -43,7 +43,8 @@ class WorkspaceFileToolsTest {
             4096,
             2,
             null,
-            null));
+            null),
+        null);
     WorkspaceFileService files = new WorkspaceFileService(properties);
     WorktreeLocator locator = ignored -> worktree;
     registry = new AgentToolRegistry(List.of(
@@ -118,9 +119,17 @@ class WorkspaceFileToolsTest {
     assertThat(registry.definitions()).extracting(ToolDefinition::name)
         .containsExactly("list_files", "read_file", "search_files");
     assertThat(registry.definitions())
-        .allSatisfy(definition -> assertThat(definition.inputSchema())
-            .containsEntry("type", "object")
-            .containsEntry("additionalProperties", false));
+        .allSatisfy(definition -> {
+          assertThat(definition.inputSchema())
+              .containsEntry("type", "object")
+              .containsEntry("additionalProperties", false);
+          @SuppressWarnings("unchecked")
+          Map<String, Object> properties =
+              (Map<String, Object>) definition.inputSchema().get("properties");
+          @SuppressWarnings("unchecked")
+          List<String> required = (List<String>) definition.inputSchema().get("required");
+          assertThat(required).containsExactlyInAnyOrderElementsOf(properties.keySet());
+        });
 
     ToolExecutionContext context = new ToolExecutionContext(worktreeId);
     assertThatIllegalArgumentException()

@@ -1,6 +1,6 @@
 # Next implementation steps
 
-Status: authentication, encrypted credentials, controlled Git mirrors/worktrees and automatic filesystem master-key management are committed. The complete first controlled tool slice, including approval-gated tests and persisted REST/SSE events, is implemented locally and verified; no commit or push was created by the agent for this latest slice.
+Status: authentication, encrypted credentials, controlled Git mirrors/worktrees and automatic filesystem master-key management are committed. The complete first controlled tool slice and the persistent provider/model foundation are implemented locally and verified; no commit or push was created by the agent for these latest slices.
 
 ## 1. Finish and review the current security slices
 
@@ -33,8 +33,8 @@ Status: authentication, encrypted credentials, controlled Git mirrors/worktrees 
 
 ## 5. Add model-driven run orchestration
 
-1. Persist an agent run and its ordered model/tool turns independently from disposable worktree lifecycle records.
-2. Add a provider-neutral model client boundary and one initial provider implementation with encrypted credentials.
+1. [x] Persist an agent run and its ordered model/tool turns independently from disposable worktree lifecycle records.
+2. [x] Add a provider-neutral model client boundary and an OpenAI Responses API implementation with encrypted credentials.
 3. Drive the tool loop with explicit budgets, cancellation and resumable terminal states.
 4. Surface pending approvals, model output, tool results and terminal status in an administrator run view.
 

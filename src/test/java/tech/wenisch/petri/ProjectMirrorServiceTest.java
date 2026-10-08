@@ -1,5 +1,6 @@
 package tech.wenisch.petri;
 
+import jakarta.persistence.EntityManager;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
@@ -22,6 +23,8 @@ import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.jdbc.core.JdbcTemplate;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.transaction.annotation.Transactional;
 import tech.wenisch.petri.audit.AuditEventRepository;
 import tech.wenisch.petri.apikey.ApiKeyService;
@@ -35,6 +38,9 @@ import tech.wenisch.petri.agent.tool.ToolExecutionContext;
 import tech.wenisch.petri.agent.run.TestRunService;
 import tech.wenisch.petri.agent.run.TestRunStatus;
 import tech.wenisch.petri.agent.run.TestRunView;
+import tech.wenisch.petri.agent.model.ModelCredentialService;
+import tech.wenisch.petri.agent.model.ModelProvider;
+import tech.wenisch.petri.agent.model.SaveModelCredentialCommand;
 import tech.wenisch.petri.git.ProjectMirrorService;
 import tech.wenisch.petri.git.ProjectWorktreeService;
 import tech.wenisch.petri.git.ProjectWorktreeStatus;
@@ -66,6 +72,10 @@ class ProjectMirrorServiceTest {
   @Autowired AuditEventRepository auditEvents;
   @Autowired ApiKeyService apiKeys;
   @Autowired MockMvc mockMvc;
+  @Autowired ModelCredentialService modelCredentials;
+  @Autowired JdbcTemplate jdbc;
+  @Autowired ObjectMapper objectMapper;
+  @Autowired EntityManager entityManager;
 
   @Test
   void clonesAndFetchesLocalRepositoryIntoControlledMirror() throws Exception {
@@ -100,6 +110,17 @@ class ProjectMirrorServiceTest {
     ToolExecutionContext toolContext = new ToolExecutionContext(worktree.id());
     String apiKey = apiKeys.create(new CreateApiKeyCommand("Agent integration", null), ADMIN_EMAIL)
         .rawKey();
+    modelCredentials.save(
+        ModelProvider.OPENAI,
+        new SaveModelCredentialCommand("provider-secret", "configured-model"),
+        ADMIN_EMAIL);
+    entityManager.flush();
+    String encryptedModelKey = jdbc.queryForObject(
+        "select api_key_ciphertext from model_provider_credential where provider = 'OPENAI'",
+        String.class);
+    assertThat(encryptedModelKey)
+        .startsWith("v1:")
+        .doesNotContain("provider-secret");
     mockMvc.perform(get("/api/v1/agent/tools")
             .header("Authorization", "Bearer " + apiKey))
         .andExpect(status().isOk())
@@ -117,6 +138,27 @@ class ProjectMirrorServiceTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$[*].type").value(org.hamcrest.Matchers.hasItems(
             "TOOL_STARTED", "TOOL_SUCCEEDED")));
+    String createdRun = mockMvc.perform(post(
+            "/api/v1/agent/worktrees/{worktreeId}/runs", worktree.id())
+            .header("Authorization", "Bearer " + apiKey)
+            .contentType("application/json")
+            .content("{\"prompt\":\"Inspect this repository\",\"provider\":\"OPENAI\",\"maxModelTurns\":8}"))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.status").value("PENDING"))
+        .andExpect(jsonPath("$.model").value("configured-model"))
+        .andExpect(jsonPath("$.turns[0].kind").value("USER_PROMPT"))
+        .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+    UUID agentRunId = UUID.fromString(objectMapper.readTree(createdRun).path("id").asText());
+    mockMvc.perform(get(
+            "/api/v1/agent/worktrees/{worktreeId}/runs/{runId}", worktree.id(), agentRunId)
+            .header("Authorization", "Bearer " + apiKey))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.turns[0].content").value("Inspect this repository"));
+    mockMvc.perform(post(
+            "/api/v1/agent/worktrees/{worktreeId}/runs/{runId}/cancel", worktree.id(), agentRunId)
+            .header("Authorization", "Bearer " + apiKey))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("CANCELLED"));
 
     TestRunView requestedTestRun = (TestRunView) tools.execute(
         "run_tests", toolContext, java.util.Map.of()).output();

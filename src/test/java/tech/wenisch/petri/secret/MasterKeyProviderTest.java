@@ -68,6 +68,7 @@ class MasterKeyProviderTest {
     PetriProperties properties = new PetriProperties(
         null,
         new PetriProperties.Secrets(configuredKey, keyFile.toString()),
+        null,
         null);
     return new SecretCipher(new MasterKeyProvider(properties));
   }

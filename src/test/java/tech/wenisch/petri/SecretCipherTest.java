@@ -35,6 +35,7 @@ class SecretCipherTest {
     PetriProperties properties = new PetriProperties(
         new PetriProperties.Security(null, null),
         new PetriProperties.Secrets(masterKey, "unused-master-key-file"),
+        null,
         null);
     return new SecretCipher(new MasterKeyProvider(properties));
   }

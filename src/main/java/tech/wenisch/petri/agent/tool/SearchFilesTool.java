@@ -14,9 +14,11 @@ public class SearchFilesTool implements AgentTool {
       ToolSchemas.object(
           Map.of(
               "query", ToolSchemas.string("Case-sensitive literal text to find."),
-              "path", ToolSchemas.string("Relative file or directory path; defaults to root."),
-              "maxResults", ToolSchemas.integer("Maximum number of matches requested.", 1, 1000)),
-          List.of("query")));
+              "path", ToolSchemas.nullableString(
+                  "Relative file or directory path; null selects root."),
+              "maxResults", ToolSchemas.nullableInteger(
+                  "Maximum number of matches; null selects the default.", 1, 1000)),
+          List.of("query", "path", "maxResults")));
 
   private final WorktreeLocator worktrees;
   private final WorkspaceFileService files;

@@ -54,7 +54,8 @@ class TestCommandRunnerTest {
             null,
             null,
             timeout,
-            outputLimit));
+            outputLimit),
+        null);
     return new TestCommandRunner(properties);
   }
 

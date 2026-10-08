@@ -54,6 +54,19 @@ Tool file/output sizes and search result counts are bounded through `PETRI_MAX_T
 
 API clients can discover and invoke tools below `/api/v1/agent`. Tool lifecycle events are stored, mirrored into the audit log, available as recent JSON events, and streamed live as Server-Sent Events from `/api/v1/agent/worktrees/{worktreeId}/events/stream`. API clients may request privileged work but cannot approve it. Approval, rejection and execution endpoints live below `/operations` and require an authenticated instance administrator plus CSRF protection.
 
+## Model providers and agent runs
+
+Model access is isolated behind a provider-neutral client boundary. The first implementation uses OpenAI's Responses API with strict function schemas, one tool call at a time, bounded responses and no redirects. An instance administrator stores an OpenAI API key plus an explicit model name through `/operations/model-credentials/OPENAI`; the API key is encrypted before persistence and is never returned by status responses.
+
+API clients can create, inspect, list and cancel persistent runs below `/api/v1/agent/worktrees/{worktreeId}/runs`. Runs and their ordered turns are separate from disposable worktree lifecycle records. The execution loop is the next slice; newly created runs therefore remain `PENDING` unless cancelled.
+
+```bash
+export PETRI_OPENAI_BASE_URL=https://api.openai.com/v1
+export PETRI_MODEL_REQUEST_TIMEOUT=2m
+export PETRI_MAX_MODEL_RESPONSE_BYTES=2000000
+export PETRI_MODEL_MAX_OUTPUT_TOKENS=4096
+```
+
 ## OIDC
 
 Local login remains available by default. To enable an OpenID Connect provider, configure a standard Spring Security client registration with `openid` and `email` scopes. Petri requires the provider's `email_verified` claim before it creates or links an account. A verified email matching an existing local account retains that account's Petri role.
@@ -75,7 +88,7 @@ spring:
 
 ## Status
 
-Phase 1 is in progress. The current slices provide the reproducible backend/frontend build, Flyway-managed persistence, local and optional OIDC authentication, project registry, audit events, administrator-managed API keys, encrypted project Git credentials, controlled repository mirrors, disposable worktrees, approval-gated file/test tools, REST invocation and persisted SSE lifecycle events.
+Phase 1 is in progress. The current slices provide the reproducible backend/frontend build, Flyway-managed persistence, local and optional OIDC authentication, project registry, audit events, administrator-managed API keys, encrypted Git/model credentials, controlled repository mirrors, disposable worktrees, approval-gated file/test tools, REST invocation, persisted SSE lifecycle events and the persistent provider-neutral model/run foundation.
 
 ## License
 

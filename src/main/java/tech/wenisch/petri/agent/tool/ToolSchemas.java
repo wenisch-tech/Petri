@@ -19,9 +19,22 @@ final class ToolSchemas {
     return Map.of("type", "string", "description", description);
   }
 
+  static Map<String, Object> nullableString(String description) {
+    return Map.of("type", List.of("string", "null"), "description", description);
+  }
+
   static Map<String, Object> integer(String description, int minimum, int maximum) {
     return Map.of(
         "type", "integer",
+        "description", description,
+        "minimum", minimum,
+        "maximum", maximum);
+  }
+
+  static Map<String, Object> nullableInteger(
+      String description, int minimum, int maximum) {
+    return Map.of(
+        "type", List.of("integer", "null"),
         "description", description,
         "minimum", minimum,
         "maximum", maximum);
