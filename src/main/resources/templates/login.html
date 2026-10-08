@@ -16,7 +16,7 @@
         <p class="text-sm text-ink-500">Managed coding-agent workspace</p>
       </div>
     </div>
-    <p th:if="${param.error}" class="mb-5 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">Invalid email or password.</p>
+    <p th:if="${param.error}" class="mb-5 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">Unable to sign in. Check your credentials or identity-provider account.</p>
     <p th:if="${param.logout}" class="mb-5 rounded-lg border border-good-500/30 bg-good-500/10 p-3 text-sm text-good-500">You have been signed out.</p>
     <form method="post" action="/login" class="space-y-5">
       <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
@@ -30,7 +30,13 @@
       </label>
       <button class="btn-primary w-full" type="submit"><i data-lucide="KeyRound"></i> Sign in</button>
     </form>
+    <div th:if="${!#lists.isEmpty(oidcProviders)}" class="mt-7 border-t border-ink-700 pt-6">
+      <p class="mb-3 text-center text-xs font-bold uppercase tracking-[.16em] text-ink-500">or continue with</p>
+      <a th:each="provider : ${oidcProviders}"
+         class="btn-secondary mb-2 w-full"
+         th:href="@{/oauth2/authorization/{registrationId}(registrationId=${provider.registrationId})}"
+         th:text="${provider.clientName}">Identity provider</a>
+    </div>
   </main>
 </body>
 </html>
-

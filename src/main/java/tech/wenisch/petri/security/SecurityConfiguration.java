@@ -4,6 +4,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationRunner;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpStatus;
@@ -14,6 +15,7 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -22,6 +24,7 @@ import org.springframework.security.web.util.matcher.NegatedRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import tech.wenisch.petri.apikey.ApiKeyService;
 import tech.wenisch.petri.config.PetriProperties;
+import tech.wenisch.petri.security.oidc.PetriOidcUserService;
 
 @Configuration
 public class SecurityConfiguration {
@@ -38,7 +41,7 @@ public class SecurityConfiguration {
       AppUser user = users.findByEmailIgnoreCase(username)
           .orElseThrow(() -> new UsernameNotFoundException(username));
       return User.withUsername(user.getEmail())
-          .password(user.getPasswordHash())
+          .password(user.hasLocalPassword() ? user.getPasswordHash() : "{noop}unavailable")
           .roles(user.getRole())
           .disabled(!user.isEnabled())
           .build();
@@ -46,9 +49,18 @@ public class SecurityConfiguration {
   }
 
   @Bean
-  SecurityFilterChain securityFilterChain(HttpSecurity http, ApiKeyService apiKeys) throws Exception {
+  SecurityFilterChain securityFilterChain(
+      HttpSecurity http,
+      ApiKeyService apiKeys,
+      ObjectProvider<ClientRegistrationRepository> clientRegistrations,
+      PetriOidcUserService oidcUsers) throws Exception {
     RequestMatcher apiRequests = request -> request.getRequestURI()
         .startsWith(request.getContextPath() + "/api/");
+    if (clientRegistrations.getIfAvailable() != null) {
+      http.oauth2Login(login -> login
+          .loginPage("/login")
+          .userInfoEndpoint(userInfo -> userInfo.oidcUserService(oidcUsers)));
+    }
     return http
         .csrf(csrf -> csrf.ignoringRequestMatchers(apiRequests))
         .authorizeHttpRequests(authorize -> authorize

@@ -17,7 +17,7 @@ public class AppUser {
   @Column(nullable = false, unique = true, length = 320)
   private String email;
 
-  @Column(name = "password_hash", nullable = false, length = 200)
+  @Column(name = "password_hash", length = 200)
   private String passwordHash;
 
   @Column(nullable = false, length = 32)
@@ -35,11 +35,19 @@ public class AppUser {
   protected AppUser() {}
 
   public AppUser(UUID id, String email, String passwordHash, String role) {
+    this(id, email, passwordHash, role, true);
+  }
+
+  public static AppUser oidcUser(UUID id, String email, String role) {
+    return new AppUser(id, email, null, role, false);
+  }
+
+  private AppUser(UUID id, String email, String passwordHash, String role, boolean passwordChangeRequired) {
     this.id = id;
     this.email = email.trim().toLowerCase(Locale.ROOT);
     this.passwordHash = passwordHash;
     this.role = role;
-    this.passwordChangeRequired = true;
+    this.passwordChangeRequired = passwordChangeRequired;
     this.enabled = true;
     this.createdAt = Instant.now();
   }
@@ -48,6 +56,7 @@ public class AppUser {
   public String getEmail() { return email; }
   @JsonIgnore
   public String getPasswordHash() { return passwordHash; }
+  public boolean hasLocalPassword() { return passwordHash != null; }
   public String getRole() { return role; }
   public boolean isPasswordChangeRequired() { return passwordChangeRequired; }
   public boolean isEnabled() { return enabled; }

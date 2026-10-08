@@ -28,4 +28,5 @@ petri:
   security:
     initial-admin-email: ${PETRI_ADMIN_EMAIL:admin@petri.local}
     initial-admin-password: ${PETRI_ADMIN_PASSWORD:admin}
-
+  secrets:
+    master-key: ${PETRI_SECRETS_MASTER_KEY:}
