@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpStatus;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.userdetails.User;
@@ -13,7 +14,13 @@ import org.springframework.security.core.userdetails.UserDetailsService;
 import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.web.authentication.HttpStatusEntryPoint;
+import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.util.matcher.NegatedRequestMatcher;
+import org.springframework.security.web.util.matcher.RequestMatcher;
+import tech.wenisch.petri.apikey.ApiKeyService;
 import tech.wenisch.petri.config.PetriProperties;
 
 @Configuration
@@ -39,16 +46,27 @@ public class SecurityConfiguration {
   }
 
   @Bean
-  SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+  SecurityFilterChain securityFilterChain(HttpSecurity http, ApiKeyService apiKeys) throws Exception {
+    RequestMatcher apiRequests = request -> request.getRequestURI()
+        .startsWith(request.getContextPath() + "/api/");
     return http
+        .csrf(csrf -> csrf.ignoringRequestMatchers(apiRequests))
         .authorizeHttpRequests(authorize -> authorize
             .requestMatchers("/css/**", "/js/**", "/actuator/health", "/actuator/health/**")
             .permitAll()
+            .requestMatchers(apiRequests).hasRole("API_CLIENT")
             .requestMatchers(HttpMethod.POST, "/projects").hasRole("INSTANCE_ADMIN")
             .requestMatchers("/audit", "/audit/**").hasRole("INSTANCE_ADMIN")
+            .requestMatchers("/api-keys", "/api-keys/**").hasRole("INSTANCE_ADMIN")
             .anyRequest().authenticated())
+        .exceptionHandling(exceptions -> exceptions.defaultAuthenticationEntryPointFor(
+            new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),
+            apiRequests).defaultAuthenticationEntryPointFor(
+                new LoginUrlAuthenticationEntryPoint("/login"),
+                new NegatedRequestMatcher(apiRequests)))
         .formLogin(form -> form.loginPage("/login").defaultSuccessUrl("/", true).permitAll())
         .logout(logout -> logout.logoutSuccessUrl("/login?logout"))
+        .addFilterBefore(new ApiKeyAuthenticationFilter(apiKeys), UsernamePasswordAuthenticationFilter.class)
         .build();
   }
 

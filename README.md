@@ -17,7 +17,7 @@ The standalone profile stores its H2 database below `data/`. PostgreSQL can be s
 
 ## Status
 
-Phase 1 is in progress. The current slices provide the reproducible backend/frontend build, Flyway-managed persistence, local authentication, health endpoint, project registry and immutable audit events for project creation.
+Phase 1 is in progress. The current slices provide the reproducible backend/frontend build, Flyway-managed persistence, local authentication, project registry, audit events, and administrator-managed API keys with BCrypt-only storage, expiry and revocation.
 
 ## License
 
