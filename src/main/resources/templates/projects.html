@@ -55,7 +55,7 @@
 
       <div th:unless="${#lists.isEmpty(projects)}" class="table-shell mt-8">
         <table class="data-table">
-          <thead><tr><th>Project</th><th>Repository</th><th>Default branch</th><th>Status</th></tr></thead>
+          <thead><tr><th>Project</th><th>Repository</th><th>Default branch</th><th>Status</th><th></th></tr></thead>
           <tbody>
             <tr th:each="project : ${projects}">
               <td>
@@ -65,6 +65,10 @@
               <td class="max-w-md"><span class="block truncate" th:text="${project.repositoryUri}">repository</span></td>
               <td><code th:text="${project.defaultBranch}">main</code></td>
               <td><span class="badge" th:text="${project.status}">ACTIVE</span></td>
+              <td class="text-right" th:if="${canManageProjects}">
+                <a class="btn-secondary" th:href="@{/projects/{id}/settings(id=${project.id})}"><i data-lucide="Settings"></i> Settings</a>
+              </td>
+              <td th:unless="${canManageProjects}"></td>
             </tr>
           </tbody>
         </table>

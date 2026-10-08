@@ -32,7 +32,9 @@ class SecretCipherTest {
   }
 
   private static SecretCipher cipher(String masterKey) {
-    return new SecretCipher(new PetriProperties(new PetriProperties.Security(null, null),
-        new PetriProperties.Secrets(masterKey)));
+    return new SecretCipher(new PetriProperties(
+        new PetriProperties.Security(null, null),
+        new PetriProperties.Secrets(masterKey),
+        null));
   }
 }

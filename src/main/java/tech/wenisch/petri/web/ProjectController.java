@@ -2,6 +2,7 @@ package tech.wenisch.petri.web;
 
 import jakarta.validation.Valid;
 import java.security.Principal;
+import org.springframework.security.core.Authentication;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.validation.BindingResult;
@@ -25,8 +26,10 @@ public class ProjectController {
   }
 
   @GetMapping("/projects")
-  String projects(Model model) {
+  String projects(Model model, Authentication authentication) {
     model.addAttribute("projects", projects.findAllByOrderByCreatedAtDesc());
+    model.addAttribute("canManageProjects", authentication.getAuthorities().stream()
+        .anyMatch(authority -> "ROLE_INSTANCE_ADMIN".equals(authority.getAuthority())));
     return "projects";
   }
 

@@ -68,6 +68,10 @@ public class SecurityConfiguration {
             .permitAll()
             .requestMatchers(apiRequests).hasRole("API_CLIENT")
             .requestMatchers(HttpMethod.POST, "/projects").hasRole("INSTANCE_ADMIN")
+            .requestMatchers(
+                "/projects/*/settings", "/projects/*/credential", "/projects/*/credential/**",
+                "/projects/*/mirror/**")
+            .hasRole("INSTANCE_ADMIN")
             .requestMatchers("/audit", "/audit/**").hasRole("INSTANCE_ADMIN")
             .requestMatchers("/api-keys", "/api-keys/**").hasRole("INSTANCE_ADMIN")
             .anyRequest().authenticated())
