@@ -74,6 +74,7 @@ public class SecurityConfiguration {
             .hasRole("INSTANCE_ADMIN")
             .requestMatchers("/audit", "/audit/**").hasRole("INSTANCE_ADMIN")
             .requestMatchers("/api-keys", "/api-keys/**").hasRole("INSTANCE_ADMIN")
+            .requestMatchers("/operations", "/operations/**").hasRole("INSTANCE_ADMIN")
             .anyRequest().authenticated())
         .exceptionHandling(exceptions -> exceptions.defaultAuthenticationEntryPointFor(
             new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),

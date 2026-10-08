@@ -41,9 +41,18 @@ export PETRI_MAX_COMMAND_OUTPUT_BYTES=1000000
 
 ## Agent tools
 
-The first native tools are `list_files`, `read_file`, `search_files`, `create_patch` and `show_diff`. Every call is scoped to an active persisted worktree; relative paths, real paths and symlinks are checked before access. File reads return a SHA-256 hash, and a patch proposal must include that exact hash. Proposals are persisted for review and cannot modify a file until a user approves them. Application uses an atomic replacement and records `CONFLICT` instead of overwriting a file changed after the original read.
+The first native tools are `list_files`, `read_file`, `search_files`, `create_patch`, `show_diff` and `run_tests`. Every call is scoped to an active persisted worktree; relative paths, real paths and symlinks are checked before access. File reads return a SHA-256 hash, and a patch proposal must include that exact hash. Proposals are persisted for review and cannot modify a file until an instance administrator approves them. Application uses an atomic replacement and records `CONFLICT` instead of overwriting a file changed after the original read.
+
+`run_tests` also creates a proposal instead of launching a process. Once separately approved, Petri permits only one of these fixed commands, selected from safe build files and non-symlinked executable wrappers:
+
+- `./mvnw --batch-mode --no-transfer-progress test`
+- `./gradlew --no-daemon test`
+
+The test process receives a reduced environment, has its process tree terminated on timeout, and stores bounded combined output. Configure its limits with `PETRI_TEST_COMMAND_TIMEOUT` and `PETRI_MAX_TEST_OUTPUT_BYTES`. Approval is a safety boundary, not an operating-system sandbox: deploy Petri under an isolated, least-privileged account or container before running untrusted repositories.
 
 Tool file/output sizes and search result counts are bounded through `PETRI_MAX_TOOL_FILE_BYTES`, `PETRI_MAX_TOOL_OUTPUT_BYTES` and `PETRI_MAX_SEARCH_RESULTS`.
+
+API clients can discover and invoke tools below `/api/v1/agent`. Tool lifecycle events are stored, mirrored into the audit log, available as recent JSON events, and streamed live as Server-Sent Events from `/api/v1/agent/worktrees/{worktreeId}/events/stream`. API clients may request privileged work but cannot approve it. Approval, rejection and execution endpoints live below `/operations` and require an authenticated instance administrator plus CSRF protection.
 
 ## OIDC
 
@@ -66,7 +75,7 @@ spring:
 
 ## Status
 
-Phase 1 is in progress. The current slices provide the reproducible backend/frontend build, Flyway-managed persistence, local and optional OIDC authentication, project registry, audit events, administrator-managed API keys, encrypted project Git credentials, controlled repository mirrors, disposable worktrees and the first approval-gated file tools.
+Phase 1 is in progress. The current slices provide the reproducible backend/frontend build, Flyway-managed persistence, local and optional OIDC authentication, project registry, audit events, administrator-managed API keys, encrypted project Git credentials, controlled repository mirrors, disposable worktrees, approval-gated file/test tools, REST invocation and persisted SSE lifecycle events.
 
 ## License
 

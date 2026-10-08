@@ -82,7 +82,7 @@ class GitCommandRunnerTest {
         null,
         new PetriProperties.Workspace(
             temporaryDirectory.resolve("workspace").toString(), timeout, outputLimit,
-            null, null, null));
+            null, null, null, null, null));
     return new GitCommandRunner(new WorkspacePaths(properties), properties);
   }
 

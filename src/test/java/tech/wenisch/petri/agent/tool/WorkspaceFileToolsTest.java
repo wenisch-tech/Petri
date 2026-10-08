@@ -41,7 +41,9 @@ class WorkspaceFileToolsTest {
             4096,
             1024,
             4096,
-            2));
+            2,
+            null,
+            null));
     WorkspaceFileService files = new WorkspaceFileService(properties);
     WorktreeLocator locator = ignored -> worktree;
     registry = new AgentToolRegistry(List.of(

@@ -38,3 +38,5 @@ petri:
     max-tool-file-bytes: ${PETRI_MAX_TOOL_FILE_BYTES:1000000}
     max-tool-output-bytes: ${PETRI_MAX_TOOL_OUTPUT_BYTES:1000000}
     max-search-results: ${PETRI_MAX_SEARCH_RESULTS:200}
+    test-command-timeout: ${PETRI_TEST_COMMAND_TIMEOUT:10m}
+    max-test-output-bytes: ${PETRI_MAX_TEST_OUTPUT_BYTES:2000000}

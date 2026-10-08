@@ -2,6 +2,12 @@ package tech.wenisch.petri;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -12,16 +18,23 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.boot.webmvc.test.autoconfigure.AutoConfigureMockMvc;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import tech.wenisch.petri.audit.AuditEventRepository;
+import tech.wenisch.petri.apikey.ApiKeyService;
+import tech.wenisch.petri.apikey.CreateApiKeyCommand;
 import tech.wenisch.petri.agent.change.ChangeProposalService;
 import tech.wenisch.petri.agent.change.ChangeProposalStatus;
 import tech.wenisch.petri.agent.change.ChangeProposalView;
 import tech.wenisch.petri.agent.tool.AgentToolRegistry;
 import tech.wenisch.petri.agent.tool.ReadFileResult;
 import tech.wenisch.petri.agent.tool.ToolExecutionContext;
+import tech.wenisch.petri.agent.run.TestRunService;
+import tech.wenisch.petri.agent.run.TestRunStatus;
+import tech.wenisch.petri.agent.run.TestRunView;
 import tech.wenisch.petri.git.ProjectMirrorService;
 import tech.wenisch.petri.git.ProjectWorktreeService;
 import tech.wenisch.petri.git.ProjectWorktreeStatus;
@@ -31,6 +44,7 @@ import tech.wenisch.petri.project.ProjectService;
 import tech.wenisch.petri.workspace.WorktreeLocator;
 
 @SpringBootTest
+@AutoConfigureMockMvc
 @Transactional
 class ProjectMirrorServiceTest {
   private static final String ADMIN_EMAIL = "test-admin@petri.local";
@@ -48,7 +62,10 @@ class ProjectMirrorServiceTest {
   @Autowired WorktreeLocator worktreeLocator;
   @Autowired AgentToolRegistry tools;
   @Autowired ChangeProposalService proposals;
+  @Autowired TestRunService testRuns;
   @Autowired AuditEventRepository auditEvents;
+  @Autowired ApiKeyService apiKeys;
+  @Autowired MockMvc mockMvc;
 
   @Test
   void clonesAndFetchesLocalRepositoryIntoControlledMirror() throws Exception {
@@ -81,6 +98,57 @@ class ProjectMirrorServiceTest {
     assertThat(worktreeLocator.requireActiveWorktree(worktree.id())).isEqualTo(worktreePath);
     assertThat(worktreePath.resolve("README.md")).hasContent("second revision\n");
     ToolExecutionContext toolContext = new ToolExecutionContext(worktree.id());
+    String apiKey = apiKeys.create(new CreateApiKeyCommand("Agent integration", null), ADMIN_EMAIL)
+        .rawKey();
+    mockMvc.perform(get("/api/v1/agent/tools")
+            .header("Authorization", "Bearer " + apiKey))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[*].name").value(org.hamcrest.Matchers.hasItems(
+            "list_files", "read_file", "search_files", "create_patch", "show_diff", "run_tests")));
+    mockMvc.perform(post("/api/v1/agent/worktrees/{worktreeId}/tools/read_file", worktree.id())
+            .header("Authorization", "Bearer " + apiKey)
+            .contentType("application/json")
+            .content("{\"path\":\"README.md\"}"))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.toolName").value("read_file"))
+        .andExpect(jsonPath("$.output.content").value("second revision\n"));
+    mockMvc.perform(get("/api/v1/agent/worktrees/{worktreeId}/events", worktree.id())
+            .header("Authorization", "Bearer " + apiKey))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[*].type").value(org.hamcrest.Matchers.hasItems(
+            "TOOL_STARTED", "TOOL_SUCCEEDED")));
+
+    TestRunView requestedTestRun = (TestRunView) tools.execute(
+        "run_tests", toolContext, java.util.Map.of()).output();
+    assertThat(requestedTestRun.status()).isEqualTo(TestRunStatus.PROPOSED);
+    assertThat(requestedTestRun.command()).isEqualTo(
+        "./mvnw --batch-mode --no-transfer-progress test");
+    assertThatIllegalStateException().isThrownBy(() -> testRuns.execute(requestedTestRun.id()));
+    mockMvc.perform(post("/operations/test-runs/{testRunId}/approve", requestedTestRun.id())
+            .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN"))
+            .with(csrf()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("APPROVED"));
+    mockMvc.perform(post("/operations/test-runs/{testRunId}/execute", requestedTestRun.id())
+            .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN"))
+            .with(csrf()))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("PASSED"))
+        .andExpect(jsonPath("$.exitCode").value(0))
+        .andExpect(jsonPath("$.output").value(org.hamcrest.Matchers.containsString(
+            "fixture tests passed")));
+    mockMvc.perform(post("/operations/test-runs/{testRunId}/execute", requestedTestRun.id())
+            .header("Authorization", "Bearer " + apiKey))
+        .andExpect(status().isForbidden());
+    TestRunView rejectedTestRun = (TestRunView) tools.execute(
+        "run_tests", toolContext, java.util.Map.of()).output();
+    assertThat(testRuns.reject(rejectedTestRun.id(), ADMIN_EMAIL).status())
+        .isEqualTo(TestRunStatus.REJECTED);
+    assertThatIllegalStateException().isThrownBy(() -> testRuns.execute(rejectedTestRun.id()));
+    assertThat(auditActions()).contains(
+        "TEST_RUN_REQUESTED", "TEST_RUN_APPROVED", "TEST_RUN_STARTED", "TEST_RUN_PASSED",
+        "TEST_RUN_REJECTED");
+
     ReadFileResult read = (ReadFileResult) tools.execute(
         "read_file", toolContext, java.util.Map.of("path", "README.md")).output();
     ChangeProposalView proposal = (ChangeProposalView) tools.execute(
@@ -154,7 +222,13 @@ class ProjectMirrorServiceTest {
     git("-C", source.toString(), "config", "user.name", "Petri Test");
     git("-C", source.toString(), "config", "user.email", "petri@example.test");
     Files.writeString(source.resolve("README.md"), "first revision\n");
-    git("-C", source.toString(), "add", "README.md");
+    Files.writeString(source.resolve("pom.xml"), "<project/>\n");
+    Path wrapper = source.resolve("mvnw");
+    Files.writeString(wrapper, "#!/bin/sh\nprintf 'fixture tests passed\\n'\n");
+    if (!wrapper.toFile().setExecutable(true)) {
+      throw new AssertionError("Could not mark fixture Maven wrapper executable");
+    }
+    git("-C", source.toString(), "add", "README.md", "pom.xml", "mvnw");
     git("-C", source.toString(), "commit", "-m", "first");
     return source;
   }

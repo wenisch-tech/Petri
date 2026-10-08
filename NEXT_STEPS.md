@@ -1,6 +1,6 @@
 # Next implementation steps
 
-Status: authentication, encrypted credentials, controlled Git mirrors/worktrees and automatic filesystem master-key management are committed. The first confined file tools and approval-gated change proposals are implemented locally and verified; no commit or push was created by the agent for this latest slice.
+Status: authentication, encrypted credentials, controlled Git mirrors/worktrees and automatic filesystem master-key management are committed. The complete first controlled tool slice, including approval-gated tests and persisted REST/SSE events, is implemented locally and verified; no commit or push was created by the agent for this latest slice.
 
 ## 1. Finish and review the current security slices
 
@@ -23,15 +23,22 @@ Status: authentication, encrypted credentials, controlled Git mirrors/worktrees 
 4. [x] Create detached worktrees from mirrors, persist their lifecycle and constrain cleanup to the UUID-derived run path.
 5. [x] Test traversal and symlink rejection, timeout/output handling, askpass cleanup, local clone/fetch and forced disposable-worktree cleanup.
 
-## 4. Build the first controlled agent tool slice — in progress
+## 4. Build the first controlled agent tool slice — completed locally
 
 1. [x] Define registered JSON-schema descriptors for `list_files`, `read_file`, `search_files`, `create_patch` and `show_diff`.
 2. [x] Add active-worktree confinement, traversal/symlink/`.git` rejection, bounded traversal/file/output sizes and SHA-256 read hashes.
 3. [x] Persist change proposals with `PROPOSED`, `APPROVED`, `APPLIED`, `REJECTED` and `CONFLICT` states; only approved proposals can atomically replace a file.
-4. [ ] Add a separately approved `run_tests` operation with a strict Maven/Gradle command policy, timeout and bounded output.
-5. [ ] Expose agent-run events through REST plus Server-Sent Events and persist an audit trail.
+4. [x] Add a separately approved `run_tests` operation with a strict Maven/Gradle command policy, timeout and bounded output.
+5. [x] Expose agent-run events through REST plus Server-Sent Events and persist an audit trail.
 
-## 5. Verification discipline for every slice
+## 5. Add model-driven run orchestration
+
+1. Persist an agent run and its ordered model/tool turns independently from disposable worktree lifecycle records.
+2. Add a provider-neutral model client boundary and one initial provider implementation with encrypted credentials.
+3. Drive the tool loop with explicit budgets, cancellation and resumable terminal states.
+4. Surface pending approvals, model output, tool results and terminal status in an administrator run view.
+
+## 6. Verification discipline for every slice
 
 1. Add focused unit/integration tests first, then run `./mvnw -o test` and `./mvnw -o package`.
 2. Run `git diff --check` before handoff.
