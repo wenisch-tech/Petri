@@ -10,6 +10,8 @@ spring:
   flyway:
     enabled: true
 petri:
+  secrets:
+    master-key: AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=
   security:
     initial-admin-email: test-admin@petri.local
     initial-admin-password: test-password

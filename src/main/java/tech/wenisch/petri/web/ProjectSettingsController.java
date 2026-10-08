@@ -20,23 +20,19 @@ import tech.wenisch.petri.git.ProjectMirrorService;
 import tech.wenisch.petri.git.SaveGitCredentialCommand;
 import tech.wenisch.petri.project.Project;
 import tech.wenisch.petri.project.ProjectRepository;
-import tech.wenisch.petri.secret.SecretCipher;
 
 @Controller
 public class ProjectSettingsController {
   private final ProjectRepository projects;
   private final ProjectGitCredentialService credentials;
-  private final SecretCipher cipher;
   private final ProjectMirrorService mirrors;
 
   public ProjectSettingsController(
       ProjectRepository projects,
       ProjectGitCredentialService credentials,
-      SecretCipher cipher,
       ProjectMirrorService mirrors) {
     this.projects = projects;
     this.credentials = credentials;
-    this.cipher = cipher;
     this.mirrors = mirrors;
   }
 
@@ -112,7 +108,6 @@ public class ProjectSettingsController {
     model.addAttribute("project", project);
     model.addAttribute("credential", credentials.status(projectId));
     model.addAttribute("authenticationTypes", GitAuthenticationType.values());
-    model.addAttribute("secretEncryptionConfigured", cipher.isConfigured());
     model.addAttribute("mirror", mirrors.status(projectId));
   }
 }

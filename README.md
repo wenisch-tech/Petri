@@ -17,11 +17,15 @@ The standalone profile stores its H2 database below `data/`. PostgreSQL can be s
 
 ## Secret encryption
 
-Repository credentials and future model-provider credentials are encrypted with AES-256-GCM before persistence. Configure a dedicated, Base64-encoded 32-byte key in every environment that stores credentials; Petri fails closed if a secret operation is attempted without it. Keep the value outside source control and back it up securely, because losing it makes encrypted records unrecoverable.
+Repository credentials and future model-provider credentials are encrypted with AES-256-GCM before persistence. If no key is configured, Petri creates a random 256-bit key once at `./data/petri-master.key`, restricts the file to its owner, and reuses it after restarts. Override the location with `PETRI_SECRETS_MASTER_KEY_FILE`, or supply a Base64-encoded 32-byte key directly with `PETRI_SECRETS_MASTER_KEY`; the explicit key takes precedence and no key file is created.
 
 ```bash
 export PETRI_SECRETS_MASTER_KEY="$(openssl rand -base64 32)"
+# or keep automatic generation outside the application directory:
+export PETRI_SECRETS_MASTER_KEY_FILE=/var/lib/petri/secrets/master.key
 ```
+
+Back up whichever key source is used. Petri refuses malformed or symlinked key files instead of replacing them, because losing or changing the key makes existing encrypted records unrecoverable.
 
 An instance administrator can configure or remove an HTTPS token or username/password credential from a project's settings page. Petri only displays whether a credential exists; the stored secret is never rendered back into the UI.
 

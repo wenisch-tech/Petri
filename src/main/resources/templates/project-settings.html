@@ -27,10 +27,6 @@
 
       <div th:if="${credentialSaved}" class="mt-6 rounded-xl border border-good-500/30 bg-good-500/10 p-4 text-sm text-good-500">Git credentials were encrypted and saved.</div>
       <div th:if="${credentialRemoved}" class="mt-6 rounded-xl border border-good-500/30 bg-good-500/10 p-4 text-sm text-good-500">Git credentials were removed.</div>
-      <div th:unless="${secretEncryptionConfigured}" class="mt-6 rounded-xl border border-amber-500/30 bg-amber-500/10 p-4 text-sm text-amber-300">
-        Set <code>PETRI_SECRETS_MASTER_KEY</code> before storing credentials.
-      </div>
-
       <div class="mt-8 rounded-xl border border-ink-700 p-5">
         <div class="flex flex-wrap items-center justify-between gap-4">
           <div>
@@ -85,7 +81,7 @@
           <span class="field-error" th:if="${#fields.hasErrors('secret')}" th:errors="*{secret}">Invalid secret</span>
         </label>
         <div class="flex justify-end border-t border-ink-700 pt-6">
-          <button class="btn-primary" type="submit" th:disabled="${!secretEncryptionConfigured}"><i data-lucide="LockKeyhole"></i> Encrypt and save</button>
+          <button class="btn-primary" type="submit"><i data-lucide="LockKeyhole"></i> Encrypt and save</button>
         </div>
       </form>
     </section>

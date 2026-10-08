@@ -30,6 +30,7 @@ petri:
     initial-admin-password: ${PETRI_ADMIN_PASSWORD:admin}
   secrets:
     master-key: ${PETRI_SECRETS_MASTER_KEY:}
+    master-key-file: ${PETRI_SECRETS_MASTER_KEY_FILE:./data/petri-master.key}
   workspace:
     root: ${PETRI_WORKSPACE_ROOT:./data/workspaces}
     git-command-timeout: ${PETRI_GIT_COMMAND_TIMEOUT:2m}

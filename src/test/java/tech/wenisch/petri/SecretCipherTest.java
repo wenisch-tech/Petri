@@ -6,6 +6,7 @@ import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 
 import org.junit.jupiter.api.Test;
 import tech.wenisch.petri.config.PetriProperties;
+import tech.wenisch.petri.secret.MasterKeyProvider;
 import tech.wenisch.petri.secret.SecretCipher;
 
 class SecretCipherTest {
@@ -24,17 +25,17 @@ class SecretCipherTest {
   }
 
   @Test
-  void refusesMissingOrInvalidMasterKeysAndTamperedCiphertext() {
-    assertThatIllegalStateException().isThrownBy(() -> cipher(null).encrypt("value"));
+  void refusesInvalidConfiguredKeysAndTamperedCiphertext() {
     assertThatIllegalStateException().isThrownBy(() -> cipher("not-base64").encrypt("value"));
     assertThatIllegalStateException().isThrownBy(() -> cipher("AQID").encrypt("value"));
     assertThatIllegalArgumentException().isThrownBy(() -> cipher(MASTER_KEY).decrypt("v1:bad:value"));
   }
 
   private static SecretCipher cipher(String masterKey) {
-    return new SecretCipher(new PetriProperties(
+    PetriProperties properties = new PetriProperties(
         new PetriProperties.Security(null, null),
-        new PetriProperties.Secrets(masterKey),
-        null));
+        new PetriProperties.Secrets(masterKey, "unused-master-key-file"),
+        null);
+    return new SecretCipher(new MasterKeyProvider(properties));
   }
 }

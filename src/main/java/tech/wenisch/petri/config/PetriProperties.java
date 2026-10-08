@@ -9,7 +9,7 @@ import org.springframework.validation.annotation.Validated;
 public record PetriProperties(Security security, Secrets secrets, Workspace workspace) {
   public PetriProperties {
     security = security == null ? new Security(null, null) : security;
-    secrets = secrets == null ? new Secrets(null) : secrets;
+    secrets = secrets == null ? new Secrets(null, null) : secrets;
     workspace = workspace == null ? new Workspace(null, null, null) : workspace;
   }
 
@@ -24,7 +24,13 @@ public record PetriProperties(Security security, Secrets secrets, Workspace work
     }
   }
 
-  public record Secrets(String masterKey) {
+  public record Secrets(String masterKey, String masterKeyFile) {
+    public Secrets {
+      masterKeyFile = masterKeyFile == null || masterKeyFile.isBlank()
+          ? "./data/petri-master.key"
+          : masterKeyFile;
+    }
+
     public boolean isConfigured() {
       return masterKey != null && !masterKey.isBlank();
     }
