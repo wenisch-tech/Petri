@@ -10,7 +10,7 @@ public record PetriProperties(Security security, Secrets secrets, Workspace work
   public PetriProperties {
     security = security == null ? new Security(null, null) : security;
     secrets = secrets == null ? new Secrets(null, null) : secrets;
-    workspace = workspace == null ? new Workspace(null, null, null) : workspace;
+    workspace = workspace == null ? new Workspace(null, null, null, null, null, null) : workspace;
   }
 
   public record Security(String initialAdminEmail, String initialAdminPassword) {
@@ -36,16 +36,31 @@ public record PetriProperties(Security security, Secrets secrets, Workspace work
     }
   }
 
-  public record Workspace(String root, Duration gitCommandTimeout, Integer maxCommandOutputBytes) {
+  public record Workspace(
+      String root,
+      Duration gitCommandTimeout,
+      Integer maxCommandOutputBytes,
+      Integer maxToolFileBytes,
+      Integer maxToolOutputBytes,
+      Integer maxSearchResults) {
     public Workspace {
       root = root == null || root.isBlank() ? "./data/workspaces" : root;
       gitCommandTimeout = gitCommandTimeout == null ? Duration.ofMinutes(2) : gitCommandTimeout;
       maxCommandOutputBytes = maxCommandOutputBytes == null ? 1_000_000 : maxCommandOutputBytes;
+      maxToolFileBytes = maxToolFileBytes == null ? 1_000_000 : maxToolFileBytes;
+      maxToolOutputBytes = maxToolOutputBytes == null ? 1_000_000 : maxToolOutputBytes;
+      maxSearchResults = maxSearchResults == null ? 200 : maxSearchResults;
       if (gitCommandTimeout.isZero() || gitCommandTimeout.isNegative()) {
         throw new IllegalArgumentException("Git command timeout must be positive");
       }
       if (maxCommandOutputBytes < 1024) {
         throw new IllegalArgumentException("Git command output limit must be at least 1024 bytes");
+      }
+      if (maxToolFileBytes < 1024 || maxToolOutputBytes < 1024) {
+        throw new IllegalArgumentException("Agent tool byte limits must be at least 1024");
+      }
+      if (maxSearchResults < 1) {
+        throw new IllegalArgumentException("Maximum search results must be positive");
       }
     }
   }

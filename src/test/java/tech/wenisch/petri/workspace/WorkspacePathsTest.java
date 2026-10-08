@@ -55,6 +55,6 @@ class WorkspacePathsTest {
     return new WorkspacePaths(new PetriProperties(
         null,
         null,
-        new PetriProperties.Workspace(root.toString(), null, null)));
+        new PetriProperties.Workspace(root.toString(), null, null, null, null, null)));
   }
 }

@@ -35,3 +35,6 @@ petri:
     root: ${PETRI_WORKSPACE_ROOT:./data/workspaces}
     git-command-timeout: ${PETRI_GIT_COMMAND_TIMEOUT:2m}
     max-command-output-bytes: ${PETRI_MAX_COMMAND_OUTPUT_BYTES:1000000}
+    max-tool-file-bytes: ${PETRI_MAX_TOOL_FILE_BYTES:1000000}
+    max-tool-output-bytes: ${PETRI_MAX_TOOL_OUTPUT_BYTES:1000000}
+    max-search-results: ${PETRI_MAX_SEARCH_RESULTS:200}

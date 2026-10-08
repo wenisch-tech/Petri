@@ -1,6 +1,6 @@
 # Next implementation steps
 
-Status: the OIDC-account-linking and AES-256-GCM foundations are committed. Encrypted Git credentials, controlled repository mirrors and persisted disposable worktrees are implemented locally and verified; no commit or push was created by the agent for these latest slices.
+Status: authentication, encrypted credentials, controlled Git mirrors/worktrees and automatic filesystem master-key management are committed. The first confined file tools and approval-gated change proposals are implemented locally and verified; no commit or push was created by the agent for this latest slice.
 
 ## 1. Finish and review the current security slices
 
@@ -23,12 +23,13 @@ Status: the OIDC-account-linking and AES-256-GCM foundations are committed. Encr
 4. [x] Create detached worktrees from mirrors, persist their lifecycle and constrain cleanup to the UUID-derived run path.
 5. [x] Test traversal and symlink rejection, timeout/output handling, askpass cleanup, local clone/fetch and forced disposable-worktree cleanup.
 
-## 4. Build the first controlled agent tool slice — next
+## 4. Build the first controlled agent tool slice — in progress
 
-1. Define tool descriptors with JSON schemas for list-files, read-file, search, create-patch, show-diff and run-tests.
-2. Add workspace confinement, file-size/output limits and content hashes for read-then-patch conflict detection.
-3. Model a change proposal and explicit approval state; do not apply patches until approval is recorded.
-4. Expose agent-run events through REST plus Server-Sent Events and persist an audit trail.
+1. [x] Define registered JSON-schema descriptors for `list_files`, `read_file`, `search_files`, `create_patch` and `show_diff`.
+2. [x] Add active-worktree confinement, traversal/symlink/`.git` rejection, bounded traversal/file/output sizes and SHA-256 read hashes.
+3. [x] Persist change proposals with `PROPOSED`, `APPROVED`, `APPLIED`, `REJECTED` and `CONFLICT` states; only approved proposals can atomically replace a file.
+4. [ ] Add a separately approved `run_tests` operation with a strict Maven/Gradle command policy, timeout and bounded output.
+5. [ ] Expose agent-run events through REST plus Server-Sent Events and persist an audit trail.
 
 ## 5. Verification discipline for every slice
 

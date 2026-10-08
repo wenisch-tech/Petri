@@ -39,6 +39,12 @@ export PETRI_GIT_COMMAND_TIMEOUT=2m
 export PETRI_MAX_COMMAND_OUTPUT_BYTES=1000000
 ```
 
+## Agent tools
+
+The first native tools are `list_files`, `read_file`, `search_files`, `create_patch` and `show_diff`. Every call is scoped to an active persisted worktree; relative paths, real paths and symlinks are checked before access. File reads return a SHA-256 hash, and a patch proposal must include that exact hash. Proposals are persisted for review and cannot modify a file until a user approves them. Application uses an atomic replacement and records `CONFLICT` instead of overwriting a file changed after the original read.
+
+Tool file/output sizes and search result counts are bounded through `PETRI_MAX_TOOL_FILE_BYTES`, `PETRI_MAX_TOOL_OUTPUT_BYTES` and `PETRI_MAX_SEARCH_RESULTS`.
+
 ## OIDC
 
 Local login remains available by default. To enable an OpenID Connect provider, configure a standard Spring Security client registration with `openid` and `email` scopes. Petri requires the provider's `email_verified` claim before it creates or links an account. A verified email matching an existing local account retains that account's Petri role.
@@ -60,7 +66,7 @@ spring:
 
 ## Status
 
-Phase 1 is in progress. The current slices provide the reproducible backend/frontend build, Flyway-managed persistence, local and optional OIDC authentication, project registry, audit events, administrator-managed API keys, encrypted project Git credentials, controlled repository mirrors and disposable worktrees.
+Phase 1 is in progress. The current slices provide the reproducible backend/frontend build, Flyway-managed persistence, local and optional OIDC authentication, project registry, audit events, administrator-managed API keys, encrypted project Git credentials, controlled repository mirrors, disposable worktrees and the first approval-gated file tools.
 
 ## License
 
