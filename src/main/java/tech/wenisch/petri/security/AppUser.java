@@ -1,0 +1,55 @@
+package tech.wenisch.petri.security;
+
+import com.fasterxml.jackson.annotation.JsonIgnore;
+import jakarta.persistence.Column;
+import jakarta.persistence.Entity;
+import jakarta.persistence.Id;
+import jakarta.persistence.Table;
+import java.time.Instant;
+import java.util.Locale;
+import java.util.UUID;
+
+@Entity
+@Table(name = "app_user")
+public class AppUser {
+  @Id private UUID id;
+
+  @Column(nullable = false, unique = true, length = 320)
+  private String email;
+
+  @Column(name = "password_hash", nullable = false, length = 200)
+  private String passwordHash;
+
+  @Column(nullable = false, length = 32)
+  private String role;
+
+  @Column(name = "password_change_required", nullable = false)
+  private boolean passwordChangeRequired;
+
+  @Column(nullable = false)
+  private boolean enabled;
+
+  @Column(name = "created_at", nullable = false)
+  private Instant createdAt;
+
+  protected AppUser() {}
+
+  public AppUser(UUID id, String email, String passwordHash, String role) {
+    this.id = id;
+    this.email = email.trim().toLowerCase(Locale.ROOT);
+    this.passwordHash = passwordHash;
+    this.role = role;
+    this.passwordChangeRequired = true;
+    this.enabled = true;
+    this.createdAt = Instant.now();
+  }
+
+  public UUID getId() { return id; }
+  public String getEmail() { return email; }
+  @JsonIgnore
+  public String getPasswordHash() { return passwordHash; }
+  public String getRole() { return role; }
+  public boolean isPasswordChangeRequired() { return passwordChangeRequired; }
+  public boolean isEnabled() { return enabled; }
+  public Instant getCreatedAt() { return createdAt; }
+}

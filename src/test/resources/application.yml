@@ -1,0 +1,15 @@
+spring:
+  datasource:
+    url: jdbc:h2:mem:petri-test;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DB_CLOSE_DELAY=-1
+    username: sa
+    password:
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+petri:
+  security:
+    initial-admin-email: test-admin@petri.local
+    initial-admin-password: test-password

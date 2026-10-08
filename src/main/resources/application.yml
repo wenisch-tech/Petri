@@ -1,0 +1,31 @@
+spring:
+  application:
+    name: petri
+  datasource:
+    url: ${SPRING_DATASOURCE_URL:jdbc:h2:file:./data/petri;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH}
+    username: ${SPRING_DATASOURCE_USERNAME:sa}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+    open-in-view: false
+  flyway:
+    enabled: true
+  thymeleaf:
+    cache: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,prometheus
+  endpoint:
+    health:
+      probes:
+        enabled: true
+
+petri:
+  security:
+    initial-admin-email: ${PETRI_ADMIN_EMAIL:admin@petri.local}
+    initial-admin-password: ${PETRI_ADMIN_PASSWORD:admin}
+

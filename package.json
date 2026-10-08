@@ -1,0 +1,24 @@
+{
+  "name": "petri-ui",
+  "private": true,
+  "scripts": {
+    "build": "npm run build:css && npm run build:js",
+    "build:css": "tailwindcss -i src/main/frontend/petri.css -o target/classes/static/css/petri.css --minify",
+    "build:js": "esbuild src/main/frontend/petri.js --bundle --minify --format=iife --outfile=target/classes/static/js/petri.js",
+    "watch:css": "tailwindcss -i src/main/frontend/petri.css -o target/classes/static/css/petri.css --watch",
+    "watch:js": "esbuild src/main/frontend/petri.js --bundle --format=iife --outfile=target/classes/static/js/petri.js --watch"
+  },
+  "dependencies": {
+    "alpinejs": "3.17.4",
+    "lucide": "0.577.0"
+  },
+  "devDependencies": {
+    "@tailwindcss/cli": "4.3.0",
+    "esbuild": "0.28.2",
+    "tailwindcss": "4.3.3"
+  },
+  "overrides": {
+    "@parcel/watcher": "2.6.0",
+    "source-map-js": "1.2.2"
+  }
+}
