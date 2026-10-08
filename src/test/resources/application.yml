@@ -13,3 +13,6 @@ petri:
   security:
     initial-admin-email: test-admin@petri.local
     initial-admin-password: test-password
+logging:
+  level:
+    root: WARN

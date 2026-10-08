@@ -6,6 +6,7 @@ import org.slf4j.LoggerFactory;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.http.HttpMethod;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.core.userdetails.User;
 import org.springframework.security.core.userdetails.UserDetailsService;
@@ -43,6 +44,8 @@ public class SecurityConfiguration {
         .authorizeHttpRequests(authorize -> authorize
             .requestMatchers("/css/**", "/js/**", "/actuator/health", "/actuator/health/**")
             .permitAll()
+            .requestMatchers(HttpMethod.POST, "/projects").hasRole("INSTANCE_ADMIN")
+            .requestMatchers("/audit", "/audit/**").hasRole("INSTANCE_ADMIN")
             .anyRequest().authenticated())
         .formLogin(form -> form.loginPage("/login").defaultSuccessUrl("/", true).permitAll())
         .logout(logout -> logout.logoutSuccessUrl("/login?logout"))
@@ -67,4 +70,3 @@ public class SecurityConfiguration {
     };
   }
 }
-

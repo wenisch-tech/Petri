@@ -1,7 +1,35 @@
 import Alpine from 'alpinejs';
-import { Bot, Boxes, GitBranch, KeyRound, LogOut, Moon, ShieldCheck, Sun } from 'lucide';
+import {
+  ArrowLeft,
+  Bot,
+  Boxes,
+  CircleCheck,
+  FolderGit2,
+  GitBranch,
+  History,
+  KeyRound,
+  LogOut,
+  Moon,
+  Plus,
+  ShieldCheck,
+  Sun
+} from 'lucide';
 
-const icons = { Bot, Boxes, GitBranch, KeyRound, LogOut, Moon, ShieldCheck, Sun };
+const icons = {
+  ArrowLeft,
+  Bot,
+  Boxes,
+  CircleCheck,
+  FolderGit2,
+  GitBranch,
+  History,
+  KeyRound,
+  LogOut,
+  Moon,
+  Plus,
+  ShieldCheck,
+  Sun
+};
 const storedTheme = (() => {
   try { return localStorage.getItem('petri-theme'); } catch { return null; }
 })();
@@ -35,4 +63,3 @@ document.addEventListener('DOMContentLoaded', () => {
 
 window.Alpine = Alpine;
 Alpine.start();
-

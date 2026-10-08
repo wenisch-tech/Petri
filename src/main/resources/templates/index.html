@@ -16,6 +16,10 @@
         <span class="grid size-9 place-items-center rounded-xl bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span>
         <span>Petri</span>
       </a>
+      <nav class="hidden items-center gap-1 sm:flex" aria-label="Primary navigation">
+        <a class="nav-link" href="/projects">Projects</a>
+        <a class="nav-link" href="/audit">Audit</a>
+      </nav>
       <div class="flex items-center gap-2">
         <button class="btn-secondary" type="button" x-data @click="$store.theme.toggle()" aria-label="Toggle theme">
           <i data-lucide="Sun"></i>
@@ -38,9 +42,9 @@
       </div>
       <div class="grid gap-4 p-6 sm:grid-cols-3 sm:p-8">
         <article class="metric">
-          <i class="text-cyan-500" data-lucide="GitBranch"></i>
+          <i class="text-cyan-500" data-lucide="FolderGit2"></i>
           <span class="metric-label mt-4 block">Projects</span>
-          <span class="metric-value">Git-managed</span>
+          <span class="metric-value" th:text="${projectCount}">0</span>
         </article>
         <article class="metric">
           <i class="text-cyan-500" data-lucide="ShieldCheck"></i>
@@ -53,8 +57,25 @@
           <span class="metric-value">Modular</span>
         </article>
       </div>
+      <div class="border-t border-ink-700/70 p-6 sm:p-8">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <h2 class="text-lg font-semibold">Recent projects</h2>
+            <p class="mt-1 text-sm text-ink-500">Repositories prepared for controlled agent runs.</p>
+          </div>
+          <a class="btn-primary" href="/projects/new"><i data-lucide="Plus"></i> Add project</a>
+        </div>
+        <p th:if="${#lists.isEmpty(recentProjects)}" class="mt-6 rounded-xl border border-dashed border-ink-700 p-6 text-sm text-ink-500">
+          No projects yet. Add the first repository to continue.
+        </p>
+        <div th:unless="${#lists.isEmpty(recentProjects)}" class="mt-6 grid gap-3 sm:grid-cols-2">
+          <a th:each="project : ${recentProjects}" href="/projects" class="metric transition hover:border-brand-400/60">
+            <span class="font-semibold text-ink-100" th:text="${project.name}">Project</span>
+            <span class="mt-1 block truncate text-sm text-ink-500" th:text="${project.repositoryUri}">repository</span>
+          </a>
+        </div>
+      </div>
     </section>
   </main>
 </body>
 </html>
-
