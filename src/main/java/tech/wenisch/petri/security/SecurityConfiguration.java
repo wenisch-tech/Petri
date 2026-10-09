@@ -73,6 +73,8 @@ public class SecurityConfiguration {
                 "/projects/*/mirror/**")
             .hasRole("INSTANCE_ADMIN")
             .requestMatchers("/audit", "/audit/**").hasRole("INSTANCE_ADMIN")
+            .requestMatchers("/chat", "/chat/**").hasRole("INSTANCE_ADMIN")
+            .requestMatchers("/model-settings", "/model-settings/**").hasRole("INSTANCE_ADMIN")
             .requestMatchers("/runs", "/runs/**").hasRole("INSTANCE_ADMIN")
             .requestMatchers("/api-keys", "/api-keys/**").hasRole("INSTANCE_ADMIN")
             .requestMatchers("/operations", "/operations/**").hasRole("INSTANCE_ADMIN")

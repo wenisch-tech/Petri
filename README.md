@@ -2,6 +2,8 @@
 
 Petri is a self-hosted, Java-based coding agent for controlled analysis, modification and verification of software projects.
 
+See the [documentation index](docs/README.md) for setup, configuration, model providers, Git workspaces, agent behavior, API usage and the security model.
+
 ## Development
 
 Requirements: JDK 25 and Maven 3.9+.
@@ -69,15 +71,26 @@ API clients can discover and invoke tools below `/api/v1/agent`. Tool lifecycle 
 
 ## Model providers and agent runs
 
-Model access is isolated behind a provider-neutral client boundary. The first implementation uses OpenAI's Responses API with strict function schemas, one tool call at a time, bounded responses and no redirects. An instance administrator stores an OpenAI API key plus an explicit model name through `/operations/model-credentials/OPENAI`; the API key is encrypted before persistence and is never returned by status responses.
+Model access is isolated behind a provider-neutral client boundary. An instance administrator configures one or more providers at `/model-settings`; each has its own base URL, model ID, maximum output tokens, optional reasoning/verbosity controls and optional encrypted API key. Stored keys are never rendered after submission. The REST operations under `/operations/model-credentials/{provider}` support the same settings for automation.
 
-API clients can create, inspect, list, execute and cancel persistent runs below `/api/v1/agent/worktrees/{worktreeId}/runs`. A new run starts as `PENDING`; `POST /api/v1/agent/worktrees/{worktreeId}/runs/{runId}/execute` drives the synchronous model/tool loop until it completes, fails, is cancelled or exhausts its model-turn budget. Runs and their ordered turns are separate from disposable worktree lifecycle records.
+| Provider | Default base URL | Protocol | API key |
+| --- | --- | --- | --- |
+| `OPENAI` | `https://api.openai.com/v1` | Responses API | required |
+| `LITELLM` | `http://localhost:4000/v1` | Responses API | optional |
+| `OLLAMA` | `http://localhost:11434/v1` | Chat Completions | optional |
+| `OPENAI_COMPATIBLE` | `http://localhost:8000/v1` | Chat Completions | optional |
+
+LiteLLM can route any configured model alias through its Responses endpoint. Ollama and generic OpenAI-compatible endpoints use Chat Completions because this is the broadest local-server contract; Petri reconstructs the full conversation and tool-call history from persisted turns for every request, so no provider-side conversation state is required. Base URLs may point at another container or LAN host. Use plain HTTP only on a trusted local network, especially when an API key is configured.
+
+New runs snapshot their provider, model identity and generation settings so later default changes do not alter those values on an existing or resumable run. API clients and the web chat can override the configured model and generation defaults for an individual run. Reasoning effort and verbosity are optional because support differs by model.
+
+API clients can create, inspect, list, execute and cancel persistent runs below `/api/v1/agent/worktrees/{worktreeId}/runs`. A new run starts as `PENDING`; `POST /api/v1/agent/worktrees/{worktreeId}/runs/{runId}/execute` drives the synchronous model/tool loop until it completes, fails, is cancelled or exhausts its model-turn budget. `POST .../runs/start` combines creation with asynchronous execution, and `POST .../runs/{runId}/resume` queues a persisted run without holding the client connection. Runs and their ordered turns are separate from disposable worktree lifecycle records.
 
 Run-scoped tool lifecycle events are available as replayable JSON and Server-Sent Events at `/api/v1/agent/worktrees/{worktreeId}/runs/{runId}/events` and `/events/stream`. Worktree-wide event endpoints remain available for broader monitoring.
 
 Each model response, tool call and tool result is persisted before the next model request. Continuations use the provider response ID and original tool-call ID. An execution lease prevents concurrent workers from driving the same run and allows an interrupted `RUNNING` run to be resumed after the lease expires. Cancellation is checked between external calls and tools. File changes and tests remain proposals: model execution never bypasses their administrator approval gates.
 
-Instance administrators can inspect all runs at `/runs`. The detail view shows the prompt, ordered persisted turns, final output or failure, and patch/test proposals linked to that exact run. Proposed operations can be approved or rejected there; approved changes and tests still require a separate explicit apply or execute action.
+Instance administrators can work from the chat-style console at `/chat`. It selects a configured provider, project and active disposable worktree, starts the model loop in the background, refreshes model/tool progress, and embeds patch and test approval actions in the conversation. Per-task advanced controls can override model ID, output budget, reasoning effort and verbosity. The `/runs` pages remain the detailed operational view of prompts, ordered persisted turns, final output or failure, and proposals linked to an exact run. Approved changes and tests still require a separate explicit apply or execute action.
 
 ```bash
 export PETRI_OPENAI_BASE_URL=https://api.openai.com/v1
@@ -107,7 +120,7 @@ spring:
 
 ## Status
 
-Phase 1 is in progress. The current slices provide the reproducible backend/frontend build, Flyway-managed persistence, local and optional OIDC authentication, project registry, audit events, administrator-managed API keys, encrypted Git/model credentials, controlled repository mirrors, disposable worktrees, approval-gated file/test tools, lazy-loaded skills, REST invocation, persisted SSE lifecycle events and persistent provider-neutral model/tool orchestration.
+Phase 1 is in progress. The current slices provide the reproducible backend/frontend build, Flyway-managed persistence, local and optional OIDC authentication, project registry, audit events, administrator-managed API keys, encrypted Git/model credentials, rich model generation settings, controlled repository mirrors, disposable worktrees, approval-gated file/test tools, lazy-loaded skills, REST invocation, persisted SSE lifecycle events, persistent provider-neutral model/tool orchestration and a browser-based chat console.
 
 ## License
 

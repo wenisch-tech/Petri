@@ -17,8 +17,10 @@
         <span>Petri</span>
       </a>
       <nav class="hidden items-center gap-1 sm:flex" aria-label="Primary navigation">
+        <a class="nav-link" href="/chat">Chat</a>
         <a class="nav-link" href="/projects">Projects</a>
         <a class="nav-link bg-ink-800 text-ink-100" href="/runs">Runs</a>
+        <a class="nav-link" href="/model-settings">Models</a>
         <a class="nav-link" href="/audit">Audit</a>
         <a class="nav-link" href="/api-keys">API keys</a>
       </nav>
@@ -40,15 +42,16 @@
       <div th:if="${operationMessage}" class="mt-6 rounded-xl border border-good-500/30 bg-good-500/10 p-4 text-sm text-good-500" th:text="${operationMessage}">Operation completed.</div>
       <div th:if="${operationError}" class="mt-6 rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-300" th:text="${operationError}">Operation failed.</div>
 
-      <div class="mt-6 grid gap-4 sm:grid-cols-3">
+      <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <article class="metric"><span class="metric-label">Model</span><span class="mt-2 block break-words font-mono text-sm" th:text="|${run.provider} / ${run.model}|">provider / model</span></article>
         <article class="metric"><span class="metric-label">Model turns</span><span class="metric-value" th:text="|${run.modelTurnCount} / ${run.maxModelTurns}|">0 / 20</span></article>
         <article class="metric"><span class="metric-label">Created</span><span class="mt-2 block font-mono text-xs" th:text="${run.createdAt}">time</span></article>
+        <article class="metric"><span class="metric-label">Generation</span><span class="mt-2 block text-sm" th:text="|${run.maxOutputTokens} tokens · reasoning ${run.reasoningEffort ?: 'default'} · verbosity ${run.textVerbosity ?: 'default'}|">settings</span></article>
       </div>
 
       <div class="mt-6">
         <h2 class="font-semibold">Prompt</h2>
-        <pre class="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-ink-700 bg-ink-950 p-4 text-sm text-ink-300" th:text="${run.turns[0].content}">prompt</pre>
+        <pre class="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-ink-700 bg-ink-950 p-4 text-sm text-ink-300" th:text="${run.prompt}">prompt</pre>
       </div>
       <div th:if="${run.finalOutput != null}" class="mt-6">
         <h2 class="font-semibold">Final output</h2>

@@ -68,6 +68,13 @@ public class ProjectWorktreeService {
         .toList();
   }
 
+  @Transactional(readOnly = true)
+  public ProjectWorktreeView get(UUID worktreeId) {
+    return worktrees.findById(worktreeId)
+        .map(ProjectWorktreeService::view)
+        .orElseThrow(() -> new IllegalArgumentException("Unknown worktree"));
+  }
+
   @Transactional
   public ProjectWorktreeView create(UUID projectId, String requestedRevision, String actorEmail) {
     Project project = project(projectId);
@@ -75,10 +82,11 @@ public class ProjectWorktreeService {
     if (!mirrors.status(projectId).initialized()) {
       throw new GitOperationException("Synchronize the project mirror before creating a worktree");
     }
-    String revision = revision(requestedRevision, project.getDefaultBranch());
     UUID runId = UUID.randomUUID();
     try {
       Path mirror = paths.mirror(projectId);
+      String revision = resolveRevision(
+          mirror, requestedRevision, project.getDefaultBranch());
       Path worktree = paths.runWorktree(projectId, runId);
       String relativePath = paths.root().relativize(worktree).toString();
       GitCommandResult result = git.run(
@@ -168,6 +176,39 @@ public class ProjectWorktreeService {
       throw new IllegalArgumentException("Git revision is invalid");
     }
     return value;
+  }
+
+  private String resolveRevision(
+      Path mirror, String requestedRevision, String configuredDefault) throws IOException {
+    if (requestedRevision != null && !requestedRevision.isBlank()) {
+      return revision(requestedRevision, null);
+    }
+    String configured = revision(null, configuredDefault);
+    if (referenceExists(mirror, configured)) return configured;
+
+    GitCommandResult symbolicHead = git.run(
+        paths.root(),
+        List.of("--git-dir=" + mirror, "symbolic-ref", "--quiet", "--short", "HEAD"));
+    if (symbolicHead.succeeded() && !symbolicHead.output().isBlank()) {
+      String actualDefault = revision(symbolicHead.output().strip(), null);
+      if (referenceExists(mirror, actualDefault)) return actualDefault;
+    }
+    if (referenceExists(mirror, "HEAD")) return "HEAD";
+    throw new GitOperationException(
+        "Project mirror has no resolvable default revision; configure an existing branch");
+  }
+
+  private boolean referenceExists(Path mirror, String revision) throws IOException {
+    GitCommandResult result = git.run(
+        paths.root(),
+        List.of(
+            "--git-dir=" + mirror,
+            "rev-parse",
+            "--verify",
+            "--quiet",
+            "--end-of-options",
+            revision + "^{commit}"));
+    return result.succeeded();
   }
 
   private static ProjectWorktreeView view(ProjectWorktree worktree) {

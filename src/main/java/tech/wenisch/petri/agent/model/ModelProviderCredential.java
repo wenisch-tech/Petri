@@ -17,11 +17,25 @@ class ModelProviderCredential {
   @Column(length = 32)
   private ModelProvider provider;
 
-  @Column(name = "api_key_ciphertext", nullable = false, columnDefinition = "TEXT")
+  @Column(name = "api_key_ciphertext", columnDefinition = "TEXT")
   private String apiKeyCiphertext;
+
+  @Column(name = "base_url", length = 2048)
+  private String baseUrl;
 
   @Column(name = "model_name", nullable = false, length = 200)
   private String model;
+
+  @Column(name = "max_output_tokens", nullable = false)
+  private int maxOutputTokens;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "reasoning_effort", length = 16)
+  private ReasoningEffort reasoningEffort;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "text_verbosity", length = 16)
+  private TextVerbosity textVerbosity;
 
   @Column(name = "created_by", nullable = false)
   private UUID createdBy;
@@ -40,27 +54,51 @@ class ModelProviderCredential {
   ModelProviderCredential(
       ModelProvider provider,
       String apiKeyCiphertext,
+      String baseUrl,
       String model,
+      int maxOutputTokens,
+      ReasoningEffort reasoningEffort,
+      TextVerbosity textVerbosity,
       UUID actorId,
       Instant now) {
     this.provider = provider;
     this.apiKeyCiphertext = apiKeyCiphertext;
+    this.baseUrl = baseUrl;
     this.model = model;
+    this.maxOutputTokens = maxOutputTokens;
+    this.reasoningEffort = reasoningEffort;
+    this.textVerbosity = textVerbosity;
     this.createdBy = actorId;
     this.createdAt = now;
     this.updatedBy = actorId;
     this.updatedAt = now;
   }
 
-  void replace(String apiKeyCiphertext, String model, UUID actorId, Instant now) {
+  void replace(
+      String apiKeyCiphertext,
+      String baseUrl,
+      String model,
+      int maxOutputTokens,
+      ReasoningEffort reasoningEffort,
+      TextVerbosity textVerbosity,
+      UUID actorId,
+      Instant now) {
     this.apiKeyCiphertext = apiKeyCiphertext;
+    this.baseUrl = baseUrl;
     this.model = model;
+    this.maxOutputTokens = maxOutputTokens;
+    this.reasoningEffort = reasoningEffort;
+    this.textVerbosity = textVerbosity;
     this.updatedBy = actorId;
     this.updatedAt = now;
   }
 
   ModelProvider provider() { return provider; }
   String apiKeyCiphertext() { return apiKeyCiphertext; }
+  String baseUrl() { return baseUrl; }
   String model() { return model; }
+  int maxOutputTokens() { return maxOutputTokens; }
+  ReasoningEffort reasoningEffort() { return reasoningEffort; }
+  TextVerbosity textVerbosity() { return textVerbosity; }
   Instant updatedAt() { return updatedAt; }
 }

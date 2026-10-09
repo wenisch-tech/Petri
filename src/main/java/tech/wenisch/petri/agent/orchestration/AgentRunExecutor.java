@@ -10,7 +10,6 @@ import tech.wenisch.petri.agent.model.ModelClientRegistry;
 import tech.wenisch.petri.agent.model.ModelRequest;
 import tech.wenisch.petri.agent.model.ModelResponse;
 import tech.wenisch.petri.agent.tool.AgentToolRegistry;
-import tech.wenisch.petri.config.PetriProperties;
 
 @Service
 public class AgentRunExecutor {
@@ -30,21 +29,18 @@ public class AgentRunExecutor {
   private final ModelClientRegistry modelClients;
   private final AgentToolRegistry tools;
   private final AgentRunEventService events;
-  private final int maxOutputTokens;
 
   public AgentRunExecutor(
       AgentRunStateService stateService,
       AgentRunService runService,
       ModelClientRegistry modelClients,
       AgentToolRegistry tools,
-      AgentRunEventService events,
-      PetriProperties properties) {
+      AgentRunEventService events) {
     this.stateService = stateService;
     this.runService = runService;
     this.modelClients = modelClients;
     this.tools = tools;
     this.events = events;
-    this.maxOutputTokens = properties.agent().maxOutputTokens();
   }
 
   public AgentRunView execute(
@@ -112,14 +108,16 @@ public class AgentRunExecutor {
     if (state.initialModelRequest()) {
       return new ModelRequest(
           state.model(), INSTRUCTIONS, state.prompt(), null, null, tools.definitions(),
-          maxOutputTokens);
+          state.maxOutputTokens(), state.reasoningEffort(), state.textVerbosity(),
+          state.conversation());
     }
     if (state.previousResponseId() == null || state.toolOutputs().isEmpty()) {
       throw new IllegalStateException("Agent run has no resumable model input");
     }
     return new ModelRequest(
         state.model(), INSTRUCTIONS, null, state.previousResponseId(), state.toolOutputs(),
-        tools.definitions(), maxOutputTokens);
+        tools.definitions(), state.maxOutputTokens(), state.reasoningEffort(),
+        state.textVerbosity(), state.conversation());
   }
 
   private static String safeToolMessage(RuntimeException exception) {

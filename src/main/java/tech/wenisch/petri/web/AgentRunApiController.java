@@ -19,6 +19,7 @@ import tech.wenisch.petri.agent.event.AgentRunEventStream;
 import tech.wenisch.petri.agent.event.AgentRunEventView;
 import tech.wenisch.petri.agent.orchestration.AgentRunService;
 import tech.wenisch.petri.agent.orchestration.AgentRunExecutor;
+import tech.wenisch.petri.agent.orchestration.AgentRunLauncher;
 import tech.wenisch.petri.agent.orchestration.AgentRunView;
 import tech.wenisch.petri.agent.orchestration.CreateAgentRunCommand;
 import tech.wenisch.petri.apikey.ApiKeyPrincipal;
@@ -28,18 +29,40 @@ import tech.wenisch.petri.apikey.ApiKeyPrincipal;
 public class AgentRunApiController {
   private final AgentRunService runs;
   private final AgentRunExecutor executor;
+  private final AgentRunLauncher launcher;
   private final AgentRunEventService events;
   private final AgentRunEventStream eventStream;
 
   public AgentRunApiController(
       AgentRunService runs,
       AgentRunExecutor executor,
+      AgentRunLauncher launcher,
       AgentRunEventService events,
       AgentRunEventStream eventStream) {
     this.runs = runs;
     this.executor = executor;
+    this.launcher = launcher;
     this.events = events;
     this.eventStream = eventStream;
+  }
+
+  @PostMapping("/start")
+  public ResponseEntity<?> createAndStart(
+      @PathVariable UUID worktreeId,
+      @RequestBody CreateAgentRunCommand command,
+      Authentication authentication) {
+    ApiKeyPrincipal principal = principal(authentication);
+    try {
+      AgentRunView run = runs.create(
+          worktreeId, command, principal.createdBy(), "api-key:" + principal.id());
+      launcher.launch(
+          run.id(), run.worktreeId(), principal.createdBy(), "api-key:" + principal.id());
+      return ResponseEntity.status(HttpStatus.ACCEPTED).body(run);
+    } catch (IllegalArgumentException exception) {
+      return problem(HttpStatus.BAD_REQUEST, exception.getMessage());
+    } catch (IllegalStateException exception) {
+      return problem(HttpStatus.CONFLICT, exception.getMessage());
+    }
   }
 
   @PostMapping
@@ -95,6 +118,27 @@ public class AgentRunApiController {
     try {
       return ResponseEntity.ok(executor.execute(
           runId, worktreeId, principal.createdBy(), "api-key:" + principal.id()));
+    } catch (IllegalArgumentException exception) {
+      return problem(HttpStatus.BAD_REQUEST, exception.getMessage());
+    } catch (IllegalStateException exception) {
+      return problem(HttpStatus.CONFLICT, exception.getMessage());
+    }
+  }
+
+  @PostMapping("/{runId}/resume")
+  public ResponseEntity<?> resume(
+      @PathVariable UUID worktreeId,
+      @PathVariable UUID runId,
+      Authentication authentication) {
+    ApiKeyPrincipal principal = principal(authentication);
+    try {
+      AgentRunView run = runs.get(runId, worktreeId);
+      if (!run.createdBy().equals(principal.createdBy())) {
+        return problem(HttpStatus.BAD_REQUEST, "Agent run belongs to another creator");
+      }
+      launcher.launch(
+          run.id(), run.worktreeId(), principal.createdBy(), "api-key:" + principal.id());
+      return ResponseEntity.status(HttpStatus.ACCEPTED).body(run);
     } catch (IllegalArgumentException exception) {
       return problem(HttpStatus.BAD_REQUEST, exception.getMessage());
     } catch (IllegalStateException exception) {

@@ -382,9 +382,29 @@ class ProjectMirrorServiceTest {
         .isThrownBy(() -> worktreeLocator.requireActiveWorktree(worktree.id()));
   }
 
+  @Test
+  void usesMirrorHeadWhenConfiguredDefaultBranchDoesNotExist() throws Exception {
+    Path source = createSourceRepository("master");
+    Project project = projectService.create(
+        new CreateProjectCommand(
+            "Default branch fallback " + UUID.randomUUID(), source.toString(), "main"),
+        ADMIN_EMAIL);
+
+    mirrors.synchronize(project.getId(), ADMIN_EMAIL);
+    var worktree = worktrees.create(project.getId(), null, ADMIN_EMAIL);
+
+    assertThat(worktree.gitRevision()).isEqualTo("master");
+    assertThat(worktreeLocator.requireActiveWorktree(worktree.id()).resolve("README.md"))
+        .hasContent("first revision\n");
+  }
+
   private Path createSourceRepository() throws Exception {
+    return createSourceRepository("main");
+  }
+
+  private Path createSourceRepository(String initialBranch) throws Exception {
     Path source = temporaryDirectory.resolve("source-" + UUID.randomUUID());
-    git("init", "--initial-branch=main", source.toString());
+    git("init", "--initial-branch=" + initialBranch, source.toString());
     git("-C", source.toString(), "config", "user.name", "Petri Test");
     git("-C", source.toString(), "config", "user.email", "petri@example.test");
     Files.writeString(source.resolve("README.md"), "first revision\n");

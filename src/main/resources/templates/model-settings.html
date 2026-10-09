@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="_csrf" th:content="${_csrf.token}">
+  <meta name="_csrf_header" th:content="${_csrf.headerName}">
+  <title>Model settings · Petri</title>
+  <link rel="stylesheet" href="/css/petri.css">
+  <script defer src="/js/petri.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="page flex items-center justify-between py-4">
+      <a href="/" class="flex items-center gap-3 font-semibold">
+        <span class="grid size-9 place-items-center rounded-xl bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span>
+        <span>Petri</span>
+      </a>
+      <nav class="hidden items-center gap-1 sm:flex" aria-label="Primary navigation">
+        <a class="nav-link" href="/chat">Chat</a>
+        <a class="nav-link" href="/projects">Projects</a>
+        <a class="nav-link" href="/runs">Runs</a>
+        <a class="nav-link bg-ink-800 text-ink-100" href="/model-settings">Models</a>
+        <a class="nav-link" href="/audit">Audit</a>
+        <a class="nav-link" href="/api-keys">API keys</a>
+      </nav>
+      <a class="btn-secondary" href="/chat"><i data-lucide="MessageSquare"></i> Open chat</a>
+    </div>
+  </header>
+
+  <main class="page py-6">
+    <p class="text-xs font-bold uppercase tracking-[.2em] text-brand-400">Provider configuration</p>
+    <h1 class="mt-2 text-3xl font-semibold tracking-tight">Models and local endpoints</h1>
+    <p class="mt-2 max-w-3xl text-ink-500">Configure one or more providers. New runs snapshot the selected endpoint and generation settings; existing runs keep their original model settings.</p>
+
+    <div th:if="${settingsSaved}" class="mt-6 rounded-xl border border-good-500/30 bg-good-500/10 p-4 text-sm text-good-500">Model settings saved.</div>
+    <div th:if="${settingsRemoved}" class="mt-6 rounded-xl border border-ink-700 bg-ink-800 p-4 text-sm text-ink-300">Model configuration removed.</div>
+
+    <div class="mt-7 grid gap-6 xl:grid-cols-2">
+      <section th:each="credential : ${credentials}" class="panel p-6 sm:p-7">
+        <div class="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h2 class="text-xl font-semibold" th:text="${credential.provider.displayName()}">Provider</h2>
+            <p class="mt-1 text-sm text-ink-500" th:text="|${credential.provider.apiStyle()} · ${credential.provider.name()}|">API style</p>
+          </div>
+          <span class="badge" th:text="${credential.configured} ? 'CONFIGURED' : 'NOT CONFIGURED'">status</span>
+        </div>
+
+        <div th:if="${formError != null && submittedProvider == credential.provider}" class="mt-5 rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-300" th:text="${formError}">Could not save settings.</div>
+
+        <form class="mt-6 space-y-5" method="post" th:action="@{/model-settings/{provider}(provider=${credential.provider})}" th:object="${modelSettingsForm}" autocomplete="off">
+          <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+          <div>
+            <label class="mb-2 block text-sm font-semibold" th:for="|baseUrl-${credential.provider}|">Base URL</label>
+            <input class="field font-mono text-sm" name="baseUrl" th:id="|baseUrl-${credential.provider}|" th:value="${submittedProvider == credential.provider ? modelSettingsForm.baseUrl : credential.baseUrl}" placeholder="http://localhost:11434/v1" required>
+            <span class="field-error" th:if="${submittedProvider == credential.provider && #fields.hasErrors('baseUrl')}" th:errors="*{baseUrl}">Invalid URL</span>
+            <p class="mt-2 text-xs text-ink-500">Petri appends <code th:text="${credential.provider.apiStyle() == 'Responses API'} ? '/responses' : '/chat/completions'">/endpoint</code>.</p>
+          </div>
+
+          <div>
+            <label class="mb-2 block text-sm font-semibold" th:for="|model-${credential.provider}|">Model ID</label>
+            <input class="field" name="model" th:id="|model-${credential.provider}|" th:value="${submittedProvider == credential.provider ? modelSettingsForm.model : credential.model}" th:placeholder="${credential.provider.name() == 'OLLAMA'} ? 'qwen3-coder' : 'model-name'" required>
+            <span class="field-error" th:if="${submittedProvider == credential.provider && #fields.hasErrors('model')}" th:errors="*{model}">Invalid model</span>
+          </div>
+
+          <div>
+            <label class="mb-2 block text-sm font-semibold" th:for="|apiKey-${credential.provider}|">API key <span th:unless="${credential.provider.apiKeyRequired()}" class="font-normal text-ink-500">(optional)</span></label>
+            <input class="field" name="apiKey" th:id="|apiKey-${credential.provider}|" type="password" placeholder="Leave blank when the endpoint needs no key" autocomplete="new-password" th:required="${credential.provider.apiKeyRequired() && !credential.hasApiKey}">
+            <span class="field-error" th:if="${submittedProvider == credential.provider && #fields.hasErrors('apiKey')}" th:errors="*{apiKey}">Invalid key</span>
+            <p class="mt-2 text-xs text-ink-500" th:if="${credential.hasApiKey}">A key is stored encrypted. Leave this blank to keep it.</p>
+            <p class="mt-2 text-xs text-amber-300" th:if="${#strings.startsWith(credential.baseUrl, 'http://')}">HTTP is suitable for trusted local networks only; credentials are not encrypted in transit.</p>
+          </div>
+
+          <div class="grid gap-4 sm:grid-cols-3">
+            <div>
+              <label class="mb-2 block text-sm font-semibold" th:for="|tokens-${credential.provider}|">Max output</label>
+              <input class="field" name="maxOutputTokens" th:id="|tokens-${credential.provider}|" type="number" min="16" max="1000000" th:value="${submittedProvider == credential.provider ? modelSettingsForm.maxOutputTokens : credential.maxOutputTokens}" required>
+            </div>
+            <div>
+              <label class="mb-2 block text-sm font-semibold" th:for="|reasoning-${credential.provider}|">Reasoning</label>
+              <select class="field" name="reasoningEffort" th:id="|reasoning-${credential.provider}|">
+                <option value="">Model default</option>
+                <option th:each="effort : ${reasoningEfforts}" th:value="${effort}" th:text="${#strings.toLowerCase(effort.name())}" th:selected="${effort == (submittedProvider == credential.provider ? modelSettingsForm.reasoningEffort : credential.reasoningEffort)}">medium</option>
+              </select>
+            </div>
+            <div>
+              <label class="mb-2 block text-sm font-semibold" th:for="|verbosity-${credential.provider}|">Verbosity</label>
+              <select class="field" name="textVerbosity" th:id="|verbosity-${credential.provider}|">
+                <option value="">Model default</option>
+                <option th:each="verbosity : ${textVerbosities}" th:value="${verbosity}" th:text="${#strings.toLowerCase(verbosity.name())}" th:selected="${verbosity == (submittedProvider == credential.provider ? modelSettingsForm.textVerbosity : credential.textVerbosity)}">medium</option>
+              </select>
+            </div>
+          </div>
+
+          <button class="btn-primary" type="submit"><i data-lucide="Save"></i> Save</button>
+        </form>
+
+        <form th:if="${credential.configured}" class="mt-3" method="post" th:action="@{/model-settings/{provider}/delete(provider=${credential.provider})}" onsubmit="return confirm('Remove this model configuration?')">
+          <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+          <button class="btn-secondary" type="submit">Remove configuration</button>
+        </form>
+      </section>
+    </div>
+
+    <section class="panel mt-6 p-6 text-sm leading-6 text-ink-500">
+      <h2 class="font-semibold text-ink-200">Compatibility</h2>
+      <p class="mt-2">OpenAI and LiteLLM use the Responses API. Ollama and generic OpenAI-compatible servers use Chat Completions with reconstructed conversation history, which works with stateless local endpoints. Unsupported reasoning or verbosity controls can be left on “Model default”.</p>
+    </section>
+  </main>
+</body>
+</html>

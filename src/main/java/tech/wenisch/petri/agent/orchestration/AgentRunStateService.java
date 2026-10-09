@@ -15,6 +15,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tech.wenisch.petri.agent.model.ModelResponse;
+import tech.wenisch.petri.agent.model.ModelConversationMessage;
 import tech.wenisch.petri.agent.model.ModelToolCall;
 import tech.wenisch.petri.agent.model.ModelToolOutput;
 import tech.wenisch.petri.agent.tool.AgentToolRegistry;
@@ -291,8 +292,29 @@ class AgentRunStateService {
     }
     return new AgentExecutionState(
         run.id(), run.worktreeId(), run.provider(), run.model(), run.prompt(), run.status(),
-        run.maxModelTurns(), run.modelTurnCount(), latestResponseId,
-        List.copyOf(pending), List.copyOf(outputs));
+        run.maxModelTurns(), run.maxOutputTokens(), run.reasoningEffort(), run.textVerbosity(),
+        run.modelTurnCount(), latestResponseId,
+        List.copyOf(pending), List.copyOf(outputs), conversation(history));
+  }
+
+  static List<ModelConversationMessage> conversation(List<AgentTurn> history) {
+    List<ModelConversationMessage> messages = new ArrayList<>();
+    for (AgentTurn turn : history) {
+      if (turn.kind() == AgentTurnKind.USER_PROMPT) {
+        messages.add(ModelConversationMessage.user(turn.content()));
+      } else if (turn.kind() == AgentTurnKind.MODEL_RESPONSE) {
+        List<ModelToolCall> responseCalls = history.stream()
+            .filter(candidate -> candidate.kind() == AgentTurnKind.TOOL_CALL)
+            .filter(candidate -> turn.providerResponseId().equals(candidate.providerResponseId()))
+            .map(candidate -> new ModelToolCall(
+                candidate.toolCallId(), candidate.toolName(), candidate.content()))
+            .toList();
+        messages.add(ModelConversationMessage.assistant(turn.content(), responseCalls));
+      } else if (turn.kind() == AgentTurnKind.TOOL_RESULT) {
+        messages.add(ModelConversationMessage.tool(turn.toolCallId(), turn.content()));
+      }
+    }
+    return List.copyOf(messages);
   }
 
   private void requirePendingCall(List<AgentTurn> history, AgentPendingToolCall expected) {

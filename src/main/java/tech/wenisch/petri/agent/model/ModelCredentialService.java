@@ -1,5 +1,7 @@
 package tech.wenisch.petri.agent.model;
 
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.nio.charset.StandardCharsets;
 import java.time.Clock;
 import java.time.Instant;
@@ -7,6 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tech.wenisch.petri.audit.AuditLogService;
+import tech.wenisch.petri.config.PetriProperties;
 import tech.wenisch.petri.secret.SecretCipher;
 import tech.wenisch.petri.security.AppUser;
 import tech.wenisch.petri.security.AppUserRepository;
@@ -19,6 +22,8 @@ public class ModelCredentialService {
   private final AppUserRepository users;
   private final SecretCipher cipher;
   private final AuditLogService auditLog;
+  private final int defaultMaxOutputTokens;
+  private final String defaultOpenAiBaseUrl;
   private final Clock clock;
 
   @Autowired
@@ -26,8 +31,16 @@ public class ModelCredentialService {
       ModelProviderCredentialRepository credentials,
       AppUserRepository users,
       SecretCipher cipher,
-      AuditLogService auditLog) {
-    this(credentials, users, cipher, auditLog, Clock.systemUTC());
+      AuditLogService auditLog,
+      PetriProperties properties) {
+    this(
+        credentials,
+        users,
+        cipher,
+        auditLog,
+        properties.agent().maxOutputTokens(),
+        properties.agent().openAiBaseUrl(),
+        Clock.systemUTC());
   }
 
   ModelCredentialService(
@@ -35,11 +48,15 @@ public class ModelCredentialService {
       AppUserRepository users,
       SecretCipher cipher,
       AuditLogService auditLog,
+      int defaultMaxOutputTokens,
+      String defaultOpenAiBaseUrl,
       Clock clock) {
     this.credentials = credentials;
     this.users = users;
     this.cipher = cipher;
     this.auditLog = auditLog;
+    this.defaultMaxOutputTokens = defaultMaxOutputTokens;
+    this.defaultOpenAiBaseUrl = defaultOpenAiBaseUrl;
     this.clock = clock;
   }
 
@@ -47,16 +64,39 @@ public class ModelCredentialService {
   public ModelCredentialStatus status(ModelProvider provider) {
     return credentials.findById(provider)
         .map(value -> new ModelCredentialStatus(
-            provider, true, value.model(), value.updatedAt()))
-        .orElseGet(() -> ModelCredentialStatus.missing(provider));
+            provider,
+            true,
+            value.apiKeyCiphertext() != null,
+            value.baseUrl() == null ? defaultBaseUrl(provider) : value.baseUrl(),
+            value.model(),
+            value.maxOutputTokens(),
+            value.reasoningEffort(),
+            value.textVerbosity(),
+            value.updatedAt()))
+        .orElseGet(() -> new ModelCredentialStatus(
+            provider,
+            false,
+            false,
+            defaultBaseUrl(provider),
+            null,
+            defaultMaxOutputTokens,
+            null,
+            null,
+            null));
   }
 
   @Transactional(readOnly = true)
   ModelCredentialMaterial requireMaterial(ModelProvider provider) {
     ModelProviderCredential credential = credentials.findById(provider)
         .orElseThrow(() -> new IllegalStateException(provider + " credentials are not configured"));
+    String apiKey = credential.apiKeyCiphertext() == null
+        ? null
+        : cipher.decrypt(credential.apiKeyCiphertext());
     return new ModelCredentialMaterial(
-        provider, cipher.decrypt(credential.apiKeyCiphertext()), credential.model());
+        provider,
+        apiKey,
+        credential.baseUrl() == null ? defaultBaseUrl(provider) : credential.baseUrl(),
+        credential.model());
   }
 
   @Transactional
@@ -64,24 +104,65 @@ public class ModelCredentialService {
       ModelProvider provider, SaveModelCredentialCommand command, String actorEmail) {
     if (provider == null) throw new IllegalArgumentException("Model provider is required");
     AppUser actor = actor(actorEmail);
-    String apiKey = required(command.apiKey(), "API key", MAX_API_KEY_LENGTH);
     String model = required(command.model(), "Model", 200).strip();
-    String encrypted = cipher.encrypt(apiKey);
+    String baseUrl = normalizeBaseUrl(
+        command.baseUrl() == null || command.baseUrl().isBlank()
+            ? defaultBaseUrl(provider)
+            : command.baseUrl());
+    int maxOutputTokens = command.maxOutputTokens() == null
+        ? defaultMaxOutputTokens
+        : command.maxOutputTokens();
+    if (maxOutputTokens < 16 || maxOutputTokens > 1_000_000) {
+      throw new IllegalArgumentException("Maximum output tokens must be between 16 and 1000000");
+    }
     Instant now = Instant.now(clock);
     ModelProviderCredential credential = credentials.findById(provider).orElse(null);
     String action;
     if (credential == null) {
-      credential = new ModelProviderCredential(provider, encrypted, model, actor.getId(), now);
+      String apiKey = optionalApiKey(command.apiKey(), provider.apiKeyRequired());
+      credential = new ModelProviderCredential(
+          provider,
+          apiKey == null ? null : cipher.encrypt(apiKey),
+          baseUrl,
+          model,
+          maxOutputTokens,
+          command.reasoningEffort(),
+          command.textVerbosity(),
+          actor.getId(),
+          now);
       action = "MODEL_CREDENTIAL_CREATED";
     } else {
-      credential.replace(encrypted, model, actor.getId(), now);
+      String encrypted = command.apiKey() == null || command.apiKey().isBlank()
+          ? credential.apiKeyCiphertext()
+          : cipher.encrypt(required(command.apiKey(), "API key", MAX_API_KEY_LENGTH));
+      if (provider.apiKeyRequired() && encrypted == null) {
+        throw new IllegalArgumentException("API key is required");
+      }
+      credential.replace(
+          encrypted,
+          baseUrl,
+          model,
+          maxOutputTokens,
+          command.reasoningEffort(),
+          command.textVerbosity(),
+          actor.getId(),
+          now);
       action = "MODEL_CREDENTIAL_REPLACED";
     }
     credentials.save(credential);
     auditLog.record(
         actor.getEmail(), action, "MODEL_PROVIDER_CREDENTIAL", auditTarget(provider),
         "Configured credentials for " + provider);
-    return new ModelCredentialStatus(provider, true, model, now);
+    return new ModelCredentialStatus(
+        provider,
+        true,
+        credential.apiKeyCiphertext() != null,
+        baseUrl,
+        model,
+        maxOutputTokens,
+        command.reasoningEffort(),
+        command.textVerbosity(),
+        now);
   }
 
   @Transactional
@@ -105,6 +186,48 @@ public class ModelCredentialService {
     if (value == null || value.isBlank()) throw new IllegalArgumentException(label + " is required");
     if (value.length() > maxLength) throw new IllegalArgumentException(label + " is too long");
     return value;
+  }
+
+  private static String optionalApiKey(String value, boolean required) {
+    if (value == null || value.isBlank()) {
+      if (required) throw new IllegalArgumentException("API key is required");
+      return null;
+    }
+    if (value.length() > MAX_API_KEY_LENGTH) {
+      throw new IllegalArgumentException("API key is too long");
+    }
+    return value;
+  }
+
+  private String defaultBaseUrl(ModelProvider provider) {
+    return provider == ModelProvider.OPENAI
+        ? stripTrailingSlash(defaultOpenAiBaseUrl)
+        : provider.defaultBaseUrl();
+  }
+
+  private static String normalizeBaseUrl(String value) {
+    String normalized = stripTrailingSlash(required(value, "Base URL", 2048).strip());
+    try {
+      URI uri = new URI(normalized);
+      if (!("http".equalsIgnoreCase(uri.getScheme())
+              || "https".equalsIgnoreCase(uri.getScheme()))
+          || uri.getHost() == null
+          || uri.getUserInfo() != null
+          || uri.getQuery() != null
+          || uri.getFragment() != null) {
+        throw new IllegalArgumentException(
+            "Base URL must be an HTTP(S) URL without credentials, query, or fragment");
+      }
+      return uri.toString();
+    } catch (URISyntaxException exception) {
+      throw new IllegalArgumentException("Base URL is invalid", exception);
+    }
+  }
+
+  private static String stripTrailingSlash(String value) {
+    int end = value.length();
+    while (end > 0 && value.charAt(end - 1) == '/') end--;
+    return value.substring(0, end);
   }
 
   private static java.util.UUID auditTarget(ModelProvider provider) {

@@ -23,6 +23,12 @@ final class OpenAiResponsesCodec {
     body.put("parallel_tool_calls", false);
     body.put("tool_choice", "auto");
     body.put("max_output_tokens", request.maxOutputTokens());
+    if (request.reasoningEffort() != null) {
+      body.putObject("reasoning").put("effort", request.reasoningEffort().apiValue());
+    }
+    if (request.textVerbosity() != null) {
+      body.putObject("text").put("verbosity", request.textVerbosity().apiValue());
+    }
     if (request.previousResponseId() != null) {
       body.put("previous_response_id", request.previousResponseId());
     }

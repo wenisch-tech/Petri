@@ -69,6 +69,15 @@ public class AgentRunService {
     if (!credential.configured()) {
       throw new IllegalStateException(provider + " credentials are not configured");
     }
+    String model = command.model() == null || command.model().isBlank()
+        ? credential.model()
+        : required(command.model(), "Model", 200).strip();
+    int maxOutputTokens = command.maxOutputTokens() == null
+        ? credential.maxOutputTokens()
+        : command.maxOutputTokens();
+    if (maxOutputTokens < 16 || maxOutputTokens > 1_000_000) {
+      throw new IllegalArgumentException("Maximum output tokens must be between 16 and 1000000");
+    }
     int maxTurns = command.maxModelTurns() == null
         ? DEFAULT_MAX_MODEL_TURNS
         : command.maxModelTurns();
@@ -77,7 +86,17 @@ public class AgentRunService {
     }
     Instant now = Instant.now(clock);
     AgentRun run = runs.save(new AgentRun(
-        UUID.randomUUID(), worktreeId, provider, credential.model(), prompt, maxTurns, actorId, now));
+        UUID.randomUUID(),
+        worktreeId,
+        provider,
+        model,
+        prompt,
+        maxTurns,
+        maxOutputTokens,
+        command.reasoningEffort() == null ? credential.reasoningEffort() : command.reasoningEffort(),
+        command.textVerbosity() == null ? credential.textVerbosity() : command.textVerbosity(),
+        actorId,
+        now));
     turns.save(new AgentTurn(
         UUID.randomUUID(), run.id(), 0, AgentTurnKind.USER_PROMPT,
         null, null, null, prompt, now));
@@ -155,8 +174,9 @@ public class AgentRunService {
 
   private static AgentRunView view(AgentRun run, List<AgentTurn> turns) {
     return new AgentRunView(
-        run.id(), run.worktreeId(), run.provider(), run.model(), run.status(), run.maxModelTurns(),
-        run.modelTurnCount(), run.finalOutput(), run.errorMessage(), run.createdBy(), run.createdAt(),
+        run.id(), run.worktreeId(), run.provider(), run.model(), run.prompt(), run.status(), run.maxModelTurns(),
+        run.maxOutputTokens(), run.reasoningEffort(), run.textVerbosity(), run.modelTurnCount(),
+        run.finalOutput(), run.errorMessage(), run.createdBy(), run.createdAt(),
         run.startedAt(), run.completedAt(), turns.stream().map(AgentRunService::view).toList());
   }
 

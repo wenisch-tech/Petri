@@ -3,7 +3,10 @@ package tech.wenisch.petri.agent.orchestration;
 import java.util.List;
 import java.util.UUID;
 import tech.wenisch.petri.agent.model.ModelProvider;
+import tech.wenisch.petri.agent.model.ModelConversationMessage;
 import tech.wenisch.petri.agent.model.ModelToolOutput;
+import tech.wenisch.petri.agent.model.ReasoningEffort;
+import tech.wenisch.petri.agent.model.TextVerbosity;
 
 record AgentExecutionState(
     UUID runId,
@@ -13,10 +16,14 @@ record AgentExecutionState(
     String prompt,
     AgentRunStatus status,
     int maxModelTurns,
+    int maxOutputTokens,
+    ReasoningEffort reasoningEffort,
+    TextVerbosity textVerbosity,
     int modelTurnCount,
     String previousResponseId,
     List<AgentPendingToolCall> pendingToolCalls,
-    List<ModelToolOutput> toolOutputs) {
+    List<ModelToolOutput> toolOutputs,
+    List<ModelConversationMessage> conversation) {
 
   boolean terminal() {
     return switch (status) {
@@ -29,4 +36,3 @@ record AgentExecutionState(
     return modelTurnCount == 0;
   }
 }
-

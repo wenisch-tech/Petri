@@ -1,0 +1,193 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="_csrf" th:content="${_csrf.token}">
+  <meta name="_csrf_header" th:content="${_csrf.headerName}">
+  <title>Chat · Petri</title>
+  <link rel="stylesheet" href="/css/petri.css">
+  <script defer src="/js/petri.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="page flex items-center justify-between py-4">
+      <a href="/" class="flex items-center gap-3 font-semibold">
+        <span class="grid size-9 place-items-center rounded-xl bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span>
+        <span>Petri</span>
+      </a>
+      <nav class="hidden items-center gap-1 sm:flex" aria-label="Primary navigation">
+        <a class="nav-link bg-ink-800 text-ink-100" href="/chat">Chat</a>
+        <a class="nav-link" href="/projects">Projects</a>
+        <a class="nav-link" href="/runs">Runs</a>
+        <a class="nav-link" href="/model-settings">Models</a>
+        <a class="nav-link" href="/audit">Audit</a>
+        <a class="nav-link" href="/api-keys">API keys</a>
+      </nav>
+      <div class="flex items-center gap-2">
+        <button class="btn-secondary" type="button" x-data @click="$store.theme.toggle()" aria-label="Toggle theme"><i data-lucide="Sun"></i></button>
+        <a class="btn-secondary" href="/model-settings"><i data-lucide="Settings"></i> Models</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="page py-5">
+    <div th:if="${chatMessage}" class="mb-4 rounded-xl border border-good-500/30 bg-good-500/10 p-4 text-sm text-good-500" th:text="${chatMessage}">Done.</div>
+    <div th:if="${chatError}" class="mb-4 rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-300" th:text="${chatError}">Error.</div>
+    <div th:unless="${modelConfigured}" class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-xl border border-amber-400/30 bg-amber-400/10 p-4 text-sm text-amber-200">
+      <span>Configure an API key and model before starting a chat, or add a keyless local model endpoint.</span>
+      <a class="btn-secondary" href="/model-settings">Configure model</a>
+    </div>
+
+    <div class="grid min-h-[calc(100vh-9rem)] gap-5 lg:grid-cols-[18rem_minmax(0,1fr)]">
+      <aside class="panel flex min-h-0 flex-col overflow-hidden">
+        <div class="border-b border-ink-700/70 p-4">
+          <a class="btn-primary w-full" href="/chat"><i data-lucide="Plus"></i> New task</a>
+          <form class="mt-4" method="get" action="/chat">
+            <label class="mb-2 block text-xs font-bold uppercase tracking-wider text-ink-500" for="project">Project</label>
+            <select class="field text-sm" id="project" name="project" onchange="this.form.submit()">
+              <option th:if="${#lists.isEmpty(projects)}" value="">No projects</option>
+              <option th:each="item : ${projects}" th:value="${item.id}" th:text="${item.name}" th:selected="${item.id == selectedProjectId}">Project</option>
+            </select>
+          </form>
+        </div>
+        <div class="min-h-0 flex-1 overflow-y-auto p-3">
+          <p class="px-2 py-2 text-xs font-bold uppercase tracking-wider text-ink-500">Recent tasks</p>
+          <p th:if="${#lists.isEmpty(recentRuns)}" class="px-2 py-4 text-sm text-ink-500">No tasks yet.</p>
+          <a th:each="item : ${recentRuns}" th:href="@{/chat(run=${item.id})}" class="mb-1 block rounded-lg px-3 py-3 text-sm transition hover:bg-ink-800" th:classappend="${selectedRun != null && item.id == selectedRun.id} ? ' bg-ink-800' : ''">
+            <span class="block truncate font-medium" th:text="${item.prompt}">Task</span>
+            <span class="mt-1 flex items-center justify-between gap-2 text-xs text-ink-500"><span th:text="${item.status}">status</span><span th:text="${item.model}">model</span></span>
+          </a>
+        </div>
+      </aside>
+
+      <section class="panel flex min-h-0 flex-col overflow-hidden" th:attr="data-chat-run=${selectedRun != null ? selectedRun.id : null},data-chat-status=${selectedRun != null ? selectedRun.status : null},data-chat-turn-count=${selectedRun != null ? #lists.size(selectedRun.turns) : 0}">
+        <div class="flex flex-wrap items-center justify-between gap-3 border-b border-ink-700/70 px-5 py-4">
+          <div>
+            <h1 class="font-semibold" th:text="${selectedRun != null} ? 'Agent task' : 'New coding task'">Agent task</h1>
+            <p class="mt-1 text-xs text-ink-500" th:if="${selectedRun != null}" th:text="|${selectedRun.provider} · ${selectedRun.model} · ${selectedRun.modelTurnCount}/${selectedRun.maxModelTurns} turns|">model</p>
+            <p class="mt-1 text-xs text-ink-500" th:unless="${selectedRun != null}">Describe the result you want. Petri will inspect the selected worktree and propose controlled actions.</p>
+          </div>
+          <div class="flex items-center gap-2" th:if="${selectedRun != null}">
+            <span class="badge" th:text="${selectedRun.status}">RUNNING</span>
+            <a class="btn-secondary" th:href="@{/runs/{id}(id=${selectedRun.id})}">Details</a>
+          </div>
+        </div>
+
+        <div class="min-h-[24rem] flex-1 overflow-y-auto px-4 py-6 sm:px-8" data-chat-scroll>
+          <div th:unless="${selectedRun != null}" class="mx-auto grid max-w-xl place-items-center py-16 text-center">
+            <span class="grid size-14 place-items-center rounded-2xl bg-brand-500/15 text-brand-400"><i data-lucide="MessageSquare"></i></span>
+            <h2 class="mt-5 text-xl font-semibold">What should Petri build?</h2>
+            <p class="mt-2 text-sm leading-6 text-ink-500">Choose an active worktree below and send a task. File edits and test commands remain behind explicit approvals.</p>
+          </div>
+
+          <div th:if="${selectedRun != null}" class="mx-auto max-w-4xl space-y-5">
+            <article class="ml-auto max-w-3xl rounded-2xl rounded-br-md bg-brand-600 px-5 py-4 text-white">
+              <p class="whitespace-pre-wrap break-words text-sm leading-6" th:text="${selectedRun.prompt}">Prompt</p>
+            </article>
+
+            <th:block th:each="turn : ${selectedRun.turns}">
+              <article th:if="${turn.kind.name() == 'MODEL_RESPONSE' && !#strings.isEmpty(turn.content)}" class="mr-auto max-w-3xl rounded-2xl rounded-bl-md border border-ink-700 bg-ink-800 px-5 py-4">
+                <div class="mb-3 flex items-center gap-2 text-xs font-bold uppercase tracking-wider text-brand-400"><i data-lucide="Bot"></i> Petri</div>
+                <p class="whitespace-pre-wrap break-words text-sm leading-6 text-ink-300" th:text="${turn.content}">Response</p>
+              </article>
+              <details th:if="${turn.kind.name() == 'TOOL_CALL' || turn.kind.name() == 'TOOL_RESULT'}" class="mx-auto max-w-3xl rounded-xl border border-ink-700/70 bg-ink-950/50 px-4 py-3">
+                <summary class="cursor-pointer text-sm font-medium text-ink-300"><span th:text="${turn.kind.name() == 'TOOL_CALL' ? 'Using ' + turn.toolName : turn.toolName + ' result'}">Tool</span></summary>
+                <pre class="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words text-xs text-ink-500" th:text="${turn.content}">content</pre>
+              </details>
+              <article th:if="${turn.kind.name() == 'ERROR'}" class="mr-auto max-w-3xl rounded-xl border border-red-400/30 bg-red-400/10 px-5 py-4 text-sm text-red-300" th:text="${turn.content}">Error</article>
+            </th:block>
+
+            <div th:if="${selectedRun.status.name() == 'PENDING' || selectedRun.status.name() == 'RUNNING' || selectedRun.status.name() == 'CANCELLATION_REQUESTED'}" class="mr-auto flex items-center gap-3 rounded-2xl rounded-bl-md border border-ink-700 bg-ink-800 px-5 py-4 text-sm text-ink-500">
+              <span class="size-2 animate-pulse rounded-full bg-brand-400"></span>
+              <span th:text="${selectedRun.status.name() == 'PENDING' ? 'Waiting to start…' : 'Petri is working…'}">Working…</span>
+            </div>
+
+            <section th:unless="${#lists.isEmpty(changeProposals)}" class="space-y-3">
+              <h2 class="text-sm font-semibold">Proposed file changes</h2>
+              <article th:each="proposal : ${changeProposals}" class="rounded-xl border border-brand-400/30 bg-brand-500/5 p-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div><i data-lucide="FileCode2"></i><strong class="ml-2" th:text="${proposal.filePath}">file</strong><span class="ml-2 badge" th:text="${proposal.status}">status</span></div>
+                  <div class="flex gap-2">
+                    <form th:if="${proposal.status.name() == 'PROPOSED'}" method="post" th:action="@{/chat/runs/{runId}/changes/{id}/approve(runId=${selectedRun.id},id=${proposal.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-primary" type="submit">Approve</button></form>
+                    <form th:if="${proposal.status.name() == 'PROPOSED'}" method="post" th:action="@{/chat/runs/{runId}/changes/{id}/reject(runId=${selectedRun.id},id=${proposal.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-secondary" type="submit">Reject</button></form>
+                    <form th:if="${proposal.status.name() == 'APPROVED'}" method="post" th:action="@{/chat/runs/{runId}/changes/{id}/apply(runId=${selectedRun.id},id=${proposal.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-primary" type="submit">Apply</button></form>
+                  </div>
+                </div>
+                <details class="mt-3"><summary class="cursor-pointer text-sm text-ink-500">Review diff</summary><pre class="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-ink-950 p-3 text-xs text-ink-300" th:text="${proposal.unifiedDiff}">diff</pre></details>
+              </article>
+            </section>
+
+            <section th:unless="${#lists.isEmpty(testRuns)}" class="space-y-3">
+              <h2 class="text-sm font-semibold">Requested test runs</h2>
+              <article th:each="testRun : ${testRuns}" class="rounded-xl border border-cyan-500/30 bg-cyan-500/5 p-4">
+                <div class="flex flex-wrap items-center justify-between gap-3">
+                  <div><code th:text="${testRun.command}">command</code><span class="ml-2 badge" th:text="${testRun.status}">status</span></div>
+                  <div class="flex gap-2">
+                    <form th:if="${testRun.status.name() == 'PROPOSED'}" method="post" th:action="@{/chat/runs/{runId}/tests/{id}/approve(runId=${selectedRun.id},id=${testRun.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-primary" type="submit">Approve</button></form>
+                    <form th:if="${testRun.status.name() == 'PROPOSED'}" method="post" th:action="@{/chat/runs/{runId}/tests/{id}/reject(runId=${selectedRun.id},id=${testRun.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-secondary" type="submit">Reject</button></form>
+                    <form th:if="${testRun.status.name() == 'APPROVED'}" method="post" th:action="@{/chat/runs/{runId}/tests/{id}/execute(runId=${selectedRun.id},id=${testRun.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-primary" type="submit">Run tests</button></form>
+                  </div>
+                </div>
+                <pre th:if="${testRun.output != null}" class="mt-3 max-h-72 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-ink-950 p-3 text-xs text-ink-300" th:text="${testRun.output}">output</pre>
+              </article>
+            </section>
+          </div>
+        </div>
+
+        <div class="border-t border-ink-700/70 bg-ink-900 p-4 sm:p-5">
+          <form th:if="${selectedRun == null}" method="post" action="/chat/runs" class="mx-auto max-w-4xl">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="flex flex-col gap-3 sm:flex-row">
+              <select class="field sm:w-52" name="provider" required data-model-provider th:disabled="${!modelConfigured}">
+                <option th:each="item : ${configuredModels}"
+                        th:value="${item.provider}"
+                        th:text="${item.provider.displayName()}"
+                        th:selected="${item.provider == modelCredential.provider}"
+                        th:attr="data-model=${item.model},data-tokens=${item.maxOutputTokens},data-reasoning=${item.reasoningEffort},data-verbosity=${item.textVerbosity}">Provider</option>
+              </select>
+              <select class="field sm:w-64" name="worktreeId" required th:disabled="${#lists.isEmpty(worktrees)}">
+                <option value="" selected disabled>Select workspace</option>
+                <option th:each="worktree : ${worktrees}" th:value="${worktree.id}" th:text="|${worktree.gitRevision} · ${#strings.substring(worktree.id.toString(),0,8)}|">worktree</option>
+              </select>
+              <textarea class="field min-h-24 flex-1 resize-y" name="prompt" required maxlength="200000" placeholder="Ask Petri to inspect, explain, or change this project…" th:disabled="${!modelConfigured || #lists.isEmpty(worktrees)}"></textarea>
+              <button class="btn-primary self-end" type="submit" th:disabled="${!modelConfigured || #lists.isEmpty(worktrees)}"><i data-lucide="Send"></i><span class="sm:hidden">Send</span></button>
+            </div>
+            <div class="mt-3 flex flex-wrap items-center justify-between gap-3 text-xs text-ink-500">
+              <span th:if="${modelConfigured}" data-model-summary th:text="|${modelCredential.provider.displayName()} · ${modelCredential.model} · ${modelCredential.maxOutputTokens} output tokens · approvals enabled|">model</span>
+              <label>Maximum turns <input class="ml-2 w-16 rounded border border-ink-700 bg-ink-950 px-2 py-1" type="number" name="maxModelTurns" value="20" min="1" max="100"></label>
+            </div>
+            <details th:if="${modelConfigured}" class="mt-3 rounded-xl border border-ink-700/70 bg-ink-950/40 p-3">
+              <summary class="cursor-pointer text-xs font-semibold text-ink-500">Model controls for this task</summary>
+              <div class="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                <label class="text-xs text-ink-500">Model ID<input class="field mt-1 text-sm" name="model" maxlength="200" th:value="${modelCredential.model}" data-model-input required></label>
+                <label class="text-xs text-ink-500">Output tokens<input class="field mt-1 text-sm" type="number" name="maxOutputTokens" min="16" max="1000000" th:value="${modelCredential.maxOutputTokens}" data-token-input required></label>
+                <label class="text-xs text-ink-500">Reasoning<select class="field mt-1 text-sm" name="reasoningEffort" data-reasoning-input><option value="">Configured default</option><option th:each="effort : ${reasoningEfforts}" th:value="${effort}" th:text="${#strings.toLowerCase(effort.name())}">medium</option></select></label>
+                <label class="text-xs text-ink-500">Verbosity<select class="field mt-1 text-sm" name="textVerbosity" data-verbosity-input><option value="">Configured default</option><option th:each="verbosity : ${textVerbosities}" th:value="${verbosity}" th:text="${#strings.toLowerCase(verbosity.name())}">medium</option></select></label>
+              </div>
+            </details>
+          </form>
+
+          <div th:if="${selectedRun == null && #lists.isEmpty(worktrees) && selectedProjectId != null}" class="mx-auto mt-4 flex max-w-4xl flex-wrap items-center justify-between gap-3 rounded-xl border border-dashed border-ink-700 p-4 text-sm text-ink-500">
+            <span>No active worktree is available for this project.</span>
+            <form method="post" action="/chat/worktrees">
+              <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+              <input type="hidden" name="projectId" th:value="${selectedProjectId}">
+              <button class="btn-secondary" type="submit"><i data-lucide="GitBranch"></i> Prepare default branch</button>
+            </form>
+          </div>
+
+          <div th:if="${selectedRun != null}" class="mx-auto flex max-w-4xl flex-wrap items-center justify-between gap-3">
+            <span class="text-xs text-ink-500" th:text="|Run ${selectedRun.id} · ${selectedRun.maxOutputTokens} output tokens|">Run</span>
+            <div class="flex gap-2">
+              <form th:if="${selectedRun.status.name() == 'PENDING' || selectedRun.status.name() == 'RUNNING'}" method="post" th:action="@{/chat/runs/{id}/cancel(id=${selectedRun.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-secondary" type="submit"><i data-lucide="Square"></i> Cancel</button></form>
+              <form th:if="${selectedRun.status.name() == 'PENDING' || selectedRun.status.name() == 'RUNNING'}" method="post" th:action="@{/chat/runs/{id}/resume(id=${selectedRun.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-secondary" type="submit"><i data-lucide="RefreshCw"></i> Resume</button></form>
+              <a class="btn-primary" th:href="@{/chat(project=${selectedProjectId})}"><i data-lucide="Plus"></i> New task</a>
+            </div>
+          </div>
+        </div>
+      </section>
+    </div>
+  </main>
+</body>
+</html>

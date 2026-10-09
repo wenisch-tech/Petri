@@ -10,6 +10,8 @@ import java.time.Instant;
 import java.time.Duration;
 import java.util.UUID;
 import tech.wenisch.petri.agent.model.ModelProvider;
+import tech.wenisch.petri.agent.model.ReasoningEffort;
+import tech.wenisch.petri.agent.model.TextVerbosity;
 
 @Entity
 @Table(name = "agent_run")
@@ -35,6 +37,17 @@ class AgentRun {
 
   @Column(name = "max_model_turns", nullable = false)
   private int maxModelTurns;
+
+  @Column(name = "max_output_tokens", nullable = false)
+  private int maxOutputTokens;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "reasoning_effort", length = 16)
+  private ReasoningEffort reasoningEffort;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "text_verbosity", length = 16)
+  private TextVerbosity textVerbosity;
 
   @Column(name = "model_turn_count", nullable = false)
   private int modelTurnCount;
@@ -75,6 +88,9 @@ class AgentRun {
       String model,
       String prompt,
       int maxModelTurns,
+      int maxOutputTokens,
+      ReasoningEffort reasoningEffort,
+      TextVerbosity textVerbosity,
       UUID createdBy,
       Instant createdAt) {
     this.id = id;
@@ -84,6 +100,9 @@ class AgentRun {
     this.prompt = prompt;
     this.status = AgentRunStatus.PENDING;
     this.maxModelTurns = maxModelTurns;
+    this.maxOutputTokens = maxOutputTokens;
+    this.reasoningEffort = reasoningEffort;
+    this.textVerbosity = textVerbosity;
     this.modelTurnCount = 0;
     this.nextTurnIndex = 1;
     this.createdBy = createdBy;
@@ -204,6 +223,9 @@ class AgentRun {
   String prompt() { return prompt; }
   AgentRunStatus status() { return status; }
   int maxModelTurns() { return maxModelTurns; }
+  int maxOutputTokens() { return maxOutputTokens; }
+  ReasoningEffort reasoningEffort() { return reasoningEffort; }
+  TextVerbosity textVerbosity() { return textVerbosity; }
   int modelTurnCount() { return modelTurnCount; }
   String finalOutput() { return finalOutput; }
   String errorMessage() { return errorMessage; }

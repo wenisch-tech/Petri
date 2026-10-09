@@ -1,6 +1,6 @@
 # Next implementation steps
 
-Status: authentication, encrypted credentials, controlled Git mirrors/worktrees and automatic filesystem master-key management are committed. The complete controlled tool slice, provider/model execution loop, administrator run view and first lazy-loaded skill slice are implemented locally and verified; no commit or push was created by the agent for these latest slices.
+Status: authentication, encrypted credentials, controlled Git mirrors/worktrees and automatic filesystem master-key management are committed. The complete controlled tool slice, multi-provider model execution loop, lazy-loaded skills, asynchronous run API, Spring Boot chat console and rich model settings are implemented locally and verified; no commit or push was created by the agent for these latest slices.
 
 ## 1. Finish and review the current security slices
 
@@ -49,17 +49,28 @@ Status: authentication, encrypted credentials, controlled Git mirrors/worktrees 
 
 1. [x] Expose controlled worktree creation and removal for authenticated API clients.
 2. [x] Attach run IDs to streamed lifecycle events and provide a run-specific SSE endpoint with replay.
-3. Make create-and-execute/resume ergonomics suitable for a VS Code client without weakening approval boundaries.
+3. [x] Add asynchronous create-and-start/resume ergonomics suitable for web and VS Code clients without weakening approval boundaries.
 4. Add API rate limits and integration tests for concurrent runs, reconnects and cancellation.
 
-## 8. Build the first VS Code extension
+## 8. Build the Spring Boot operator console before the editor client
+
+1. [x] Add a chat-style console for choosing projects/worktrees, creating tasks and following persisted model/tool turns.
+2. [x] Launch and resume runs in the background while the browser refreshes status without holding the request open.
+3. [x] Render patch and test proposals in the conversation with the existing separate approve/apply and approve/execute boundaries.
+4. [x] Add an administrator model-settings page for encrypted credentials, model ID, output budget, reasoning effort and text verbosity.
+5. [x] Snapshot generation settings per run and permit explicit per-task overrides in the chat and run API.
+6. [x] Add OpenAI, LiteLLM, Ollama and generic OpenAI-compatible endpoints with provider-specific base URLs, optional local credentials and provider selection in chat.
+7. [x] Reconstruct persisted conversation/tool history for stateless Chat Completions servers while retaining stateful Responses continuations for OpenAI and LiteLLM.
+8. Add token streaming, Markdown rendering and optional reusable named model profiles after the persisted response-stream design is defined.
+
+## 9. Build the first VS Code extension
 
 1. Add a TypeScript extension package with secure endpoint/API-key configuration and workspace selection.
 2. Implement a chat view that creates runs, consumes SSE progress and renders terminal state.
 3. Show patch/test approval requests and open diffs through VS Code APIs before administrator-authorized application.
 4. Send active workspace, file and optional selection context without uploading unrelated files.
 
-## 9. Verification discipline for every slice
+## 10. Verification discipline for every slice
 
 1. Add focused unit/integration tests first, then run `./mvnw -o test` and `./mvnw -o package`.
 2. Run `git diff --check` before handoff.

@@ -43,7 +43,6 @@ class AgentRunTest {
   private static AgentRun run() {
     return new AgentRun(
         UUID.randomUUID(), UUID.randomUUID(), ModelProvider.OPENAI, "model", "prompt", 4,
-        UUID.randomUUID(), NOW.minusSeconds(10));
+        4096, null, null, UUID.randomUUID(), NOW.minusSeconds(10));
   }
 }
-
