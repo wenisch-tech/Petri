@@ -76,14 +76,16 @@
   .workspace-tab { @apply flex max-w-48 shrink-0 items-center gap-2 border-r border-ink-700/70 px-3 text-ink-500 hover:bg-ink-800 hover:text-ink-100; }
   .workspace-tab.is-active { @apply border-t-2 border-t-brand-400 bg-ink-950 text-ink-100; }
   .workspace-tab-close { @apply -mr-1 rounded px-1 text-ink-500 hover:bg-ink-700 hover:text-ink-100; }
-  .workspace-tree-row { @apply flex items-center text-sm; }
-  .workspace-tree-entry { @apply flex w-full items-center rounded-md px-2 py-1.5 text-left text-ink-300 hover:bg-ink-800; }
+  .workspace-tree-row { @apply block min-w-max text-[13px]; }
+  .workspace-tree-entry { @apply flex h-6 w-full min-w-0 items-center gap-0.5 rounded-none px-1 text-left text-ink-300 outline-none hover:bg-ink-800; }
+  .workspace-tree-entry.is-selected { @apply bg-brand-500/20 text-ink-100; }
+  .workspace-tree-entry:focus-visible { @apply outline-1 -outline-offset-1 outline-brand-400; }
   .workspace-tree-actions { @apply hidden shrink-0 rounded px-2 py-1 text-ink-500 hover:bg-ink-800 hover:text-ink-100; }
   .workspace-tree-row:hover .workspace-tree-actions { @apply block; }
-  .workspace-tree-children { @apply ml-3 border-l border-ink-700/60 pl-1; }
+  .workspace-tree-children { @apply ml-3.5 border-l border-ink-700/40 pl-1.5; }
   .workspace-select, .workspace-model-selector, .workspace-chat-selector { @apply rounded-lg border border-ink-700 bg-ink-900 px-2 py-1.5 text-xs text-ink-300; }
   .workspace-panel-header { @apply flex h-12 items-center justify-between border-b border-ink-700/70 px-2; }
-  .workspace-panel-content { @apply min-h-0 flex-1 overflow-auto p-2; }
+  .workspace-panel-content { @apply min-h-0 flex-1 overflow-auto py-1; }
   .workspace-switcher { @apply flex items-center gap-1 text-xs font-semibold; }
   .workspace-switcher button { @apply rounded-md px-2 py-1.5 text-ink-500 hover:text-ink-100; }
   .workspace-switcher button.is-active { @apply bg-ink-800 text-ink-100; }
@@ -91,6 +93,26 @@
   .workspace-loading, .workspace-empty, .workspace-error { @apply flex w-full items-center gap-2 rounded-lg px-3 py-3 text-left text-sm text-ink-500; }
   .workspace-error { @apply border border-red-400/30 bg-red-400/10 text-red-300; }
   .workspace-tree-name, .workspace-change-path { @apply min-w-0 flex-1 truncate; }
+  .workspace-tree-twisty { @apply grid size-4 shrink-0 place-items-center text-ink-500; }
+  .workspace-tree-twisty svg { @apply size-3.5; }
+  .workspace-tree-primary-icon { @apply mr-1 grid size-4 shrink-0 place-items-center; }
+  .workspace-tree-primary-icon svg, .workspace-file-icon { @apply size-4; }
+  .workspace-folder-icon { color: #dcb67a; }
+  .workspace-folder-icon.is-open { color: #e7c787; }
+  .workspace-file-icon.is-java { color: #e8793f; }
+  .workspace-file-icon.is-javascript { color: #e8d44d; }
+  .workspace-file-icon.is-typescript { color: #4f9bd8; }
+  .workspace-file-icon.is-json { color: #d7ba7d; }
+  .workspace-file-icon.is-markup { color: #e06c75; }
+  .workspace-file-icon.is-style { color: #c586c0; }
+  .workspace-file-icon.is-config { color: #9aa7b8; }
+  .workspace-file-icon.is-document { color: #75aadb; }
+  .workspace-file-icon.is-image { color: #c586c0; }
+  .workspace-file-icon.is-archive { color: #d7ba7d; }
+  .workspace-file-icon.is-database { color: #4ec9b0; }
+  .workspace-file-icon.is-sheet { color: #4fb286; }
+  .workspace-file-icon.is-script { color: #8dc891; }
+  .workspace-file-icon.is-generic { @apply text-ink-500; }
   .workspace-change-badge { @apply ml-2 shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] text-ink-500; }
   .workspace-change-badge.is-modified { @apply bg-amber-400/10 text-amber-300; }
   .workspace-change-badge.is-added, .workspace-change-badge.is-untracked { @apply bg-good-500/10 text-good-500; }

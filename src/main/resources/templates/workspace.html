@@ -1,18 +1,110 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="_csrf" th:content="${_csrf.token}"><meta name="_csrf_header" th:content="${_csrf.headerName}">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="_csrf" th:content="${_csrf.token}">
+  <meta name="_csrf_header" th:content="${_csrf.headerName}">
   <title th:text="|${project.name} · Workspace · Petri|">Workspace · Petri</title>
-  <link rel="stylesheet" href="/css/petri.css"><script defer src="/js/petri.js"></script>
+  <link rel="stylesheet" href="/css/petri.css?v=21">
+  <script defer src="/js/petri.js?v=21"></script>
 </head>
 <body class="workspace-body">
-  <header class="topbar workspace-topbar"><div class="flex h-14 items-center justify-between gap-3 px-4"><div class="flex min-w-0 items-center gap-3"><a href="/projects" class="flex items-center gap-2 font-semibold"><span class="grid size-8 place-items-center rounded-lg bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span><span>Petri</span></a><span class="hidden h-5 border-l border-ink-700 sm:block"></span><span class="truncate text-sm font-medium" th:text="${project.name}">Project</span><select class="workspace-select" data-worktree-selector th:disabled="${#lists.isEmpty(worktrees)}"><option th:if="${#lists.isEmpty(worktrees)}">No active worktree</option><option th:each="item : ${worktrees}" th:value="${item.id}" th:selected="${selectedWorktree != null && item.id == selectedWorktree.id}" th:text="|${item.gitRevision} · ${#strings.substring(item.id.toString(), 0, 8)}|">worktree</option></select></div><nav class="hidden items-center gap-1 lg:flex"><a class="nav-link bg-ink-800 text-ink-100" href="/projects">Workspace</a><a class="nav-link" href="/runs">Runs</a><a class="nav-link" href="/model-settings">Models</a><a class="nav-link" href="/audit">Audit</a></nav><div class="flex items-center gap-1"><button class="icon-button" type="button" data-toggle-chat title="Toggle chat" aria-label="Toggle chat"><i data-lucide="PanelRight"></i></button><button class="icon-button" type="button" x-data @click="$store.theme.toggle()" title="Toggle theme" aria-label="Toggle theme"><i data-lucide="Sun"></i></button></div></div></header>
-  <main class="workspace-shell" data-workspace th:attr="data-project-id=${project.id},data-worktree-id=${selectedWorktree != null ? selectedWorktree.id : null},data-chat-id=${selectedChat != null ? selectedChat.id : null},data-selected-file=${selectedFile}">
-    <aside class="workspace-explorer" data-workspace-explorer><div class="workspace-panel-header"><div class="workspace-switcher"><button type="button" data-explorer-mode="files" class="is-active">Files</button><button type="button" data-explorer-mode="changes">Changes <span class="workspace-count" data-change-count>0</span></button></div><div class="flex gap-1"><button class="icon-button" type="button" data-refresh-explorer title="Refresh files" aria-label="Refresh files"><i data-lucide="RefreshCw"></i></button><button class="icon-button" type="button" data-create-entry="FILE" title="New file" aria-label="New file"><i data-lucide="FilePlus2"></i></button><button class="icon-button" type="button" data-create-entry="DIRECTORY" title="New folder" aria-label="New folder"><i data-lucide="FolderPlus"></i></button></div></div><div class="workspace-panel-content" data-file-tree><div class="workspace-loading"><i data-lucide="LoaderCircle"></i><span>Loading workspace…</span></div></div><form th:if="${selectedWorktree == null}" method="post" action="/chat/worktrees" class="border-t border-ink-700/70 p-3"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><input type="hidden" name="projectId" th:value="${project.id}"><p class="mb-3 text-sm text-ink-500">Prepare a branch worktree before editing files.</p><button class="btn-secondary w-full" type="submit">Prepare default branch</button></form></aside><div class="workspace-resizer" data-resize="explorer" role="separator" aria-orientation="vertical" tabindex="0"></div>
-    <section class="workspace-editor" data-workspace-editor><div class="workspace-tabs" data-editor-tabs><span class="px-4 text-xs text-ink-500">No file open</span></div><div class="min-h-0 flex-1" data-editor-host><div class="workspace-editor-empty" data-editor-empty><i data-lucide="FileCode2" data-icon-size="28"></i><h1>Select a file</h1><p>Open a file from the explorer, or inspect a change from the Changes view.</p></div></div><footer class="workspace-statusbar"><span data-editor-status>Ready</span><span data-editor-path>—</span><span data-editor-cursor>Ln 1, Col 1</span></footer></section><div class="workspace-resizer" data-resize="chat" role="separator" aria-orientation="vertical" tabindex="0"></div>
-    <aside class="workspace-chat" data-workspace-chat><div class="workspace-chat-header"><div class="flex min-w-0 items-center gap-2"><i data-lucide="MessageSquare"></i><select class="workspace-chat-selector" data-chat-selector><option value="">New chat</option><option th:each="item : ${chats}" th:value="${item.id}" th:selected="${selectedChat != null && item.id == selectedChat.id}" th:text="${item.title}">Chat</option></select></div><button class="icon-button" type="button" data-new-chat title="New chat" aria-label="New chat"><i data-lucide="Plus"></i></button></div><div class="workspace-chat-tools"><select class="workspace-model-selector" data-model-selector th:disabled="${!modelConfigured}" aria-label="Workspace model"><option th:each="item : ${configuredModels}" th:value="${item.provider}" th:selected="${item.provider == selectedModelCredential.provider}" th:attr="data-model=${item.model},data-tokens=${item.maxOutputTokens},data-context=${item.contextWindowTokens},data-reasoning=${item.reasoningEffort},data-verbosity=${item.textVerbosity}" th:text="|${item.provider.displayName()} · ${item.model}|">Model</option></select><span class="workspace-model-unavailable" data-model-unavailable hidden>Saved model unavailable</span><button class="icon-button" type="button" data-automation-menu title="Automation" aria-label="Automation"><i data-lucide="Settings2"></i></button></div><div class="workspace-automation" data-automation-panel hidden><label><input type="checkbox" data-auto-changes> Auto-apply file changes</label><label><input type="checkbox" data-auto-tests> Auto-run approved tests</label></div><div class="workspace-review-tray" data-review-tray hidden><div><i data-lucide="CircleAlert"></i><span data-review-count>0 reviews waiting</span></div><div data-review-items></div></div><div class="workspace-chat-timeline" data-chat-scroll><div class="workspace-chat-empty" data-chat-empty><i data-lucide="MessageSquare" data-icon-size="28"></i><p>Start a durable coding chat for this worktree.</p></div></div><button class="workspace-new-response" data-new-response hidden>New response ↓</button><form class="workspace-composer" data-chat-form><textarea class="field" data-chat-input required maxlength="200000" placeholder="Ask Petri to work in this project…" th:disabled="${!modelConfigured}"></textarea><div><span class="text-xs text-ink-500" data-chat-status>Ready</span><button class="btn-primary !min-h-9 !px-3" type="submit" th:disabled="${!modelConfigured}" aria-label="Send message"><i data-lucide="Send"></i><span>Send</span></button></div></form></aside>
+  <header class="topbar workspace-topbar">
+    <div class="flex h-14 items-center justify-between gap-3 px-4">
+      <div class="flex min-w-0 items-center gap-3">
+        <a href="/projects" class="flex items-center gap-2 font-semibold">
+          <span class="grid size-8 place-items-center rounded-lg bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span>
+          <span>Petri</span>
+        </a>
+        <span class="hidden h-5 border-l border-ink-700 sm:block"></span>
+        <span class="truncate text-sm font-medium" th:text="${project.name}">Project</span>
+        <select class="workspace-select" data-worktree-selector th:disabled="${#lists.isEmpty(worktrees)}">
+          <option th:if="${#lists.isEmpty(worktrees)}">No active worktree</option>
+          <option th:each="item : ${worktrees}" th:value="${item.id}"
+                  th:selected="${selectedWorktree != null && item.id == selectedWorktree.id}"
+                  th:text="|${item.gitRevision} · ${#strings.substring(item.id.toString(), 0, 8)}|">worktree</option>
+        </select>
+      </div>
+      <nav class="hidden items-center gap-1 lg:flex">
+        <a class="nav-link bg-ink-800 text-ink-100" href="/projects">Workspace</a>
+        <a class="nav-link" href="/runs">Runs</a><a class="nav-link" href="/model-settings">Models</a><a class="nav-link" href="/audit">Audit</a>
+      </nav>
+      <div class="flex items-center gap-1">
+        <button class="icon-button" type="button" data-toggle-chat title="Toggle chat" aria-label="Toggle chat"><i data-lucide="PanelRight"></i></button>
+        <button class="icon-button" type="button" x-data @click="$store.theme.toggle()" title="Toggle theme" aria-label="Toggle theme"><i data-lucide="Sun"></i></button>
+      </div>
+    </div>
+  </header>
+
+  <main class="workspace-shell" data-workspace
+        th:attr="data-project-id=${project.id},data-worktree-id=${selectedWorktree != null ? selectedWorktree.id : null},data-chat-id=${selectedChat != null ? selectedChat.id : null},data-selected-file=${selectedFile}">
+    <aside class="workspace-explorer" data-workspace-explorer>
+      <div class="workspace-panel-header">
+        <div class="workspace-switcher">
+          <button type="button" data-explorer-mode="files" class="is-active">Files</button>
+          <button type="button" data-explorer-mode="changes">Changes <span class="workspace-count" data-change-count>0</span></button>
+        </div>
+        <div class="flex gap-1">
+          <button class="icon-button" type="button" data-refresh-explorer title="Refresh files" aria-label="Refresh files"><i data-lucide="RefreshCw"></i></button>
+          <button class="icon-button" type="button" data-create-entry="FILE" title="New file" aria-label="New file"><i data-lucide="FilePlus2"></i></button>
+          <button class="icon-button" type="button" data-create-entry="DIRECTORY" title="New folder" aria-label="New folder"><i data-lucide="FolderPlus"></i></button>
+        </div>
+      </div>
+      <div class="workspace-panel-content" data-file-tree>
+        <p th:if="${selectedWorktree != null && #lists.isEmpty(workspaceEntries)}" class="workspace-empty">No files in this worktree.</p>
+        <button th:each="entry : ${workspaceEntries}" type="button" class="workspace-tree-entry"
+                th:attr="data-server-entry=${entry.path},data-entry-type=${entry.type}">
+          <i th:attr="data-lucide=${entry.type == 'DIRECTORY' ? 'Folder' : 'File'}"></i>
+          <span class="workspace-tree-name" th:text="${entry.path}">file</span>
+        </button>
+      </div>
+      <form th:if="${selectedWorktree == null}" method="post" action="/chat/worktrees" class="border-t border-ink-700/70 p-3">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><input type="hidden" name="projectId" th:value="${project.id}">
+        <p class="mb-3 text-sm text-ink-500">Prepare a branch worktree before editing files.</p><button class="btn-secondary w-full" type="submit">Prepare default branch</button>
+      </form>
+    </aside>
+    <div class="workspace-resizer" data-resize="explorer" role="separator" aria-orientation="vertical" tabindex="0"></div>
+
+    <section class="workspace-editor" data-workspace-editor>
+      <div class="workspace-tabs" data-editor-tabs><span class="px-4 text-xs text-ink-500">No file open</span></div>
+      <div class="min-h-0 flex-1" data-editor-host><div class="workspace-editor-empty" data-editor-empty><i data-lucide="FileCode2" data-icon-size="28"></i><h1>Select a file</h1><p>Open a file from the explorer, or inspect a change from the Changes view.</p></div></div>
+      <footer class="workspace-statusbar"><span data-editor-status>Ready</span><span data-editor-path>—</span><span data-editor-cursor>Ln 1, Col 1</span></footer>
+    </section>
+    <div class="workspace-resizer" data-resize="chat" role="separator" aria-orientation="vertical" tabindex="0"></div>
+
+    <aside class="workspace-chat" data-workspace-chat>
+      <div class="workspace-chat-header">
+        <div class="flex min-w-0 items-center gap-2"><i data-lucide="MessageSquare"></i><select class="workspace-chat-selector" data-chat-selector><option value="">New chat</option><option th:each="item : ${chats}" th:value="${item.id}" th:selected="${selectedChat != null && item.id == selectedChat.id}" th:text="${item.title}">Chat</option></select></div>
+        <button class="icon-button" type="button" data-new-chat title="New chat" aria-label="New chat"><i data-lucide="Plus"></i></button>
+      </div>
+      <div class="workspace-chat-tools">
+        <select class="workspace-model-selector" data-model-selector th:disabled="${!modelConfigured}" aria-label="Workspace model">
+          <option th:each="item : ${configuredModels}" th:value="${item.provider}" th:selected="${item.provider == selectedModelCredential.provider}"
+                  th:attr="data-model=${item.model},data-tokens=${item.maxOutputTokens},data-context=${item.contextWindowTokens},data-reasoning=${item.reasoningEffort},data-verbosity=${item.textVerbosity}"
+                  th:text="|${item.provider.displayName()} · ${item.model}|">Model</option>
+        </select>
+        <span class="workspace-model-unavailable" data-model-unavailable th:hidden="${!savedModelUnavailable}">Saved model unavailable</span>
+        <button class="icon-button" type="button" data-automation-menu title="Automation" aria-label="Automation"><i data-lucide="Settings2"></i></button>
+      </div>
+      <div class="workspace-automation" data-automation-panel hidden><label><input type="checkbox" data-auto-changes> Auto-apply file changes</label><label><input type="checkbox" data-auto-tests> Auto-run approved tests</label></div>
+      <div class="workspace-review-tray" data-review-tray hidden><div><i data-lucide="CircleAlert"></i><span data-review-count>0 reviews waiting</span></div><div data-review-items></div></div>
+      <div class="workspace-chat-timeline" data-chat-scroll>
+        <div th:if="${selectedChat == null}" class="workspace-chat-empty" data-chat-empty><i data-lucide="MessageSquare" data-icon-size="28"></i><p>Start a durable coding chat for this worktree.</p></div>
+        <th:block th:each="chatRun : ${chatRuns}">
+          <article class="workspace-message workspace-message-user"><p th:text="${chatRun.prompt}">Prompt</p><div class="workspace-message-meta" th:text="|Turn ${chatRun.chatMessageIndex + 1} · ${chatRun.status}|">Turn</div></article>
+          <th:block th:each="turn : ${chatRun.turns}">
+            <article th:if="${turn.kind.name() == 'MODEL_RESPONSE'}" class="workspace-message workspace-message-assistant"><p th:text="${turn.content}">Response</p></article>
+            <article th:if="${turn.kind.name() == 'ERROR'}" class="workspace-message-error" th:text="${turn.content}">Error</article>
+          </th:block>
+          <article th:if="${chatRun.partialOutput != null}" class="workspace-message workspace-message-assistant"><small class="workspace-writing">Petri · writing…</small><p th:attr="data-run-output=${chatRun.id}" th:text="${chatRun.partialOutput}">Partial response</p></article>
+        </th:block>
+      </div>
+      <button class="workspace-new-response" data-new-response hidden>New response ↓</button>
+      <form class="workspace-composer" data-chat-form><textarea class="field" data-chat-input required maxlength="200000" placeholder="Ask Petri to work in this project…" th:disabled="${!modelConfigured}"></textarea><div><span class="text-xs text-ink-500" data-chat-status>Ready</span><button class="btn-primary !min-h-9 !px-3" type="button" data-chat-send th:disabled="${!modelConfigured}" aria-label="Send message"><i data-lucide="Send"></i><span>Send</span></button></div></form>
+    </aside>
+
     <dialog class="workspace-dialog" data-workspace-dialog><form method="dialog" data-dialog-form><h2 data-dialog-title>Workspace action</h2><p data-dialog-description></p><label data-dialog-path-label>Path<input class="field" data-dialog-path required></label><label data-dialog-confirmation-label hidden>Type the exact path to confirm<input class="field" data-dialog-confirmation></label><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm" data-dialog-confirm>Continue</button></div></form></dialog>
-    <div class="hidden" aria-hidden="true" th:if="${selectedChat != null}"><th:block th:each="chatRun : ${chatRuns}"><span th:text="${chatRun.prompt}">Prompt</span><th:block th:each="turn : ${chatRun.turns}"><span th:if="${turn.kind.name() == 'MODEL_RESPONSE'}" th:text="${turn.content}">Response</span></th:block></th:block></div>
   </main>
-</body></html>
+</body>
+</html>

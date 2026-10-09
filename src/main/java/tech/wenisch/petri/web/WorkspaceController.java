@@ -10,6 +10,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import tech.wenisch.petri.agent.change.ChangeProposalService;
+import tech.wenisch.petri.agent.tool.FileEntry;
 import tech.wenisch.petri.agent.model.ModelCredentialService;
 import tech.wenisch.petri.agent.model.ModelCredentialStatus;
 import tech.wenisch.petri.agent.model.ModelProvider;
@@ -29,6 +30,7 @@ import tech.wenisch.petri.security.AppUser;
 import tech.wenisch.petri.security.AppUserRepository;
 import tech.wenisch.petri.workspace.WorkspaceModelPreferenceService;
 import tech.wenisch.petri.workspace.WorkspaceModelPreferenceView;
+import tech.wenisch.petri.workspace.WorkspaceEditorService;
 
 /** The project-centric shell. Chat endpoints stay separate so their SSE contract remains stable. */
 @Controller
@@ -42,6 +44,7 @@ public class WorkspaceController {
   private final ChangeProposalService changes;
   private final TestRunService testRuns;
   private final WorkspaceModelPreferenceService preferences;
+  private final WorkspaceEditorService workspaceEditor;
 
   public WorkspaceController(
       ProjectRepository projects,
@@ -51,7 +54,8 @@ public class WorkspaceController {
       AppUserRepository users,
       ChangeProposalService changes,
       TestRunService testRuns,
-      WorkspaceModelPreferenceService preferences) {
+      WorkspaceModelPreferenceService preferences,
+      WorkspaceEditorService workspaceEditor) {
     this.projects = projects;
     this.worktrees = worktrees;
     this.runs = runs;
@@ -60,6 +64,7 @@ public class WorkspaceController {
     this.changes = changes;
     this.testRuns = testRuns;
     this.preferences = preferences;
+    this.workspaceEditor = workspaceEditor;
   }
 
   @GetMapping("/projects/{projectId}")
@@ -117,6 +122,7 @@ public class WorkspaceController {
     model.addAttribute("worktrees", activeWorktrees);
     model.addAttribute("selectedWorktree", selectedWorktree);
     model.addAttribute("selectedFile", file);
+    model.addAttribute("workspaceEntries", workspaceEntries(selectedWorktree));
     model.addAttribute("chats", chats);
     model.addAttribute("selectedChat", selectedChat);
     model.addAttribute("chatRuns", chatRuns);
@@ -142,6 +148,17 @@ public class WorkspaceController {
     if (id == null) return worktrees.isEmpty() ? null : worktrees.getFirst();
     return worktrees.stream().filter(value -> value.id().equals(id)).findFirst()
         .orElseThrow(() -> new IllegalArgumentException("Worktree belongs to another project or is inactive"));
+  }
+
+  private List<FileEntry> workspaceEntries(ProjectWorktreeView worktree) {
+    if (worktree == null) return List.of();
+    try {
+      return workspaceEditor.tree(worktree.id(), "").entries();
+    } catch (IllegalArgumentException | IllegalStateException exception) {
+      // The client-side explorer will show the actionable API error. Keeping page rendering alive
+      // also preserves historical chats for worktrees whose directory was removed externally.
+      return List.of();
+    }
   }
 
   private AppUser actor(Principal principal) {

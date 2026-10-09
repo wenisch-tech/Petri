@@ -23,7 +23,7 @@ Alpine.store('theme', {
   }
 });
 
-document.addEventListener('DOMContentLoaded', () => {
+function bootPetri() {
   hydrateIcons();
 
   const chat = document.querySelector('[data-chat-run]');
@@ -118,7 +118,10 @@ document.addEventListener('DOMContentLoaded', () => {
   });
 
   initializeWorkspace();
-});
+}
+
+if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootPetri, { once: true });
+else bootPetri();
 
 window.Alpine = Alpine;
 Alpine.start();
