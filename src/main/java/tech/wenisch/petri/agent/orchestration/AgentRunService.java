@@ -171,6 +171,13 @@ public class AgentRunService {
   }
 
   @Transactional(readOnly = true)
+  public List<AgentChatView> listChats(UUID worktreeId, UUID actorId) {
+    return chats.findByWorktreeIdAndCreatedByOrderByUpdatedAtDesc(worktreeId, actorId).stream()
+        .map(this::chatView)
+        .toList();
+  }
+
+  @Transactional(readOnly = true)
   public List<AgentRunView> chatRuns(UUID chatId) {
     requireChat(chatId);
     return runs.findByChatIdOrderByChatMessageIndexAsc(chatId).stream()

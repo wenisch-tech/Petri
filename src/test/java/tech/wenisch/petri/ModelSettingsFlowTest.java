@@ -131,9 +131,8 @@ class ModelSettingsFlowTest {
     jdbc.update("delete from model_provider_credential where provider = 'OPENAI'");
 
     mockMvc.perform(get("/chat").with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN")))
-        .andExpect(status().isOk())
-        .andExpect(content().string(org.hamcrest.Matchers.containsString(
-            "Configure a model before starting a chat")));
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/projects"));
   }
 
   @Test
@@ -203,10 +202,17 @@ class ModelSettingsFlowTest {
     mockMvc.perform(get("/chat")
             .param("run", runId.toString())
             .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN")))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/workspace/projects/" + projectId
+            + "?worktree=" + worktreeId + "&chat=" + chatId));
+
+    mockMvc.perform(get("/workspace/projects/" + projectId)
+            .param("worktree", worktreeId.toString())
+            .param("chat", chatId.toString())
+            .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN")))
         .andExpect(status().isOk())
         .andExpect(content().string(org.hamcrest.Matchers.containsString("Explain the module")))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("The module is ready.")))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString("12000 output tokens")));
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("The module is ready.")));
   }
 
   private String storedSecret() {

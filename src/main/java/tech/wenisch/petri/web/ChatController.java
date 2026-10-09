@@ -86,10 +86,11 @@ public class ChatController {
       @RequestParam(required = false) UUID run,
       Principal principal,
       Model model) {
-    if (chat == null && run != null) {
-      chat = runs.get(run).chatId();
-    }
     AppUser viewer = actor(principal);
+    if (chat == null && run != null) {
+      AgentRunView selectedRun = runs.get(run);
+      chat = selectedRun.chatId();
+    }
     AgentChatView selectedChat = chat == null ? null : runs.chat(chat, viewer.getId());
     if (selectedChat != null) {
       project = worktrees.get(selectedChat.worktreeId()).projectId();
@@ -97,11 +98,26 @@ public class ChatController {
     List<Project> availableProjects = projects.findAllByOrderByCreatedAtDesc();
     if (project == null && !availableProjects.isEmpty()) project = availableProjects.getFirst().getId();
 
+    if (project == null) return "redirect:/projects";
+
     List<ProjectWorktreeView> activeWorktrees = project == null
         ? List.of()
         : worktrees.list(project).stream()
             .filter(value -> value.status() == ProjectWorktreeStatus.ACTIVE)
             .toList();
+    UUID worktreeId = selectedChat == null
+        ? (activeWorktrees.isEmpty() ? null : activeWorktrees.getFirst().id())
+        : selectedChat.worktreeId();
+    StringBuilder destination = new StringBuilder("redirect:/workspace/projects/").append(project);
+    if (worktreeId != null) destination.append("?worktree=").append(worktreeId);
+    if (selectedChat != null) destination.append(worktreeId == null ? "?" : "&")
+        .append("chat=").append(selectedChat.id());
+    return destination.toString();
+    /*
+     * The former chat page was intentionally kept below as a reference while the workspace
+     * migration landed. The return above makes old URLs compatible without duplicating state.
+     */
+    /*
     model.addAttribute("projects", availableProjects);
     model.addAttribute("selectedProjectId", project);
     model.addAttribute("worktrees", activeWorktrees);
@@ -141,6 +157,7 @@ public class ChatController {
         .filter(value -> value.status().name().equals("PROPOSED") || value.status().name().equals("APPROVED") || value.status().name().equals("RUNNING"))
         .toList());
     return "chat";
+    */
   }
 
   @PostMapping("/worktrees")

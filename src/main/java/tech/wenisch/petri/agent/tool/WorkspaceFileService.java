@@ -231,16 +231,82 @@ public class WorkspaceFileService {
     }
   }
 
+  public WorkspaceEntryMutation createDirectory(Path worktree, String requestedPath) {
+    Path directory = resolveNonExisting(worktree, requestedPath, false);
+    try {
+      Files.createDirectory(directory);
+      return entry(worktree, directory);
+    } catch (IOException exception) {
+      throw new IllegalStateException("Could not create workspace directory", exception);
+    }
+  }
+
+  public WorkspaceEntryMutation move(
+      Path worktree, String sourcePath, String targetPath, String expectedSha256) {
+    Path source = resolve(worktree, sourcePath);
+    Path root = root(worktree);
+    if (source.equals(root)) throw new IllegalArgumentException("Workspace root cannot be moved");
+    if (Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS)) {
+      requireSha256(expectedSha256);
+      if (!read(worktree, sourcePath).sha256().equals(expectedSha256)) {
+        throw new FileConflictException("File changed since it was read");
+      }
+    }
+    Path target = resolveNonExisting(worktree, targetPath, false);
+    if (target.startsWith(source)) {
+      throw new IllegalArgumentException("Workspace entry cannot be moved into itself");
+    }
+    try {
+      Files.move(source, target, StandardCopyOption.ATOMIC_MOVE);
+      return entry(worktree, target);
+    } catch (AtomicMoveNotSupportedException exception) {
+      throw new IllegalStateException("Workspace filesystem does not support atomic moves", exception);
+    } catch (IOException exception) {
+      throw new IllegalStateException("Could not move workspace entry", exception);
+    }
+  }
+
+  public void delete(
+      Path worktree, String requestedPath, String expectedSha256, boolean recursive) {
+    Path target = resolve(worktree, requestedPath);
+    Path root = root(worktree);
+    if (target.equals(root)) throw new IllegalArgumentException("Workspace root cannot be deleted");
+    if (Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) {
+      requireSha256(expectedSha256);
+      if (!read(worktree, requestedPath).sha256().equals(expectedSha256)) {
+        throw new FileConflictException("File changed since it was read");
+      }
+    } else if (Files.isDirectory(target, LinkOption.NOFOLLOW_LINKS) && !recursive) {
+      try (Stream<Path> entries = Files.list(target)) {
+        if (entries.findAny().isPresent()) {
+          throw new IllegalArgumentException("Directory is not empty; recursive confirmation is required");
+        }
+      } catch (IOException exception) {
+        throw new IllegalStateException("Could not inspect workspace directory", exception);
+      }
+    }
+    try (Stream<Path> paths = Files.walk(target)) {
+      List<Path> candidates = paths.sorted(Comparator.reverseOrder()).toList();
+      if (candidates.stream().anyMatch(Files::isSymbolicLink)) {
+        throw new IllegalArgumentException("Symbolic links are not supported by workspace tools");
+      }
+      candidates.forEach(path -> {
+        try {
+          Files.delete(path);
+        } catch (IOException exception) {
+          throw new IllegalStateException("Could not delete workspace entry", exception);
+        }
+      });
+    } catch (IOException exception) {
+      throw new IllegalStateException("Could not delete workspace entry", exception);
+    }
+  }
+
   private Path resolve(Path worktree, String requestedPath) {
     if (requestedPath == null || requestedPath.indexOf('\0') >= 0) {
       throw new IllegalArgumentException("Workspace path is invalid");
     }
-    Path root;
-    try {
-      root = worktree.toRealPath();
-    } catch (IOException exception) {
-      throw new IllegalStateException("Worktree is unavailable", exception);
-    }
+    Path root = root(worktree);
     Path relativePath = Path.of(requestedPath);
     if (relativePath.isAbsolute()) throw new IllegalArgumentException("Workspace path must be relative");
     Path candidate = root.resolve(relativePath).normalize();
@@ -270,12 +336,7 @@ public class WorkspaceFileService {
     if (requestedPath == null || requestedPath.indexOf('\0') >= 0) {
       throw new IllegalArgumentException("Workspace path is invalid");
     }
-    Path root;
-    try {
-      root = worktree.toRealPath();
-    } catch (IOException exception) {
-      throw new IllegalStateException("Worktree is unavailable", exception);
-    }
+    Path root = root(worktree);
     Path relativePath = Path.of(requestedPath);
     if (relativePath.isAbsolute()) throw new IllegalArgumentException("Workspace path must be relative");
     Path candidate = root.resolve(relativePath).normalize();
@@ -324,6 +385,14 @@ public class WorkspaceFileService {
       }
     } catch (IOException exception) {
       throw new IllegalStateException("Could not read workspace file", exception);
+    }
+  }
+
+  private static Path root(Path worktree) {
+    try {
+      return worktree.toRealPath();
+    } catch (IOException exception) {
+      throw new IllegalStateException("Worktree is unavailable", exception);
     }
   }
 
@@ -424,5 +493,14 @@ public class WorkspaceFileService {
     } catch (IOException exception) {
       return 0;
     }
+  }
+
+  private WorkspaceEntryMutation entry(Path worktree, Path path) {
+    String kind = type(path);
+    if ("FILE".equals(kind)) {
+      ReadFileResult file = read(worktree, relative(worktree, path));
+      return new WorkspaceEntryMutation(file.path(), kind, file.sha256(), file.size());
+    }
+    return new WorkspaceEntryMutation(relative(worktree, path), kind, null, fileSize(path));
   }
 }

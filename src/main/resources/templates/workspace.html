@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="_csrf" th:content="${_csrf.token}">
+  <meta name="_csrf_header" th:content="${_csrf.headerName}">
+  <title th:text="|${project.name} · Workspace · Petri|">Workspace · Petri</title>
+  <link rel="stylesheet" href="/css/petri.css">
+  <script defer src="/js/petri.js"></script>
+</head>
+<body class="workspace-body">
+  <header class="topbar workspace-topbar">
+    <div class="flex h-14 items-center justify-between gap-3 px-4 sm:px-5">
+      <div class="flex min-w-0 items-center gap-3">
+        <a href="/projects" class="flex items-center gap-2 font-semibold"><span class="grid size-8 place-items-center rounded-lg bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span><span class="hidden sm:inline">Petri</span></a>
+        <span class="h-5 border-l border-ink-700"></span>
+        <span class="truncate text-sm font-medium" th:text="${project.name}">Project</span>
+        <select class="max-w-56 rounded-lg border border-ink-700 bg-ink-900 px-2 py-1.5 text-xs text-ink-300" data-worktree-selector th:disabled="${#lists.isEmpty(worktrees)}">
+          <option th:if="${#lists.isEmpty(worktrees)}">No active worktree</option>
+          <option th:each="item : ${worktrees}" th:value="${item.id}" th:selected="${selectedWorktree != null && item.id == selectedWorktree.id}" th:text="|${item.gitRevision} · ${#strings.substring(item.id.toString(), 0, 8)}|">worktree</option>
+        </select>
+      </div>
+      <nav class="hidden items-center gap-1 md:flex" aria-label="Primary navigation">
+        <a class="nav-link bg-ink-800 text-ink-100" href="/projects">Workspace</a><a class="nav-link" href="/runs">Runs</a><a class="nav-link" href="/model-settings">Models</a><a class="nav-link" href="/audit">Audit</a>
+      </nav>
+      <div class="flex items-center gap-2"><button class="btn-secondary !min-h-8 !px-2" type="button" data-toggle-chat aria-label="Toggle chat"><i data-lucide="MessageSquare"></i></button><button class="btn-secondary !min-h-8 !px-2" type="button" x-data @click="$store.theme.toggle()" aria-label="Toggle theme"><i data-lucide="Sun"></i></button></div>
+    </div>
+  </header>
+
+  <main class="workspace-shell" data-workspace th:attr="data-project-id=${project.id},data-worktree-id=${selectedWorktree != null ? selectedWorktree.id : null},data-selected-file=${selectedFile}">
+    <aside class="workspace-explorer" data-workspace-explorer>
+      <div class="flex items-center justify-between border-b border-ink-700/70 px-3 py-3"><span class="text-xs font-bold uppercase tracking-wider text-ink-500">Explorer</span><div class="flex gap-1"><button class="icon-button" type="button" data-create-entry="FILE" title="New file"><i data-lucide="FilePlus2"></i></button><button class="icon-button" type="button" data-create-entry="DIRECTORY" title="New folder"><i data-lucide="FolderPlus"></i></button></div></div>
+      <div class="min-h-0 flex-1 overflow-auto p-2" data-file-tree>
+        <p th:if="${selectedWorktree == null}" class="p-3 text-sm text-ink-500">Create a worktree to browse project files.</p>
+        <p th:if="${selectedWorktree != null}" class="p-3 text-sm text-ink-500">Loading files…</p>
+      </div>
+      <form th:if="${selectedWorktree == null}" method="post" action="/chat/worktrees" class="border-t border-ink-700/70 p-3"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><input type="hidden" name="projectId" th:value="${project.id}"><button class="btn-secondary w-full" type="submit">Prepare default branch</button></form>
+    </aside>
+    <div class="workspace-resizer" data-resize="explorer" role="separator" aria-orientation="vertical" tabindex="0"></div>
+
+    <section class="workspace-editor" data-workspace-editor>
+      <div class="workspace-tabs" data-editor-tabs><span class="px-4 text-xs text-ink-500">No file open</span></div>
+      <div class="min-h-0 flex-1" data-editor-host>
+        <div class="grid h-full place-items-center p-8 text-center text-ink-500" data-editor-empty><div><i class="mx-auto" data-lucide="FileCode2"></i><p class="mt-3 text-sm">Select a text file in the explorer.</p><p class="mt-1 text-xs">Edits are stored locally until you save with <kbd>Ctrl/Cmd+S</kbd>.</p></div></div>
+      </div>
+      <div class="flex h-7 items-center justify-between border-t border-ink-700/70 px-3 font-mono text-[11px] text-ink-500"><span data-editor-status>Ready</span><span data-editor-cursor>Ln 1, Col 1</span></div>
+    </section>
+    <div class="workspace-resizer" data-resize="chat" role="separator" aria-orientation="vertical" tabindex="0"></div>
+
+    <aside class="workspace-chat" data-workspace-chat th:classappend="${selectedChat != null} ? '' : ' workspace-chat-empty'">
+      <div class="flex items-center gap-2 border-b border-ink-700/70 px-3 py-3"><select class="field min-w-0 flex-1 !py-2 text-sm" data-chat-selector><option value="" th:selected="${selectedChat == null}">New chat</option><option th:each="item : ${chats}" th:value="${item.id}" th:selected="${selectedChat != null && item.id == selectedChat.id}" th:text="${item.title}">Chat</option></select><a class="icon-button" th:href="@{/workspace/projects/{id}(id=${project.id},worktree=${selectedWorktree != null ? selectedWorktree.id : null})}" title="New chat"><i data-lucide="Plus"></i></a></div>
+      <div class="min-h-0 flex-1 overflow-y-auto px-3 py-4" data-chat-scroll th:attr="data-chat-id=${selectedChat != null ? selectedChat.id : null}">
+        <div th:if="${selectedChat == null}" class="grid h-full place-items-center text-center text-sm text-ink-500"><div><i class="mx-auto" data-lucide="MessageSquare"></i><p class="mt-3">Start a durable coding chat.</p></div></div>
+        <div th:if="${selectedChat != null}" class="space-y-4">
+          <div class="flex items-center justify-between gap-2"><div class="min-w-0"><p class="truncate text-sm font-semibold" th:text="${selectedChat.title}">Chat</p><p class="text-xs text-ink-500" th:text="${selectedChat.active} ? 'Petri is working' : (selectedChat.queuePaused ? 'Queue paused' : 'Ready')">Ready</p></div><form th:if="${selectedChat.queuePaused}" method="post" th:action="@{/chat/{id}/queue/resume(id=${selectedChat.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-secondary !min-h-8 !px-2 text-xs" type="submit">Continue</button></form></div>
+          <th:block th:each="chatRun : ${chatRuns}">
+            <article class="ml-5 rounded-xl rounded-br-sm bg-brand-600 px-3 py-2.5 text-sm text-white"><p class="whitespace-pre-wrap break-words" th:text="${chatRun.prompt}">Prompt</p><div class="mt-2 flex justify-between text-[11px] text-white/70"><span th:text="|Turn ${chatRun.chatMessageIndex + 1}|">Turn</span><form th:if="${chatRun.status.name() == 'PENDING' || chatRun.status.name() == 'RUNNING'}" method="post" th:action="@{/chat/runs/{id}/cancel(id=${chatRun.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="underline" type="submit">Cancel</button></form></div></article>
+            <th:block th:each="turn : ${chatRun.turns}"><article th:if="${turn.kind.name() == 'MODEL_RESPONSE' && !#strings.isEmpty(turn.content)}" class="mr-5 rounded-xl rounded-bl-sm border border-ink-700 bg-ink-800 px-3 py-2.5 text-sm text-ink-300"><p class="whitespace-pre-wrap break-words" th:text="${turn.content}">Response</p></article><details th:if="${turn.kind.name() == 'TOOL_CALL' || turn.kind.name() == 'TOOL_RESULT'}" class="rounded-lg border border-ink-700/70 px-3 py-2 text-xs text-ink-500"><summary class="cursor-pointer" th:text="${turn.toolName}">Tool</summary><pre class="mt-2 max-h-48 overflow-auto whitespace-pre-wrap" th:text="${turn.content}">result</pre></details><article th:if="${turn.kind.name() == 'ERROR'}" class="rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs text-red-300" th:text="${turn.content}">Error</article></th:block>
+            <article th:if="${chatRun.partialOutput != null}" class="mr-5 rounded-xl rounded-bl-sm border border-ink-700 bg-ink-800 px-3 py-2.5 text-sm text-ink-300"><p class="mb-1 text-[11px] font-bold uppercase tracking-wider text-brand-400">Petri · writing…</p><p class="whitespace-pre-wrap break-words" th:attr="data-run-output=${chatRun.id}" th:text="${chatRun.partialOutput}">Partial</p></article>
+            <details th:each="summary : ${summariesByThrough.get(chatRun.chatMessageIndex)}" class="rounded-lg border border-ink-700/70 px-3 py-2 text-xs text-ink-500"><summary class="cursor-pointer">Earlier context compacted</summary><p class="mt-2 whitespace-pre-wrap" th:text="${summary.content}">Summary</p></details>
+          </th:block>
+        </div>
+      </div>
+      <div class="border-t border-ink-700/70 p-3">
+        <p th:unless="${modelConfigured}" class="mb-2 text-xs text-amber-200">Configure a model first.</p>
+        <form th:if="${selectedChat == null && selectedWorktree != null}" method="post" action="/chat/runs" data-chat-form><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><input type="hidden" name="worktreeId" th:value="${selectedWorktree.id}"><div class="flex gap-2"><select class="field w-28 !py-2 text-xs" name="provider" data-model-provider th:disabled="${!modelConfigured}"><option th:each="item : ${configuredModels}" th:value="${item.provider}" th:text="${item.provider.displayName()}" th:selected="${item.provider == modelCredential.provider}" th:attr="data-model=${item.model},data-tokens=${item.maxOutputTokens},data-context=${item.contextWindowTokens}">Provider</option></select><textarea class="field min-h-20 flex-1 resize-y text-sm" name="prompt" required maxlength="200000" placeholder="Ask Petri…" th:disabled="${!modelConfigured}"></textarea><button class="btn-primary self-end !min-h-9 !px-3" type="submit" th:disabled="${!modelConfigured}"><i data-lucide="Send"></i></button></div><input type="hidden" name="maxModelTurns" value="20"><input type="hidden" name="contextWindowTokens" data-context-input th:value="${modelCredential.contextWindowTokens}"><input type="hidden" name="model" data-model-input><input type="hidden" name="maxOutputTokens" data-token-input></form>
+        <form th:if="${selectedChat != null}" method="post" th:action="@{/chat/{id}/messages(id=${selectedChat.id})}" data-chat-form><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><div class="flex gap-2"><select class="field w-28 !py-2 text-xs" name="provider" data-model-provider><option th:each="item : ${configuredModels}" th:value="${item.provider}" th:text="${item.provider.displayName()}" th:selected="${item.provider == modelCredential.provider}" th:attr="data-model=${item.model},data-tokens=${item.maxOutputTokens},data-context=${item.contextWindowTokens}">Provider</option></select><textarea class="field min-h-20 flex-1 resize-y text-sm" name="prompt" required maxlength="200000" placeholder="Message Petri…"></textarea><button class="btn-primary self-end !min-h-9 !px-3" type="submit"><i data-lucide="Send"></i></button></div><input type="hidden" name="maxModelTurns" value="20"><input type="hidden" name="contextWindowTokens" data-context-input th:value="${modelCredential.contextWindowTokens}"><input type="hidden" name="model" data-model-input><input type="hidden" name="maxOutputTokens" data-token-input></form>
+      </div>
+    </aside>
+  </main>
+</body>
+</html>

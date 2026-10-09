@@ -14,6 +14,8 @@ interface AgentChatRepository extends JpaRepository<AgentChat, UUID> {
 
   List<AgentChat> findByCreatedByOrderByUpdatedAtDesc(UUID createdBy);
 
+  List<AgentChat> findByWorktreeIdAndCreatedByOrderByUpdatedAtDesc(UUID worktreeId, UUID createdBy);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select chat from AgentChat chat where chat.id = :id")
   Optional<AgentChat> findForUpdateById(@Param("id") UUID id);

@@ -17,7 +17,7 @@
         <span>Petri</span>
       </a>
       <nav class="hidden items-center gap-1 sm:flex" aria-label="Primary navigation">
-        <a class="nav-link" href="/chat">Chat</a>
+        <a class="nav-link" href="/projects">Workspace</a>
         <a class="nav-link bg-ink-800 text-ink-100" href="/projects">Projects</a>
         <a class="nav-link" href="/runs">Runs</a>
         <a class="nav-link" href="/model-settings">Models</a>
@@ -62,13 +62,14 @@
           <tbody>
             <tr th:each="project : ${projects}">
               <td>
-                <span class="font-semibold text-ink-100" th:text="${project.name}">Project</span>
+                <a class="font-semibold text-ink-100 hover:text-brand-400" th:href="@{/workspace/projects/{id}(id=${project.id})}" th:text="${project.name}">Project</a>
                 <span class="mt-1 block font-mono text-xs text-ink-500" th:text="${project.slug}">project</span>
               </td>
               <td class="max-w-md"><span class="block truncate" th:text="${project.repositoryUri}">repository</span></td>
               <td><code th:text="${project.defaultBranch}">main</code></td>
               <td><span class="badge" th:text="${project.status}">ACTIVE</span></td>
               <td class="text-right" th:if="${canManageProjects}">
+                <a class="btn-secondary" th:href="@{/workspace/projects/{id}(id=${project.id})}"><i data-lucide="FileCode2"></i> Open</a>
                 <a class="btn-secondary" th:href="@{/projects/{id}/settings(id=${project.id})}"><i data-lucide="Settings"></i> Settings</a>
               </td>
               <td th:unless="${canManageProjects}"></td>

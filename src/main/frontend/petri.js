@@ -6,6 +6,8 @@ import {
   CircleCheck,
   Eye,
   FileCode2,
+  FilePlus2,
+  FolderPlus,
   FolderGit2,
   GitBranch,
   History,
@@ -25,6 +27,7 @@ import {
   Trash2,
   Workflow
 } from 'lucide';
+import { initializeWorkspace } from './workspace';
 
 const icons = {
   ArrowLeft,
@@ -108,7 +111,8 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  const chatPanel = document.querySelector('[data-chat-id]');
+  const legacyChatPanel = document.querySelector('[data-chat-id]');
+  const chatPanel = legacyChatPanel?.closest('[data-workspace]') ? null : legacyChatPanel;
   if (chatPanel?.dataset.chatId) {
     const chatId = chatPanel.dataset.chatId;
     const atBottom = () => !scroller || scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
@@ -171,6 +175,8 @@ document.addEventListener('DOMContentLoaded', () => {
     provider.addEventListener('change', updateModelControls);
     updateModelControls();
   });
+
+  initializeWorkspace();
 });
 
 window.Alpine = Alpine;
