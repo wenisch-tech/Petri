@@ -9,7 +9,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.event.EventListener;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.support.TransactionTemplate;
 import tech.wenisch.petri.agent.change.ChangeProposalService;
 import tech.wenisch.petri.agent.run.TestRunService;
 import tech.wenisch.petri.config.PetriProperties;
@@ -23,6 +23,7 @@ public class AgentChatQueueService {
   private final AgentRunLauncher launcher;
   private final Clock clock;
   private final Duration executionLease;
+  private final TransactionTemplate transactions;
 
   @Autowired
   AgentChatQueueService(
@@ -31,9 +32,10 @@ public class AgentChatQueueService {
       ChangeProposalService changes,
       TestRunService testRuns,
       AgentRunLauncher launcher,
-      PetriProperties properties) {
+      PetriProperties properties,
+      TransactionTemplate transactions) {
     this(chats, runs, changes, testRuns, launcher,
-        properties.agent().modelRequestTimeout().plusMinutes(1), Clock.systemUTC());
+        properties.agent().modelRequestTimeout().plusMinutes(1), Clock.systemUTC(), transactions);
   }
 
   AgentChatQueueService(
@@ -43,7 +45,8 @@ public class AgentChatQueueService {
       TestRunService testRuns,
       AgentRunLauncher launcher,
       Duration executionLease,
-      Clock clock) {
+      Clock clock,
+      TransactionTemplate transactions) {
     this.chats = chats;
     this.runs = runs;
     this.changes = changes;
@@ -51,26 +54,28 @@ public class AgentChatQueueService {
     this.launcher = launcher;
     this.executionLease = executionLease;
     this.clock = clock;
+    this.transactions = transactions;
   }
 
   @EventListener
   void terminal(AgentRunTerminalEvent event) {
-    advance(event.chatId(), false, false);
+    advanceInTransaction(event.chatId(), false, false);
   }
 
   public void resume(UUID chatId, boolean overrideApprovalGate) {
-    advance(chatId, true, overrideApprovalGate);
+    advanceInTransaction(chatId, true, overrideApprovalGate);
   }
 
   public void approvalsChanged(UUID chatId) {
-    advance(chatId, false, false);
+    advanceInTransaction(chatId, false, false);
   }
 
   /** Restarts queued work after a process restart and reclaims only expired execution leases. */
   @Scheduled(fixedDelayString = "${petri.agent.queue-recovery-delay-ms:30000}")
   public void recover() {
     runs.findByStatusOrderByCreatedAtAsc(AgentRunStatus.PENDING).stream()
-        .map(AgentRun::chatId).distinct().forEach(chatId -> advance(chatId, false, false));
+        .map(AgentRun::chatId).distinct()
+        .forEach(chatId -> advanceInTransaction(chatId, false, false));
     Instant now = Instant.now(clock);
     for (AgentRun run : runs.findByStatusOrderByCreatedAtAsc(AgentRunStatus.RUNNING)) {
       if (run.executionLeaseExpired(now, executionLease)) {
@@ -84,7 +89,6 @@ public class AgentChatQueueService {
     }
   }
 
-  @Transactional
   void advance(UUID chatId, boolean userRequested, boolean explicitOverride) {
     AgentChat chat = chats.findForUpdateById(chatId).orElse(null);
     if (chat == null) return;
@@ -116,6 +120,10 @@ public class AgentChatQueueService {
     chat.resumeQueue(false, Instant.now(clock));
     if (override) chat.consumeApprovalOverride(Instant.now(clock));
     launcher.launch(next.id(), next.worktreeId(), next.createdBy(), "chat-queue:" + chatId);
+  }
+
+  private void advanceInTransaction(UUID chatId, boolean userRequested, boolean explicitOverride) {
+    transactions.executeWithoutResult(ignored -> advance(chatId, userRequested, explicitOverride));
   }
 
   private static boolean active(AgentRunStatus status) {
