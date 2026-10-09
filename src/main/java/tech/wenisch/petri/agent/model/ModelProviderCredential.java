@@ -29,6 +29,9 @@ class ModelProviderCredential {
   @Column(name = "max_output_tokens", nullable = false)
   private int maxOutputTokens;
 
+  @Column(name = "context_window_tokens", nullable = false)
+  private int contextWindowTokens;
+
   @Enumerated(EnumType.STRING)
   @Column(name = "reasoning_effort", length = 16)
   private ReasoningEffort reasoningEffort;
@@ -57,6 +60,7 @@ class ModelProviderCredential {
       String baseUrl,
       String model,
       int maxOutputTokens,
+      int contextWindowTokens,
       ReasoningEffort reasoningEffort,
       TextVerbosity textVerbosity,
       UUID actorId,
@@ -66,6 +70,7 @@ class ModelProviderCredential {
     this.baseUrl = baseUrl;
     this.model = model;
     this.maxOutputTokens = maxOutputTokens;
+    this.contextWindowTokens = contextWindowTokens;
     this.reasoningEffort = reasoningEffort;
     this.textVerbosity = textVerbosity;
     this.createdBy = actorId;
@@ -79,6 +84,7 @@ class ModelProviderCredential {
       String baseUrl,
       String model,
       int maxOutputTokens,
+      int contextWindowTokens,
       ReasoningEffort reasoningEffort,
       TextVerbosity textVerbosity,
       UUID actorId,
@@ -87,6 +93,7 @@ class ModelProviderCredential {
     this.baseUrl = baseUrl;
     this.model = model;
     this.maxOutputTokens = maxOutputTokens;
+    this.contextWindowTokens = contextWindowTokens;
     this.reasoningEffort = reasoningEffort;
     this.textVerbosity = textVerbosity;
     this.updatedBy = actorId;
@@ -98,6 +105,7 @@ class ModelProviderCredential {
   String baseUrl() { return baseUrl; }
   String model() { return model; }
   int maxOutputTokens() { return maxOutputTokens; }
+  int contextWindowTokens() { return contextWindowTokens; }
   ReasoningEffort reasoningEffort() { return reasoningEffort; }
   TextVerbosity textVerbosity() { return textVerbosity; }
   Instant updatedAt() { return updatedAt; }

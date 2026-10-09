@@ -37,6 +37,7 @@
 - Optional reasoning effort and text verbosity controls.
 - Per-run model setting snapshots and per-task overrides.
 - Full persisted conversation reconstruction for stateless Chat Completions servers.
+- Configurable context-window snapshot per provider and message.
 
 ## Agent runtime
 
@@ -46,6 +47,10 @@
 - Cancellation and resumable interrupted runs.
 - Asynchronous start/resume for browser and API clients.
 - Run-scoped and worktree-scoped lifecycle events with JSON replay and SSE streaming.
+- Durable worktree-bound chats: each message is a separately persisted run in an ordered queue.
+- One active run per chat, recovery of pending/expired work after restart, explicit queue resume and approval gates.
+- Token-by-token model text streaming with persisted partial output for reload/reconnect recovery.
+- Cumulative context summaries when a conversation exceeds its configured context budget; source history remains visible.
 - Lazy-loaded operator-controlled `SKILL.md` workflows.
 
 ## Native tools
@@ -64,7 +69,6 @@ File edits are optimistic: a proposal includes the hash observed during the read
 
 ## Current boundaries
 
-- Model output is persisted per completed response; token-by-token browser streaming is not implemented.
 - The chat displays plain preformatted text rather than rendered Markdown.
 - Model configurations are one profile per provider; reusable named profiles are not implemented.
 - Test execution is an approval boundary, not an operating-system sandbox.

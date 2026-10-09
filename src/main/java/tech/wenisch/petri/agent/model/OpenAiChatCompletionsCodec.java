@@ -1,7 +1,9 @@
 package tech.wenisch.petri.agent.model;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import tech.wenisch.petri.agent.tool.ToolDefinition;
 import tools.jackson.core.JacksonException;
@@ -47,6 +49,74 @@ final class OpenAiChatCompletionsCodec {
     } catch (JacksonException exception) {
       throw new ModelClientException("Could not encode model request", exception);
     }
+  }
+
+  String encodeStreaming(ModelRequest request) {
+    try {
+      ObjectNode body = (ObjectNode) objectMapper.readTree(encode(request));
+      body.put("stream", true);
+      return objectMapper.writeValueAsString(body);
+    } catch (JacksonException exception) {
+      throw new ModelClientException("Could not encode streaming model request", exception);
+    }
+  }
+
+  ModelResponse stream(
+      OpenAiCompatibleTransport transport,
+      ModelProvider provider,
+      ModelRequest request,
+      ModelStreamListener listener) {
+    StringBuilder text = new StringBuilder();
+    Map<Integer, StreamToolCall> calls = new HashMap<>();
+    String[] responseId = {null};
+    String[] finish = {null};
+    int[] usage = {0, 0};
+    transport.postSse(provider, "/chat/completions", encodeStreaming(request), data -> {
+      if ("[DONE]".equals(data)) return;
+      try {
+        JsonNode root = objectMapper.readTree(data);
+        if (root.path("id").isTextual()) responseId[0] = root.path("id").textValue();
+        JsonNode choice = root.path("choices").path(0);
+        JsonNode delta = choice.path("delta");
+        String piece = optionalText(delta, "content");
+        if (piece != null) { text.append(piece); listener.onTextDelta(piece); }
+        JsonNode toolCalls = delta.path("tool_calls");
+        if (toolCalls.isArray()) for (JsonNode item : toolCalls) {
+          int index = item.path("index").asInt();
+          StreamToolCall call = calls.computeIfAbsent(index, ignored -> new StreamToolCall());
+          if (item.path("id").isTextual()) call.id = item.path("id").textValue();
+          JsonNode function = item.path("function");
+          if (function.path("name").isTextual()) call.name = function.path("name").textValue();
+          String argumentsDelta = function.path("arguments").isTextual()
+              ? function.path("arguments").textValue() : "";
+          if (!argumentsDelta.isEmpty()) call.arguments.append(argumentsDelta);
+          listener.onToolCallDelta(index, call.id, call.name, argumentsDelta);
+        }
+        if (!choice.path("finish_reason").isNull()) finish[0] = choice.path("finish_reason").asText();
+        usage[0] = root.path("usage").path("prompt_tokens").asInt(usage[0]);
+        usage[1] = root.path("usage").path("completion_tokens").asInt(usage[1]);
+      } catch (JacksonException exception) {
+        throw new ModelClientException("Could not decode streaming model response", exception);
+      }
+    });
+    List<ModelToolCall> modelCalls = calls.values().stream().map(call -> new ModelToolCall(
+        call.id == null ? "call_" + UUID.randomUUID() : call.id,
+        call.name == null ? "unknown" : call.name,
+        call.arguments.toString())).toList();
+    String status = "stop".equals(finish[0]) || "tool_calls".equals(finish[0])
+        ? "completed" : finish[0] == null ? "incomplete" : finish[0];
+    ModelResponse response = new ModelResponse(responseId[0] == null ? "chatcmpl_" + UUID.randomUUID() : responseId[0],
+        status, text.toString(), modelCalls, usage[0], usage[1]);
+    listener.onUsage(response.inputTokens(), response.outputTokens());
+    if ("completed".equals(status)) listener.onCompleted(response);
+    else listener.onError("Model streaming response ended with status " + status);
+    return response;
+  }
+
+  private static final class StreamToolCall {
+    private String id;
+    private String name;
+    private final StringBuilder arguments = new StringBuilder();
   }
 
   ModelResponse decode(byte[] body) {

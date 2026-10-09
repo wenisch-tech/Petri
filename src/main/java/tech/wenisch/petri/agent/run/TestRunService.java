@@ -45,6 +45,12 @@ public class TestRunService {
     return state.listForAgentRun(agentRunId);
   }
 
+  public boolean hasOpenForAgentRun(UUID agentRunId) {
+    return state.listForAgentRun(agentRunId).stream().anyMatch(value ->
+        value.status() == TestRunStatus.PROPOSED || value.status() == TestRunStatus.APPROVED
+            || value.status() == TestRunStatus.RUNNING);
+  }
+
   public TestRunView approve(UUID testRunId, String actorEmail) {
     return state.approve(testRunId, actorEmail);
   }

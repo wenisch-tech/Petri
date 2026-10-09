@@ -46,4 +46,16 @@ public class OpenAiResponsesClient implements ModelClient {
   public ModelResponse respond(ModelRequest request) {
     return codec.decode(transport.post(provider(), "/responses", codec.encode(request)));
   }
+
+  @Override
+  public ModelResponse respondStreaming(ModelRequest request, ModelStreamListener listener) {
+    boolean[] emitted = {false};
+    ModelStreamListener tracking = ModelStreamListener.tracking(listener, () -> emitted[0] = true);
+    try {
+      return codec.stream(transport, provider(), request, tracking);
+    } catch (ModelStreamingNotSupportedException exception) {
+      if (emitted[0]) throw exception;
+      return ModelClient.super.respondStreaming(request, listener);
+    }
+  }
 }

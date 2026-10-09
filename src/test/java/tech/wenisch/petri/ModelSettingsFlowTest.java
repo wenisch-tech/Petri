@@ -133,7 +133,7 @@ class ModelSettingsFlowTest {
     mockMvc.perform(get("/chat").with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN")))
         .andExpect(status().isOk())
         .andExpect(content().string(org.hamcrest.Matchers.containsString(
-            "Configure an API key and model before starting a chat")));
+            "Configure a model before starting a chat")));
   }
 
   @Test
@@ -160,6 +160,7 @@ class ModelSettingsFlowTest {
     UUID projectId = UUID.randomUUID();
     UUID worktreeId = UUID.randomUUID();
     UUID runId = UUID.randomUUID();
+    UUID chatId = UUID.randomUUID();
     Instant now = Instant.parse("2026-10-09T10:00:00Z");
     Timestamp timestamp = Timestamp.from(now);
     jdbc.update(
@@ -175,12 +176,17 @@ class ModelSettingsFlowTest {
         worktreeId, projectId, "main", "projects/" + projectId + "/runs/" + worktreeId,
         "ACTIVE", actorId, timestamp);
     jdbc.update(
+        "insert into agent_chat "
+            + "(id, worktree_id, title, queue_paused, approval_gate_overridden, next_message_index, "
+            + "created_by, created_at, updated_at) values (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        chatId, worktreeId, "Explain the module", false, false, 1, actorId, timestamp, timestamp);
+    jdbc.update(
         "insert into agent_run "
-            + "(id, worktree_id, provider, model_name, prompt, status, max_model_turns, "
+            + "(id, chat_id, chat_message_index, context_window_tokens, worktree_id, provider, model_name, prompt, status, max_model_turns, "
             + "model_turn_count, next_turn_index, final_output, created_by, created_at, "
             + "started_at, completed_at, max_output_tokens, reasoning_effort, text_verbosity) "
-            + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-        runId, worktreeId, "OPENAI", "chat-model", "Explain the module", "COMPLETED",
+            + "values (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        runId, chatId, 0, 32768, worktreeId, "OPENAI", "chat-model", "Explain the module", "COMPLETED",
         20, 1, 2, "The module is ready.", actorId, timestamp, timestamp, timestamp,
         12000, "HIGH", "LOW");
     jdbc.update(

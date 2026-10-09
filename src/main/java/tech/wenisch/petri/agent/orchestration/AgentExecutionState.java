@@ -10,6 +10,7 @@ import tech.wenisch.petri.agent.model.TextVerbosity;
 
 record AgentExecutionState(
     UUID runId,
+    UUID chatId,
     UUID worktreeId,
     ModelProvider provider,
     String model,

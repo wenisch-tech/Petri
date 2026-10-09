@@ -2,8 +2,10 @@ package tech.wenisch.petri.web;
 
 import java.security.Principal;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.MediaType;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -13,6 +15,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseBody;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import tech.wenisch.petri.agent.change.ChangeProposalService;
 import tech.wenisch.petri.agent.change.ChangeProposalView;
 import tech.wenisch.petri.agent.model.ModelCredentialService;
@@ -21,6 +24,10 @@ import tech.wenisch.petri.agent.model.ModelProvider;
 import tech.wenisch.petri.agent.model.ReasoningEffort;
 import tech.wenisch.petri.agent.model.TextVerbosity;
 import tech.wenisch.petri.agent.orchestration.AgentRunLauncher;
+import tech.wenisch.petri.agent.orchestration.AgentChatQueueService;
+import tech.wenisch.petri.agent.orchestration.AgentChatView;
+import tech.wenisch.petri.agent.orchestration.AgentChatStream;
+import tech.wenisch.petri.agent.orchestration.AgentChatSummaryView;
 import tech.wenisch.petri.agent.orchestration.AgentRunService;
 import tech.wenisch.petri.agent.orchestration.AgentRunView;
 import tech.wenisch.petri.agent.orchestration.CreateAgentRunCommand;
@@ -42,6 +49,8 @@ public class ChatController {
   private final ProjectWorktreeService worktrees;
   private final AgentRunService runs;
   private final AgentRunLauncher launcher;
+  private final AgentChatQueueService queue;
+  private final AgentChatStream chatStream;
   private final ModelCredentialService modelCredentials;
   private final AppUserRepository users;
   private final ChangeProposalService changes;
@@ -52,6 +61,8 @@ public class ChatController {
       ProjectWorktreeService worktrees,
       AgentRunService runs,
       AgentRunLauncher launcher,
+      AgentChatQueueService queue,
+      AgentChatStream chatStream,
       ModelCredentialService modelCredentials,
       AppUserRepository users,
       ChangeProposalService changes,
@@ -60,6 +71,8 @@ public class ChatController {
     this.worktrees = worktrees;
     this.runs = runs;
     this.launcher = launcher;
+    this.queue = queue;
+    this.chatStream = chatStream;
     this.modelCredentials = modelCredentials;
     this.users = users;
     this.changes = changes;
@@ -69,11 +82,17 @@ public class ChatController {
   @GetMapping
   String chat(
       @RequestParam(required = false) UUID project,
+      @RequestParam(required = false) UUID chat,
       @RequestParam(required = false) UUID run,
+      Principal principal,
       Model model) {
-    AgentRunView selectedRun = run == null ? null : runs.get(run);
-    if (selectedRun != null) {
-      project = worktrees.get(selectedRun.worktreeId()).projectId();
+    if (chat == null && run != null) {
+      chat = runs.get(run).chatId();
+    }
+    AppUser viewer = actor(principal);
+    AgentChatView selectedChat = chat == null ? null : runs.chat(chat, viewer.getId());
+    if (selectedChat != null) {
+      project = worktrees.get(selectedChat.worktreeId()).projectId();
     }
     List<Project> availableProjects = projects.findAllByOrderByCreatedAtDesc();
     if (project == null && !availableProjects.isEmpty()) project = availableProjects.getFirst().getId();
@@ -86,8 +105,9 @@ public class ChatController {
     model.addAttribute("projects", availableProjects);
     model.addAttribute("selectedProjectId", project);
     model.addAttribute("worktrees", activeWorktrees);
-    model.addAttribute("selectedRun", selectedRun);
-    model.addAttribute("recentRuns", runs.listAll().stream().limit(40).toList());
+    model.addAttribute("selectedChat", selectedChat);
+    model.addAttribute("chatRuns", selectedChat == null ? List.of() : runs.chatRuns(selectedChat.id()));
+    model.addAttribute("recentChats", runs.listChats(viewer.getId()).stream().limit(40).toList());
     List<ModelCredentialStatus> configuredModels = java.util.Arrays.stream(ModelProvider.values())
         .map(modelCredentials::status)
         .filter(ModelCredentialStatus::configured)
@@ -103,13 +123,23 @@ public class ChatController {
     model.addAttribute("modelConfigured", !configuredModels.isEmpty());
     model.addAttribute("reasoningEfforts", ReasoningEffort.values());
     model.addAttribute("textVerbosities", TextVerbosity.values());
-    if (selectedRun != null) {
-      model.addAttribute("changeProposals", changes.listForAgentRun(selectedRun.id()));
-      model.addAttribute("testRuns", testRuns.listForAgentRun(selectedRun.id()));
-    } else {
-      model.addAttribute("changeProposals", List.of());
-      model.addAttribute("testRuns", List.of());
-    }
+    List<AgentRunView> selectedRuns = selectedChat == null ? List.of() : runs.chatRuns(selectedChat.id());
+    List<AgentChatSummaryView> chatSummaries = selectedChat == null
+        ? List.of() : runs.chatSummaries(selectedChat.id());
+    model.addAttribute("summariesByThrough", chatSummaries.stream().collect(java.util.stream.Collectors.groupingBy(
+        AgentChatSummaryView::throughMessageIndex)));
+    model.addAttribute("changeProposalsByRun", selectedRuns.stream().collect(java.util.stream.Collectors.toMap(
+        AgentRunView::id, value -> changes.listForAgentRun(value.id()))));
+    model.addAttribute("testRunsByRun", selectedRuns.stream().collect(java.util.stream.Collectors.toMap(
+        AgentRunView::id, value -> testRuns.listForAgentRun(value.id()))));
+    model.addAttribute("openChangeProposals", selectedRuns.stream()
+        .flatMap(value -> changes.listForAgentRun(value.id()).stream())
+        .filter(value -> value.status().name().equals("PROPOSED") || value.status().name().equals("APPROVED"))
+        .toList());
+    model.addAttribute("openTestRuns", selectedRuns.stream()
+        .flatMap(value -> testRuns.listForAgentRun(value.id()).stream())
+        .filter(value -> value.status().name().equals("PROPOSED") || value.status().name().equals("APPROVED") || value.status().name().equals("RUNNING"))
+        .toList());
     return "chat";
   }
 
@@ -136,6 +166,7 @@ public class ChatController {
       @RequestParam(defaultValue = "20") Integer maxModelTurns,
       @RequestParam(required = false) String model,
       @RequestParam(required = false) Integer maxOutputTokens,
+      @RequestParam(required = false) Integer contextWindowTokens,
       @RequestParam(required = false) ReasoningEffort reasoningEffort,
       @RequestParam(required = false) TextVerbosity textVerbosity,
       Principal principal,
@@ -150,17 +181,59 @@ public class ChatController {
               maxModelTurns,
               model,
               maxOutputTokens,
+              contextWindowTokens,
               reasoningEffort,
               textVerbosity),
           actor.getId(),
           actor.getEmail());
       launcher.launch(
           run.id(), run.worktreeId(), actor.getId(), "web:" + actor.getEmail());
-      return "redirect:/chat?run=" + run.id();
+      return "redirect:/chat?chat=" + run.chatId();
     } catch (IllegalArgumentException | IllegalStateException exception) {
       redirect.addFlashAttribute("chatError", exception.getMessage());
       return "redirect:/chat";
     }
+  }
+
+  @PostMapping("/{chatId}/messages")
+  String enqueueMessage(
+      @PathVariable UUID chatId,
+      @RequestParam String prompt,
+      @RequestParam ModelProvider provider,
+      @RequestParam(defaultValue = "20") Integer maxModelTurns,
+      @RequestParam(required = false) String model,
+      @RequestParam(required = false) Integer maxOutputTokens,
+      @RequestParam(required = false) Integer contextWindowTokens,
+      @RequestParam(required = false) ReasoningEffort reasoningEffort,
+      @RequestParam(required = false) TextVerbosity textVerbosity,
+      Principal principal,
+      RedirectAttributes redirect) {
+    try {
+      AppUser actor = actor(principal);
+      runs.enqueue(chatId, new CreateAgentRunCommand(prompt, provider, maxModelTurns, model,
+          maxOutputTokens, contextWindowTokens, reasoningEffort, textVerbosity), actor.getId(),
+          "web:" + actor.getEmail());
+      queue.resume(chatId, false);
+    } catch (IllegalArgumentException | IllegalStateException exception) {
+      redirect.addFlashAttribute("chatError", exception.getMessage());
+    }
+    return "redirect:/chat?chat=" + chatId;
+  }
+
+  @PostMapping("/{chatId}/queue/resume")
+  String resumeQueue(
+      @PathVariable UUID chatId,
+      @RequestParam(defaultValue = "false") boolean overrideApprovals,
+      Principal principal,
+      RedirectAttributes redirect) {
+    try {
+      AppUser actor = actor(principal);
+      runs.resumeChatQueue(chatId, actor.getId(), overrideApprovals);
+      queue.resume(chatId, overrideApprovals);
+    } catch (IllegalArgumentException | IllegalStateException exception) {
+      redirect.addFlashAttribute("chatError", exception.getMessage());
+    }
+    return "redirect:/chat?chat=" + chatId;
   }
 
   @PostMapping("/runs/{runId}/resume")
@@ -175,7 +248,7 @@ public class ChatController {
     } catch (IllegalArgumentException | IllegalStateException exception) {
       redirect.addFlashAttribute("chatError", exception.getMessage());
     }
-    return "redirect:/chat?run=" + runId;
+    return "redirect:/chat?chat=" + runs.get(runId).chatId();
   }
 
   @PostMapping("/runs/{runId}/cancel")
@@ -188,13 +261,24 @@ public class ChatController {
     } catch (IllegalArgumentException | IllegalStateException exception) {
       redirect.addFlashAttribute("chatError", exception.getMessage());
     }
-    return "redirect:/chat?run=" + runId;
+    return "redirect:/chat?chat=" + runs.get(runId).chatId();
   }
 
   @GetMapping("/runs/{runId}/state")
   @ResponseBody
   ResponseEntity<AgentRunView> state(@PathVariable UUID runId) {
     return ResponseEntity.ok(runs.get(runId));
+  }
+
+  @GetMapping("/{chatId}/state")
+  @ResponseBody
+  ResponseEntity<AgentChatView> chatState(@PathVariable UUID chatId, Principal principal) {
+    return ResponseEntity.ok(runs.chat(chatId, actor(principal).getId()));
+  }
+
+  @GetMapping(value = "/{chatId}/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
+  SseEmitter stream(@PathVariable UUID chatId, Principal principal) {
+    return chatStream.subscribe(chatId, runs.chat(chatId, actor(principal).getId()));
   }
 
   @PostMapping("/runs/{runId}/changes/{proposalId}/approve")
@@ -288,14 +372,16 @@ public class ChatController {
     }
   }
 
-  private static String operation(
+  private String operation(
       UUID runId, RedirectAttributes redirect, Runnable action, String successMessage) {
+    UUID chatId = runs.get(runId).chatId();
     try {
       action.run();
+      queue.approvalsChanged(chatId);
       redirect.addFlashAttribute("chatMessage", successMessage);
     } catch (IllegalArgumentException | IllegalStateException exception) {
       redirect.addFlashAttribute("chatError", exception.getMessage());
     }
-    return "redirect:/chat?run=" + runId;
+    return "redirect:/chat?chat=" + chatId;
   }
 }

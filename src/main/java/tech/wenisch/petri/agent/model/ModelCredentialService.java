@@ -17,6 +17,8 @@ import tech.wenisch.petri.security.AppUserRepository;
 @Service
 public class ModelCredentialService {
   private static final int MAX_API_KEY_LENGTH = 12000;
+  private static final int DEFAULT_CONTEXT_WINDOW_TOKENS = 32768;
+  private static final int MIN_CONTEXT_INPUT_RESERVE = 2048;
 
   private final ModelProviderCredentialRepository credentials;
   private final AppUserRepository users;
@@ -70,6 +72,7 @@ public class ModelCredentialService {
             value.baseUrl() == null ? defaultBaseUrl(provider) : value.baseUrl(),
             value.model(),
             value.maxOutputTokens(),
+            value.contextWindowTokens(),
             value.reasoningEffort(),
             value.textVerbosity(),
             value.updatedAt()))
@@ -80,6 +83,7 @@ public class ModelCredentialService {
             defaultBaseUrl(provider),
             null,
             defaultMaxOutputTokens,
+            DEFAULT_CONTEXT_WINDOW_TOKENS,
             null,
             null,
             null));
@@ -115,6 +119,10 @@ public class ModelCredentialService {
     if (maxOutputTokens < 16 || maxOutputTokens > 1_000_000) {
       throw new IllegalArgumentException("Maximum output tokens must be between 16 and 1000000");
     }
+    int contextWindowTokens = command.contextWindowTokens() == null
+        ? DEFAULT_CONTEXT_WINDOW_TOKENS
+        : command.contextWindowTokens();
+    validateContextWindow(contextWindowTokens, maxOutputTokens);
     Instant now = Instant.now(clock);
     ModelProviderCredential credential = credentials.findById(provider).orElse(null);
     String action;
@@ -126,6 +134,7 @@ public class ModelCredentialService {
           baseUrl,
           model,
           maxOutputTokens,
+          contextWindowTokens,
           command.reasoningEffort(),
           command.textVerbosity(),
           actor.getId(),
@@ -143,6 +152,7 @@ public class ModelCredentialService {
           baseUrl,
           model,
           maxOutputTokens,
+          contextWindowTokens,
           command.reasoningEffort(),
           command.textVerbosity(),
           actor.getId(),
@@ -160,6 +170,7 @@ public class ModelCredentialService {
         baseUrl,
         model,
         maxOutputTokens,
+        contextWindowTokens,
         command.reasoningEffort(),
         command.textVerbosity(),
         now);
@@ -197,6 +208,16 @@ public class ModelCredentialService {
       throw new IllegalArgumentException("API key is too long");
     }
     return value;
+  }
+
+  private static void validateContextWindow(int contextWindowTokens, int maxOutputTokens) {
+    if (contextWindowTokens < maxOutputTokens + MIN_CONTEXT_INPUT_RESERVE
+        || Math.floor(contextWindowTokens * 0.85) < maxOutputTokens + MIN_CONTEXT_INPUT_RESERVE
+        || contextWindowTokens > 10_000_000) {
+      throw new IllegalArgumentException(
+          "Context window must leave at least " + MIN_CONTEXT_INPUT_RESERVE
+              + " input tokens after the safety reserve");
+    }
   }
 
   private String defaultBaseUrl(ModelProvider provider) {

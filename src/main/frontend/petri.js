@@ -108,27 +108,69 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
-  const provider = document.querySelector('[data-model-provider]');
-  if (provider) {
+  const chatPanel = document.querySelector('[data-chat-id]');
+  if (chatPanel?.dataset.chatId) {
+    const chatId = chatPanel.dataset.chatId;
+    const atBottom = () => !scroller || scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 80;
+    const ensureOutput = (runId) => {
+      let output = document.querySelector(`[data-run-output="${runId}"]`);
+      if (output) return output;
+      const shell = document.createElement('article');
+      shell.className = 'mr-auto max-w-3xl rounded-2xl rounded-bl-md border border-ink-700 bg-ink-800 px-5 py-4';
+      shell.innerHTML = '<div class="mb-3 text-xs font-bold uppercase tracking-wider text-brand-400">Petri · writing…</div>';
+      output = document.createElement('p');
+      output.className = 'whitespace-pre-wrap break-words text-sm leading-6 text-ink-300';
+      output.dataset.runOutput = runId;
+      shell.append(output);
+      scroller?.append(shell);
+      return output;
+    };
+    const stream = new EventSource(`/chat/${chatId}/stream`);
+    stream.addEventListener('assistant-delta', event => {
+      try {
+        const value = JSON.parse(event.data);
+        const follow = atBottom();
+        ensureOutput(value.runId).textContent += value.delta;
+        if (follow && scroller) scroller.scrollTop = scroller.scrollHeight;
+      } catch { /* ignore malformed stream data; state polling recovers */ }
+    });
+    const timer = window.setInterval(async () => {
+      if (document.hidden) return;
+      try {
+        const response = await fetch(`/chat/${chatId}/state`, { headers: { Accept: 'application/json' }, cache: 'no-store' });
+        if (!response.ok) return;
+        const state = await response.json();
+        const signature = JSON.stringify(state.runs.map(run => [run.id, run.status, run.turns.length, run.partialOutput]));
+        if (chatPanel.dataset.chatSignature && chatPanel.dataset.chatSignature !== signature) window.location.reload();
+        chatPanel.dataset.chatSignature = signature;
+      } catch { /* EventSource reconnects and polling retries */ }
+    }, 1200);
+    window.addEventListener('beforeunload', () => { window.clearInterval(timer); stream.close(); }, { once: true });
+  }
+
+  document.querySelectorAll('[data-model-provider]').forEach(provider => {
+    const form = provider.closest('form');
     const updateModelControls = () => {
       const option = provider.selectedOptions[0];
       if (!option) return;
-      const modelInput = document.querySelector('[data-model-input]');
-      const tokenInput = document.querySelector('[data-token-input]');
-      const reasoningInput = document.querySelector('[data-reasoning-input]');
-      const verbosityInput = document.querySelector('[data-verbosity-input]');
+      const modelInput = form?.querySelector('[data-model-input]');
+      const tokenInput = form?.querySelector('[data-token-input]');
+      const reasoningInput = form?.querySelector('[data-reasoning-input]');
+      const verbosityInput = form?.querySelector('[data-verbosity-input]');
+      const contextInput = form?.querySelector('[data-context-input]');
       if (modelInput) modelInput.value = option.dataset.model || '';
       if (tokenInput) tokenInput.value = option.dataset.tokens || '';
       if (reasoningInput) reasoningInput.value = option.dataset.reasoning || '';
       if (verbosityInput) verbosityInput.value = option.dataset.verbosity || '';
-      const summary = document.querySelector('[data-model-summary]');
+      if (contextInput) contextInput.value = option.dataset.context || '';
+      const summary = form?.querySelector('[data-model-summary]');
       if (summary) {
         summary.textContent = `${option.textContent} · ${option.dataset.model} · ${option.dataset.tokens} output tokens · approvals enabled`;
       }
     };
     provider.addEventListener('change', updateModelControls);
     updateModelControls();
-  }
+  });
 });
 
 window.Alpine = Alpine;

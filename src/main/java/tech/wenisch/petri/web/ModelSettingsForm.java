@@ -22,6 +22,10 @@ public class ModelSettingsForm {
   @Max(1_000_000)
   private Integer maxOutputTokens;
 
+  @Min(2048)
+  @Max(10_000_000)
+  private Integer contextWindowTokens;
+
   private ReasoningEffort reasoningEffort;
   private TextVerbosity textVerbosity;
 
@@ -34,6 +38,10 @@ public class ModelSettingsForm {
   public Integer getMaxOutputTokens() { return maxOutputTokens; }
   public void setMaxOutputTokens(Integer maxOutputTokens) {
     this.maxOutputTokens = maxOutputTokens;
+  }
+  public Integer getContextWindowTokens() { return contextWindowTokens; }
+  public void setContextWindowTokens(Integer contextWindowTokens) {
+    this.contextWindowTokens = contextWindowTokens;
   }
   public ReasoningEffort getReasoningEffort() { return reasoningEffort; }
   public void setReasoningEffort(ReasoningEffort reasoningEffort) {

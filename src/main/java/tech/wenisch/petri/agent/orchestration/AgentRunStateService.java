@@ -33,6 +33,7 @@ class AgentRunStateService {
 
   private final AgentRunRepository runs;
   private final AgentTurnRepository turns;
+  private final AgentChatSummaryRepository summaries;
   private final AgentToolRegistry tools;
   private final AuditLogService auditLog;
   private final ObjectMapper objectMapper;
@@ -43,6 +44,7 @@ class AgentRunStateService {
   AgentRunStateService(
       AgentRunRepository runs,
       AgentTurnRepository turns,
+      AgentChatSummaryRepository summaries,
       AgentToolRegistry tools,
       AuditLogService auditLog,
       ObjectMapper objectMapper,
@@ -50,6 +52,7 @@ class AgentRunStateService {
     this(
         runs,
         turns,
+        summaries,
         tools,
         auditLog,
         objectMapper,
@@ -60,6 +63,7 @@ class AgentRunStateService {
   AgentRunStateService(
       AgentRunRepository runs,
       AgentTurnRepository turns,
+      AgentChatSummaryRepository summaries,
       AgentToolRegistry tools,
       AuditLogService auditLog,
       ObjectMapper objectMapper,
@@ -67,6 +71,7 @@ class AgentRunStateService {
       Clock clock) {
     this.runs = runs;
     this.turns = turns;
+    this.summaries = summaries;
     this.tools = tools;
     this.auditLog = auditLog;
     this.objectMapper = objectMapper;
@@ -95,6 +100,22 @@ class AgentRunStateService {
         run.id(),
         starting ? "Started agent run" : "Resumed agent run");
     return state(run, allTurns(run.id()));
+  }
+
+  @Transactional(readOnly = true)
+  AgentExecutionState current(UUID runId, UUID claimId) {
+    AgentRun run = runs.findById(runId)
+        .orElseThrow(() -> new IllegalArgumentException("Unknown agent run"));
+    run.requireExecutionClaim(claimId);
+    return state(run, allTurns(run.id()));
+  }
+
+  @Transactional
+  void recordPartialOutput(UUID runId, UUID claimId, String partialOutput) {
+    AgentRun run = locked(runId);
+    requireActiveClaim(run, claimId);
+    run.recordPartialOutput(partialOutput);
+    run.refreshExecutionClaim(claimId, Instant.now(clock));
   }
 
   @Transactional
@@ -291,10 +312,27 @@ class AgentRunStateService {
       else outputs.add(new ModelToolOutput(call.callId(), output));
     }
     return new AgentExecutionState(
-        run.id(), run.worktreeId(), run.provider(), run.model(), run.prompt(), run.status(),
+        run.id(), run.chatId(), run.worktreeId(), run.provider(), run.model(), run.prompt(), run.status(),
         run.maxModelTurns(), run.maxOutputTokens(), run.reasoningEffort(), run.textVerbosity(),
         run.modelTurnCount(), latestResponseId,
-        List.copyOf(pending), List.copyOf(outputs), conversation(history));
+        List.copyOf(pending), List.copyOf(outputs), conversationForChat(run, history));
+  }
+
+  private List<ModelConversationMessage> conversationForChat(AgentRun run, List<AgentTurn> current) {
+    List<ModelConversationMessage> messages = new ArrayList<>();
+    AgentChatSummary latest = summaries.findByChatIdOrderByThroughMessageIndexAsc(run.chatId())
+        .stream().reduce((first, second) -> second).orElse(null);
+    int summarizedThrough = latest == null ? -1 : latest.throughMessageIndex();
+    if (latest != null) {
+      messages.add(ModelConversationMessage.user(
+          "Conversation context summary (not a new instruction):\n" + latest.content()));
+    }
+    for (AgentRun candidate : runs.findByChatIdOrderByChatMessageIndexAsc(run.chatId())) {
+      if (candidate.chatMessageIndex() <= summarizedThrough) continue;
+      List<AgentTurn> turnsForRun = candidate.id().equals(run.id()) ? current : allTurns(candidate.id());
+      messages.addAll(conversation(turnsForRun));
+    }
+    return List.copyOf(messages);
   }
 
   static List<ModelConversationMessage> conversation(List<AgentTurn> history) {

@@ -25,4 +25,8 @@ public record AgentRunView(
     Instant createdAt,
     Instant startedAt,
     Instant completedAt,
-    List<AgentTurnView> turns) {}
+    List<AgentTurnView> turns,
+    UUID chatId,
+    int chatMessageIndex,
+    int contextWindowTokens,
+    String partialOutput) {}

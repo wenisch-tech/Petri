@@ -1,6 +1,7 @@
 package tech.wenisch.petri.agent.orchestration;
 
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import tech.wenisch.petri.agent.event.AgentRunEventService;
 import tech.wenisch.petri.agent.event.AgentRunEventType;
@@ -31,18 +32,27 @@ public class AgentRunExecutor {
   private final ModelClientRegistry modelClients;
   private final AgentToolRegistry tools;
   private final AgentRunEventService events;
+  private final ApplicationEventPublisher eventPublisher;
+  private final AgentChatSummaryService summaries;
+  private final AgentChatStream chatStream;
 
   public AgentRunExecutor(
       AgentRunStateService stateService,
       AgentRunService runService,
       ModelClientRegistry modelClients,
       AgentToolRegistry tools,
-      AgentRunEventService events) {
+      AgentRunEventService events,
+      ApplicationEventPublisher eventPublisher,
+      AgentChatSummaryService summaries,
+      AgentChatStream chatStream) {
     this.stateService = stateService;
     this.runService = runService;
     this.modelClients = modelClients;
     this.tools = tools;
     this.events = events;
+    this.eventPublisher = eventPublisher;
+    this.summaries = summaries;
+    this.chatStream = chatStream;
   }
 
   public AgentRunView execute(
@@ -55,6 +65,10 @@ public class AgentRunExecutor {
         runId, expectedWorktreeId, expectedCreatorId, claimId, actor);
     String runActor = "agent-run:" + runId;
     try {
+      if (state.initialModelRequest()) {
+        if (summaries.compactIfNeeded(state)) chatStream.summaryStatus(state.chatId(), "completed");
+        state = stateService.current(runId, claimId);
+      }
       while (!state.terminal()) {
         state = stateService.cancelIfRequested(runId, claimId, actor);
         if (state.terminal()) break;
@@ -64,11 +78,13 @@ public class AgentRunExecutor {
             events.record(
                 state.worktreeId(), runId, AgentRunEventType.TOOL_STARTED, call.name(), runActor,
                 "Agent run started tool " + call.name());
+            chatStream.toolLifecycle(state.chatId(), runId, call.name(), "started");
             try {
               stateService.executeTool(runId, claimId, call);
               events.record(
                   state.worktreeId(), runId, AgentRunEventType.TOOL_SUCCEEDED, call.name(), runActor,
                   "Agent run completed tool " + call.name());
+              chatStream.toolLifecycle(state.chatId(), runId, call.name(), "completed");
             } catch (AgentRunCancellationException exception) {
               break;
             } catch (RuntimeException exception) {
@@ -81,6 +97,7 @@ public class AgentRunExecutor {
               events.record(
                   state.worktreeId(), runId, AgentRunEventType.TOOL_FAILED, call.name(), runActor,
                   "Agent run tool failed: " + call.name());
+              chatStream.toolLifecycle(state.chatId(), runId, call.name(), "failed");
             }
             state = stateService.cancelIfRequested(runId, claimId, actor);
             if (state.terminal()) break;
@@ -97,13 +114,31 @@ public class AgentRunExecutor {
 
         ModelRequest request = request(state);
         ModelClient client = modelClients.require(state.provider());
-        ModelResponse response = client.respond(request);
+        UUID chatId = state.chatId();
+        StringBuilder partial = new StringBuilder();
+        long[] checkpoint = {System.nanoTime()};
+        ModelResponse response = client.respondStreaming(request, delta -> {
+          partial.append(delta);
+          chatStream.textDelta(chatId, runId, delta);
+          long elapsedMillis = (System.nanoTime() - checkpoint[0]) / 1_000_000;
+          if (partial.length() >= 1024 || elapsedMillis >= 500) {
+            stateService.recordPartialOutput(runId, claimId, partial.toString());
+            checkpoint[0] = System.nanoTime();
+          }
+        });
+        if (!partial.isEmpty()) stateService.recordPartialOutput(runId, claimId, partial.toString());
         state = stateService.recordModelResponse(runId, claimId, response, actor);
       }
     } catch (RuntimeException exception) {
       stateService.failExecution(runId, claimId, safeExecutionMessage(exception), actor);
     }
-    return runService.get(runId, expectedWorktreeId);
+    AgentRunView result = runService.get(runId, expectedWorktreeId);
+    if (result.status() == AgentRunStatus.COMPLETED || result.status() == AgentRunStatus.FAILED
+        || result.status() == AgentRunStatus.BUDGET_EXHAUSTED || result.status() == AgentRunStatus.CANCELLED) {
+      chatStream.runStatus(result.chatId(), result);
+      eventPublisher.publishEvent(new AgentRunTerminalEvent(result.id(), result.chatId()));
+    }
+    return result;
   }
 
   private ModelRequest request(AgentExecutionState state) {

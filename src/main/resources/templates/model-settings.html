@@ -71,10 +71,14 @@
             <p class="mt-2 text-xs text-amber-300" th:if="${#strings.startsWith(credential.baseUrl, 'http://')}">HTTP is suitable for trusted local networks only; credentials are not encrypted in transit.</p>
           </div>
 
-          <div class="grid gap-4 sm:grid-cols-3">
+          <div class="grid gap-4 sm:grid-cols-4">
             <div>
               <label class="mb-2 block text-sm font-semibold" th:for="|tokens-${credential.provider}|">Max output</label>
               <input class="field" name="maxOutputTokens" th:id="|tokens-${credential.provider}|" type="number" min="16" max="1000000" th:value="${submittedProvider == credential.provider ? modelSettingsForm.maxOutputTokens : credential.maxOutputTokens}" required>
+            </div>
+            <div>
+              <label class="mb-2 block text-sm font-semibold" th:for="|context-${credential.provider}|">Context window</label>
+              <input class="field" name="contextWindowTokens" th:id="|context-${credential.provider}|" type="number" min="2048" max="10000000" th:value="${submittedProvider == credential.provider ? modelSettingsForm.contextWindowTokens : credential.contextWindowTokens}" required>
             </div>
             <div>
               <label class="mb-2 block text-sm font-semibold" th:for="|reasoning-${credential.provider}|">Reasoning</label>

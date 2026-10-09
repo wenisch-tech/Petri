@@ -102,6 +102,11 @@ public class ChangeProposalService {
         .toList();
   }
 
+  public boolean hasOpenForAgentRun(UUID agentRunId) {
+    return proposals.findByAgentRunIdOrderByCreatedAtAsc(agentRunId).stream().anyMatch(value ->
+        value.status() == ChangeProposalStatus.PROPOSED || value.status() == ChangeProposalStatus.APPROVED);
+  }
+
   @Transactional(readOnly = true)
   public ChangeProposalView get(UUID proposalId, UUID expectedWorktreeId) {
     ChangeProposal proposal = proposal(proposalId);

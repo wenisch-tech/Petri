@@ -14,6 +14,13 @@ interface AgentRunRepository extends JpaRepository<AgentRun, UUID> {
 
   List<AgentRun> findByWorktreeIdOrderByCreatedAtDesc(UUID worktreeId);
 
+  List<AgentRun> findByChatIdOrderByChatMessageIndexAsc(UUID chatId);
+
+  List<AgentRun> findByChatIdAndStatusOrderByChatMessageIndexAsc(
+      UUID chatId, AgentRunStatus status);
+
+  List<AgentRun> findByStatusOrderByCreatedAtAsc(AgentRunStatus status);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select run from AgentRun run where run.id = :id")
   Optional<AgentRun> findForUpdateById(@Param("id") UUID id);

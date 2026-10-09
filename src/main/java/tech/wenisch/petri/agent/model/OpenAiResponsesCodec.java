@@ -6,6 +6,7 @@ import tools.jackson.databind.node.ArrayNode;
 import tools.jackson.databind.node.ObjectNode;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.concurrent.atomic.AtomicReference;
 import tech.wenisch.petri.agent.tool.ToolDefinition;
 
 final class OpenAiResponsesCodec {
@@ -32,7 +33,18 @@ final class OpenAiResponsesCodec {
     if (request.previousResponseId() != null) {
       body.put("previous_response_id", request.previousResponseId());
     }
-    if (request.prompt() != null) {
+    if (request.previousResponseId() == null && !request.conversation().isEmpty()) {
+      ArrayNode input = body.putArray("input");
+      for (ModelConversationMessage message : request.conversation()) {
+        ObjectNode item = input.addObject();
+        switch (message.role()) {
+          case USER -> item.put("role", "user").put("content", message.content());
+          case ASSISTANT -> item.put("role", "assistant").put("content", message.content());
+          case TOOL -> item.put("role", "user").put("content",
+              "Tool result for " + message.toolCallId() + ": " + message.content());
+        }
+      }
+    } else if (request.prompt() != null) {
       body.put("input", request.prompt());
     } else {
       ArrayNode input = body.putArray("input");
@@ -59,9 +71,64 @@ final class OpenAiResponsesCodec {
     }
   }
 
+  String encodeStreaming(ModelRequest request) {
+    try {
+      ObjectNode body = (ObjectNode) objectMapper.readTree(encode(request));
+      body.put("stream", true);
+      return objectMapper.writeValueAsString(body);
+    } catch (tools.jackson.core.JacksonException exception) {
+      throw new ModelClientException("Could not encode streaming model request", exception);
+    }
+  }
+
+  ModelResponse stream(
+      OpenAiCompatibleTransport transport,
+      ModelProvider provider,
+      ModelRequest request,
+      ModelStreamListener listener) {
+    AtomicReference<ModelResponse> completed = new AtomicReference<>();
+    transport.postSse(provider, "/responses", encodeStreaming(request), data -> {
+      if ("[DONE]".equals(data)) return;
+      try {
+        JsonNode event = objectMapper.readTree(data);
+        String type = event.path("type").asText();
+        if ("response.output_text.delta".equals(type)) {
+          String delta = event.path("delta").asText("");
+          if (!delta.isEmpty()) listener.onTextDelta(delta);
+        } else if ("response.function_call_arguments.delta".equals(type)) {
+          listener.onToolCallDelta(event.path("output_index").asInt(),
+              event.path("call_id").asText(null), event.path("name").asText(null),
+              event.path("delta").asText(""));
+        } else if ("response.completed".equals(type)) {
+          JsonNode response = event.path("response");
+          ModelResponse value = decodeNode(response.isMissingNode() ? event : response);
+          completed.set(value);
+          listener.onUsage(value.inputTokens(), value.outputTokens());
+          listener.onCompleted(value);
+        } else if ("error".equals(type)) {
+          String message = event.path("message").asText("unknown error");
+          listener.onError(message);
+          throw new ModelClientException("Model streaming response failed: " + message);
+        }
+      } catch (tools.jackson.core.JacksonException exception) {
+        throw new ModelClientException("Could not decode streaming model response", exception);
+      }
+    });
+    ModelResponse response = completed.get();
+    if (response == null) throw new ModelClientException("Model streaming response did not complete");
+    return response;
+  }
+
   ModelResponse decode(byte[] body) {
     try {
-      JsonNode root = objectMapper.readTree(body);
+      return decodeNode(objectMapper.readTree(body));
+    } catch (tools.jackson.core.JacksonException exception) {
+      throw new ModelClientException("Could not decode model response", exception);
+    }
+  }
+
+  private ModelResponse decodeNode(JsonNode root) {
+    try {
       String id = requiredText(root, "id");
       String status = requiredText(root, "status");
       List<ModelToolCall> calls = new ArrayList<>();

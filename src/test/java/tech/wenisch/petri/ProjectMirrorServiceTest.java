@@ -499,7 +499,14 @@ class ProjectMirrorServiceTest {
           """.formatted(requestNumber, requestNumber);
     }
     byte[] body = response.getBytes(StandardCharsets.UTF_8);
-    exchange.getResponseHeaders().set("Content-Type", "application/json");
+    if (request.contains("\"stream\":true")) {
+      body = ("data: {\"type\":\"response.completed\",\"response\":"
+          + response.replace("\n", "") + "}\n\n")
+          .getBytes(StandardCharsets.UTF_8);
+      exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
+    } else {
+      exchange.getResponseHeaders().set("Content-Type", "application/json");
+    }
     exchange.sendResponseHeaders(200, body.length);
     exchange.getResponseBody().write(body);
     exchange.close();

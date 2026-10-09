@@ -18,6 +18,12 @@ import tech.wenisch.petri.agent.model.TextVerbosity;
 class AgentRun {
   @Id private UUID id;
 
+  @Column(name = "chat_id", nullable = false)
+  private UUID chatId;
+
+  @Column(name = "chat_message_index", nullable = false)
+  private int chatMessageIndex;
+
   @Column(name = "worktree_id", nullable = false)
   private UUID worktreeId;
 
@@ -41,6 +47,9 @@ class AgentRun {
   @Column(name = "max_output_tokens", nullable = false)
   private int maxOutputTokens;
 
+  @Column(name = "context_window_tokens", nullable = false)
+  private int contextWindowTokens;
+
   @Enumerated(EnumType.STRING)
   @Column(name = "reasoning_effort", length = 16)
   private ReasoningEffort reasoningEffort;
@@ -60,6 +69,9 @@ class AgentRun {
 
   @Column(name = "error_message", length = 1000)
   private String errorMessage;
+
+  @Column(name = "partial_output", columnDefinition = "TEXT")
+  private String partialOutput;
 
   @Column(name = "created_by", nullable = false)
   private UUID createdBy;
@@ -83,6 +95,40 @@ class AgentRun {
 
   AgentRun(
       UUID id,
+      UUID chatId,
+      int chatMessageIndex,
+      UUID worktreeId,
+      ModelProvider provider,
+      String model,
+      String prompt,
+      int maxModelTurns,
+      int maxOutputTokens,
+      int contextWindowTokens,
+      ReasoningEffort reasoningEffort,
+      TextVerbosity textVerbosity,
+      UUID createdBy,
+      Instant createdAt) {
+    this.id = id;
+    this.chatId = chatId;
+    this.chatMessageIndex = chatMessageIndex;
+    this.worktreeId = worktreeId;
+    this.provider = provider;
+    this.model = model;
+    this.prompt = prompt;
+    this.status = AgentRunStatus.PENDING;
+    this.maxModelTurns = maxModelTurns;
+    this.maxOutputTokens = maxOutputTokens;
+    this.contextWindowTokens = contextWindowTokens;
+    this.reasoningEffort = reasoningEffort;
+    this.textVerbosity = textVerbosity;
+    this.modelTurnCount = 0;
+    this.nextTurnIndex = 1;
+    this.createdBy = createdBy;
+    this.createdAt = createdAt;
+  }
+
+  AgentRun(
+      UUID id,
       UUID worktreeId,
       ModelProvider provider,
       String model,
@@ -93,20 +139,8 @@ class AgentRun {
       TextVerbosity textVerbosity,
       UUID createdBy,
       Instant createdAt) {
-    this.id = id;
-    this.worktreeId = worktreeId;
-    this.provider = provider;
-    this.model = model;
-    this.prompt = prompt;
-    this.status = AgentRunStatus.PENDING;
-    this.maxModelTurns = maxModelTurns;
-    this.maxOutputTokens = maxOutputTokens;
-    this.reasoningEffort = reasoningEffort;
-    this.textVerbosity = textVerbosity;
-    this.modelTurnCount = 0;
-    this.nextTurnIndex = 1;
-    this.createdBy = createdBy;
-    this.createdAt = createdAt;
+    this(id, id, 0, worktreeId, provider, model, prompt, maxModelTurns, maxOutputTokens,
+        32768, reasoningEffort, textVerbosity, createdBy, createdAt);
   }
 
   void start(Instant now) {
@@ -153,8 +187,13 @@ class AgentRun {
     requireStatus(AgentRunStatus.RUNNING);
     status = AgentRunStatus.COMPLETED;
     finalOutput = output;
+    partialOutput = null;
     completedAt = now;
     clearExecutionClaim();
+  }
+
+  void recordPartialOutput(String output) {
+    partialOutput = output == null || output.isEmpty() ? null : output;
   }
 
   void fail(String safeMessage, Instant now) {
@@ -199,6 +238,11 @@ class AgentRun {
     };
   }
 
+  boolean executionLeaseExpired(Instant now, Duration leaseDuration) {
+    return executionClaimId == null || executionClaimedAt == null
+        || !executionClaimedAt.plus(leaseDuration).isAfter(now);
+  }
+
   private void requireActive() {
     if (status != AgentRunStatus.RUNNING && status != AgentRunStatus.CANCELLATION_REQUESTED) {
       throw new IllegalStateException("Agent run is not active");
@@ -217,6 +261,8 @@ class AgentRun {
   }
 
   UUID id() { return id; }
+  UUID chatId() { return chatId; }
+  int chatMessageIndex() { return chatMessageIndex; }
   UUID worktreeId() { return worktreeId; }
   ModelProvider provider() { return provider; }
   String model() { return model; }
@@ -224,11 +270,13 @@ class AgentRun {
   AgentRunStatus status() { return status; }
   int maxModelTurns() { return maxModelTurns; }
   int maxOutputTokens() { return maxOutputTokens; }
+  int contextWindowTokens() { return contextWindowTokens; }
   ReasoningEffort reasoningEffort() { return reasoningEffort; }
   TextVerbosity textVerbosity() { return textVerbosity; }
   int modelTurnCount() { return modelTurnCount; }
   String finalOutput() { return finalOutput; }
   String errorMessage() { return errorMessage; }
+  String partialOutput() { return partialOutput; }
   UUID createdBy() { return createdBy; }
   Instant createdAt() { return createdAt; }
   Instant startedAt() { return startedAt; }

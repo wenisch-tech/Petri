@@ -48,10 +48,19 @@ Provider-specific reasoning and verbosity fields are omitted from generic Chat C
 
 - **Model ID** is passed unchanged to the provider.
 - **Maximum output tokens** must be between 16 and 1,000,000.
+- **Context window tokens** defaults to 32,768. It must retain at least 2,048 input tokens after
+  the output budget and Petri's 15% safety reserve.
 - **Reasoning effort** is optional and model-dependent.
 - **Text verbosity** is optional and mainly relevant to Responses-compatible models.
 
 The chat can override these defaults for one task. The selected provider, model and generation values are stored on the run so later default changes do not alter its model identity or generation limits. Endpoint URLs and secrets remain provider-level configuration and are resolved when a request executes; changing them therefore affects resumed runs for that provider.
+
+## Streaming compatibility
+
+Petri attempts provider streaming first. Responses-compatible providers consume text deltas and the
+completed response event; Chat Completions providers consume content/tool-call deltas and finish
+events. If an endpoint explicitly rejects streaming before producing a delta, Petri retries that
+request once without streaming. It never retries after text has reached the browser.
 
 ## Endpoint security
 

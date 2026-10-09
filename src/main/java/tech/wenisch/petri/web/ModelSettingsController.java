@@ -79,6 +79,7 @@ public class ModelSettingsController {
               modelSettingsForm.getApiKey(),
               modelSettingsForm.getModel(),
               modelSettingsForm.getMaxOutputTokens(),
+              modelSettingsForm.getContextWindowTokens(),
               modelSettingsForm.getReasoningEffort(),
               modelSettingsForm.getTextVerbosity(),
               modelSettingsForm.getBaseUrl()),

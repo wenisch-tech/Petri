@@ -9,11 +9,12 @@ public record ModelCredentialStatus(
     String baseUrl,
     String model,
     Integer maxOutputTokens,
+    Integer contextWindowTokens,
     ReasoningEffort reasoningEffort,
     TextVerbosity textVerbosity,
     Instant updatedAt) {
   static ModelCredentialStatus missing(ModelProvider provider) {
     return new ModelCredentialStatus(
-        provider, false, false, provider.defaultBaseUrl(), null, null, null, null, null);
+        provider, false, false, provider.defaultBaseUrl(), null, null, null, null, null, null);
   }
 }

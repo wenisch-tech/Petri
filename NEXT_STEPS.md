@@ -61,7 +61,8 @@ Status: authentication, encrypted credentials, controlled Git mirrors/worktrees 
 5. [x] Snapshot generation settings per run and permit explicit per-task overrides in the chat and run API.
 6. [x] Add OpenAI, LiteLLM, Ollama and generic OpenAI-compatible endpoints with provider-specific base URLs, optional local credentials and provider selection in chat.
 7. [x] Reconstruct persisted conversation/tool history for stateless Chat Completions servers while retaining stateful Responses continuations for OpenAI and LiteLLM.
-8. Add token streaming, Markdown rendering and optional reusable named model profiles after the persisted response-stream design is defined.
+8. [x] Add durable chats, ordered per-chat queues, token streaming, persisted partial output and context-window summaries.
+9. Add Markdown rendering and optional reusable named model profiles.
 
 ## 9. Build the first VS Code extension
 
