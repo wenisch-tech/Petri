@@ -157,11 +157,7 @@
   .workspace-dialog p { @apply text-sm text-ink-500; }
   .workspace-dialog label { @apply grid gap-1.5 text-sm font-medium text-ink-300; }
   .workspace-dialog-actions { @apply flex justify-end gap-2 pt-2; }
-  .cm-editor { @apply h-full text-sm; }
-  .cm-scroller { @apply overflow-auto font-mono; }
-  .cm-gutters { @apply bg-ink-900 text-ink-500; }
-  .cm-activeLine, .cm-activeLineGutter { @apply bg-ink-800/70; }
-  .cm-content { @apply caret-brand-400; }
+  [data-editor-host] > .monaco-editor, [data-editor-host] > .monaco-diff-editor { @apply h-full w-full; }
   .chat-collapsed { grid-template-columns: var(--explorer-width) 5px minmax(0, 1fr) 0 0; }
   .chat-collapsed .workspace-chat, .chat-collapsed .workspace-resizer[data-resize="chat"] { @apply hidden; }
   @media (max-width: 900px) {

@@ -4,23 +4,14 @@
   "scripts": {
     "build": "npm run build:css && npm run build:js",
     "build:css": "tailwindcss -i src/main/frontend/petri.css -o target/classes/static/css/petri.css --minify",
-    "build:js": "esbuild src/main/frontend/petri.js --bundle --minify --format=iife --outfile=target/classes/static/js/petri.js",
+    "build:js": "node scripts/build-frontend.mjs",
     "watch:css": "tailwindcss -i src/main/frontend/petri.css -o target/classes/static/css/petri.css --watch",
-    "watch:js": "esbuild src/main/frontend/petri.js --bundle --format=iife --outfile=target/classes/static/js/petri.js --watch"
+    "watch:js": "node scripts/build-frontend.mjs --watch"
   },
   "dependencies": {
-    "@codemirror/lang-css": "^6.3.1",
-    "@codemirror/lang-html": "^6.4.12",
-    "@codemirror/lang-java": "^6.0.2",
-    "@codemirror/lang-javascript": "^6.2.5",
-    "@codemirror/lang-json": "^6.0.2",
-    "@codemirror/lang-markdown": "^6.5.2",
-    "@codemirror/lang-xml": "^6.1.0",
-    "@codemirror/lang-yaml": "^6.1.3",
-    "@codemirror/merge": "^6.12.2",
     "alpinejs": "3.17.4",
-    "codemirror": "^6.0.2",
-    "lucide": "0.577.0"
+    "lucide": "0.577.0",
+    "monaco-editor": "^0.55.1"
   },
   "devDependencies": {
     "@tailwindcss/cli": "4.3.0",

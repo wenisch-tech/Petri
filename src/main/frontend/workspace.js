@@ -1,22 +1,23 @@
-import { basicSetup, EditorView } from 'codemirror';
-import { EditorState } from '@codemirror/state';
-import { keymap } from '@codemirror/view';
-import { defaultKeymap, indentWithTab } from '@codemirror/commands';
-import { MergeView } from '@codemirror/merge';
-import { java } from '@codemirror/lang-java';
-import { javascript } from '@codemirror/lang-javascript';
-import { json } from '@codemirror/lang-json';
-import { html } from '@codemirror/lang-html';
-import { css } from '@codemirror/lang-css';
-import { markdown } from '@codemirror/lang-markdown';
-import { xml } from '@codemirror/lang-xml';
-import { yaml } from '@codemirror/lang-yaml';
-import { hydrateIcons, renderIcon } from './icons';
+import { renderIcon } from './icons';
 
 const DB = 'petri-workspace', STORE = 'worktree-state';
-const activeRun = new Set(['PENDING', 'RUNNING', 'CANCELLATION_REQUESTED']);
 const csrfHeaders = () => { const token = document.querySelector('meta[name="_csrf"]')?.content; const header = document.querySelector('meta[name="_csrf_header"]')?.content; return token && header ? { [header]: token } : {}; };
-const languageFor = path => { const ext = path.split('.').pop()?.toLowerCase(); if (ext === 'java') return java(); if (['js','mjs','cjs','ts','tsx','jsx'].includes(ext)) return javascript({ jsx: ['jsx','tsx'].includes(ext), typescript: ['ts','tsx'].includes(ext) }); if (ext === 'json') return json(); if (['html','htm'].includes(ext)) return html(); if (ext === 'css') return css(); if (['md','markdown'].includes(ext)) return markdown(); if (['xml','svg','pom'].includes(ext)) return xml(); if (['yaml','yml'].includes(ext)) return yaml(); return []; };
+const monacoLanguageFor = path => {
+  const name = path.split('/').at(-1)?.toLowerCase() || '';
+  const ext = name.includes('.') ? name.split('.').at(-1) : '';
+  if (ext === 'java') return 'java';
+  if (['js', 'mjs', 'cjs', 'jsx'].includes(ext)) return 'javascript';
+  if (['ts', 'tsx'].includes(ext)) return 'typescript';
+  if (['json', 'jsonl'].includes(ext)) return 'json';
+  if (['html', 'htm'].includes(ext)) return 'html';
+  if (ext === 'css') return 'css';
+  if (['xml', 'svg', 'pom'].includes(ext)) return 'xml';
+  if (['yaml', 'yml'].includes(ext)) return 'yaml';
+  if (['md', 'markdown'].includes(ext)) return 'markdown';
+  if (['sh', 'bash', 'zsh', 'fish'].includes(ext) || name === 'dockerfile' || name === 'makefile') return 'shell';
+  if (ext === 'sql') return 'sql';
+  return 'plaintext';
+};
 function el(tag, classes, value) { const node = document.createElement(tag); if (classes) node.className = classes; if (value !== undefined) node.textContent = value; return node; }
 function filePresentation(path) {
   const name = path.split('/').at(-1)?.toLowerCase() || '';
@@ -50,7 +51,12 @@ export function initializeWorkspace() {
   root.dataset.workspaceInitialized = 'true';
   const worktreeId = root.dataset.worktreeId;
   if (!worktreeId) return;
-  const state = { root, projectId: root.dataset.projectId, worktreeId, api: `/workspace/api/worktrees/${worktreeId}`, changes: new Map(), mode: 'files', tabs: [], active: null, drafts: {}, views: new Map(), chatId: root.dataset.chatId || null, snapshot: null };
+  const state = {
+    root, projectId: root.dataset.projectId, worktreeId, api: `/workspace/api/worktrees/${worktreeId}`,
+    changes: new Map(), mode: 'files', tabs: [], active: null, drafts: {}, chatId: root.dataset.chatId || null,
+    snapshot: null, monaco: null, monacoPromise: null, models: new Map(), diffModels: new Map(),
+    editor: null, diffEditor: null, editorToken: 0, resizeObserver: null
+  };
   const key = `project:${state.projectId}:worktree:${worktreeId}`;
   try { localStorage.setItem(`petri:last-worktree:${state.projectId}`, worktreeId); } catch {}
   const start = (name, initializer, report) => {
@@ -76,19 +82,278 @@ function initializeLayout(state) {
 }
 
 function initializeEditor(state, storageKey) {
-  state.tabsEl = state.root.querySelector('[data-editor-tabs]'); state.host = state.root.querySelector('[data-editor-host]'); state.status = state.root.querySelector('[data-editor-status]'); state.pathStatus = state.root.querySelector('[data-editor-path]'); state.cursor = state.root.querySelector('[data-editor-cursor]');
+  state.tabsEl = state.root.querySelector('[data-editor-tabs]');
+  state.host = state.root.querySelector('[data-editor-host]');
+  state.status = state.root.querySelector('[data-editor-status]');
+  state.pathStatus = state.root.querySelector('[data-editor-path]');
+  state.cursor = state.root.querySelector('[data-editor-cursor]');
   state.persist = () => localWrite(storageKey, { tabs: state.tabs, active: state.active, drafts: state.drafts });
-  document.addEventListener('keydown', event => { if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && state.root.contains(document.activeElement)) { event.preventDefault(); saveActive(state); } });
+  state.resizeObserver = new ResizeObserver(() => layoutEditor(state));
+  state.resizeObserver.observe(state.host);
+  document.addEventListener('keydown', event => {
+    if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === 's' && state.root.contains(document.activeElement)) {
+      event.preventDefault();
+      saveActive(state);
+    }
+  });
+  window.addEventListener('petri-theme-change', event => {
+    if (state.monaco) state.monaco.editor.setTheme(event.detail?.theme === 'light' ? 'petri-light' : 'petri-dark');
+  });
+  window.addEventListener('beforeunload', () => disposeEditor(state), { once: true });
 }
-function renderTabs(state) { state.tabsEl.replaceChildren(); if (!state.tabs.length) { state.tabsEl.append(el('span', 'px-4 text-xs text-ink-500', 'No file open')); return; } for (const tab of state.tabs) { const button = el('button', `workspace-tab${tab === state.active ? ' is-active' : ''}`); button.type = 'button'; const path = tab.replace(/^diff:/, ''); button.append(tab.startsWith('diff:') ? renderIcon('GitCompareArrows') : fileIcon(path), document.createTextNode(path.split('/').at(-1))); if (state.drafts[tab]?.dirty) button.append(el('span', 'workspace-dirty-dot', '•')); const close = el('span', 'workspace-tab-close', '×'); close.addEventListener('click', event => { event.stopPropagation(); closeTab(state, tab); }); button.append(close); button.addEventListener('click', () => activateTab(state, tab)); state.tabsEl.append(button); } }
-function editorEmpty(state, message = 'Select a file from the explorer, or inspect a change from the Changes view.') { state.host.replaceChildren(); const box = el('div', 'workspace-editor-empty'); box.append(renderIcon('FileCode2', { width: 28, height: 28 }), el('h1', '', 'Select a file'), el('p', '', message)); state.host.append(box); state.pathStatus.textContent = '—'; }
-function activateTab(state, tab) { state.active = tab; renderTabs(state); const draft = state.drafts[tab]; if (tab.startsWith('diff:')) return mountDiff(state, tab.slice(5), draft); mountEditor(state, tab, draft); state.persist(); }
-function mountEditor(state, path, draft) { state.host.replaceChildren(); if (!draft) return editorEmpty(state); const update = EditorView.updateListener.of(change => { const selection = change.state.selection.main.head; const line = change.state.doc.lineAt(selection); state.cursor.textContent = `Ln ${line.number}, Col ${selection - line.from + 1}`; if (!change.docChanged) return; draft.content = change.state.doc.toString(); draft.dirty = draft.content !== draft.original; state.status.textContent = draft.dirty ? 'Unsaved changes' : 'Saved'; renderTabs(state); state.persist(); }); const view = new EditorView({ state: EditorState.create({ doc: draft.content, extensions: [basicSetup, keymap.of([...defaultKeymap, indentWithTab]), languageFor(path), update] }), parent: state.host }); state.views.set(path, view); state.pathStatus.textContent = path; state.status.textContent = draft.dirty ? 'Unsaved changes' : 'Saved'; }
-function mountDiff(state, path, diff) { state.host.replaceChildren(); if (!diff || diff.binary || diff.truncated) return editorEmpty(state, 'This changed file is binary or too large to display safely.'); new MergeView({ a: { doc: diff.beforeContent || '', extensions: [EditorState.readOnly.of(true), languageFor(path)] }, b: { doc: diff.afterContent || '', extensions: [EditorState.readOnly.of(true), languageFor(path)] }, parent: state.host, orientation: 'a-b', revertControls: false, collapseUnchanged: { margin: 3, minSize: 4 } }); state.pathStatus.textContent = `${path} · Git diff`; state.status.textContent = `${diff.status} · read only`; }
-async function openFile(state, path) { state.root.querySelectorAll('[data-tree-path]').forEach(entry => entry.classList.toggle('is-selected', entry.dataset.treePath === path)); if (state.tabs.includes(path)) return activateTab(state, path); try { state.status.textContent = `Opening ${path}…`; const file = await request(`${state.api}/files?path=${encodeURIComponent(path)}`); const saved = state.drafts[path]; state.drafts[path] = saved?.originalSha256 === file.sha256 ? saved : { content: file.content, original: file.content, originalSha256: file.sha256, dirty: false }; state.tabs.push(path); activateTab(state, path); } catch (error) { state.status.textContent = error.message; } }
-async function openDiff(state, path, proposalId) { const tab = `diff:${path}`; const endpoint = proposalId ? `${state.api}/proposals/${proposalId}/diff` : `${state.api}/diff?path=${encodeURIComponent(path)}`; try { state.drafts[tab] = await request(endpoint); if (!state.tabs.includes(tab)) state.tabs.push(tab); activateTab(state, tab); } catch (error) { state.status.textContent = error.message; } }
-function closeTab(state, tab) { if (state.drafts[tab]?.dirty && !confirm(`Discard unsaved changes in ${tab}?`)) return; state.views.get(tab)?.destroy(); state.views.delete(tab); state.tabs = state.tabs.filter(value => value !== tab); delete state.drafts[tab]; state.active = state.tabs.at(-1) || null; renderTabs(state); if (state.active) activateTab(state, state.active); else editorEmpty(state); state.persist(); }
-async function saveActive(state) { const draft = state.drafts[state.active]; if (!draft || state.active?.startsWith('diff:') || !draft.dirty) return; try { const saved = await request(`${state.api}/files`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ path: state.active, content: draft.content, expectedSha256: draft.originalSha256 }) }); draft.original = draft.content; draft.originalSha256 = saved.sha256; draft.dirty = false; state.status.textContent = 'Saved'; renderTabs(state); state.persist(); refreshChanges(state); } catch (error) { state.status.textContent = error.status === 409 ? 'Conflict: disk file changed. Keep draft or reload the file.' : error.message; } }
+
+function renderTabs(state) {
+  state.tabsEl.replaceChildren();
+  if (!state.tabs.length) {
+    state.tabsEl.append(el('span', 'px-4 text-xs text-ink-500', 'No file open'));
+    return;
+  }
+  for (const tab of state.tabs) {
+    const button = el('button', `workspace-tab${tab === state.active ? ' is-active' : ''}`);
+    button.type = 'button';
+    const path = state.drafts[tab]?.path || tab.replace(/^diff:/, '');
+    button.append(tab.startsWith('diff:') ? renderIcon('GitCompareArrows') : fileIcon(path), document.createTextNode(path.split('/').at(-1)));
+    if (state.drafts[tab]?.dirty) button.append(el('span', 'workspace-dirty-dot', '•'));
+    const close = el('span', 'workspace-tab-close', '×');
+    close.addEventListener('click', event => { event.stopPropagation(); closeTab(state, tab); });
+    button.append(close);
+    button.addEventListener('click', () => activateTab(state, tab));
+    state.tabsEl.append(button);
+  }
+}
+
+function editorEmpty(state, message = 'Select a file from the explorer, or inspect a change from the Changes view.') {
+  disposeVisibleEditor(state);
+  state.host.replaceChildren();
+  const box = el('div', 'workspace-editor-empty');
+  box.append(renderIcon('FileCode2', { width: 28, height: 28 }), el('h1', '', 'Select a file'), el('p', '', message));
+  state.host.append(box);
+  state.pathStatus.textContent = '—';
+  state.cursor.textContent = 'Ln 1, Col 1';
+}
+
+function loadMonacoStyles() {
+  if (document.querySelector('link[data-petri-monaco-styles]')) return;
+  const stylesheet = document.createElement('link');
+  stylesheet.rel = 'stylesheet';
+  stylesheet.href = '/js/monaco/monaco.css?v=22';
+  stylesheet.dataset.petriMonacoStyles = 'true';
+  document.head.append(stylesheet);
+}
+
+async function ensureMonaco(state) {
+  if (state.monaco) return state.monaco;
+  if (!state.monacoPromise) {
+    loadMonacoStyles();
+    const moduleUrl = '/js/monaco/' + 'monaco.js';
+    state.monacoPromise = import(moduleUrl).then(module => {
+      const monaco = module.monaco;
+      monaco.editor.defineTheme('petri-dark', {
+        base: 'vs-dark', inherit: true,
+        colors: { 'editor.background': '#070b12', 'editorGutter.background': '#0d1420', 'editor.lineHighlightBackground': '#172235', 'editorCursor.foreground': '#818cf8' },
+        rules: []
+      });
+      monaco.editor.defineTheme('petri-light', {
+        base: 'vs', inherit: true,
+        colors: { 'editor.background': '#f6f8fc', 'editorGutter.background': '#ffffff', 'editor.lineHighlightBackground': '#edf1f7', 'editorCursor.foreground': '#4f46e5' },
+        rules: []
+      });
+      monaco.editor.setTheme(document.documentElement.dataset.theme === 'light' ? 'petri-light' : 'petri-dark');
+      state.monaco = monaco;
+      return monaco;
+    });
+  }
+  return state.monacoPromise;
+}
+
+function layoutEditor(state) {
+  const dimension = { width: state.host.clientWidth, height: state.host.clientHeight };
+  if (dimension.width < 1 || dimension.height < 1) return;
+  state.editor?.layout(dimension);
+  if (state.diffEditor) {
+    state.diffEditor.updateOptions({ renderSideBySide: dimension.width >= 840 });
+    state.diffEditor.layout(dimension);
+  }
+}
+
+function disposeVisibleEditor(state) {
+  if (state.editor) {
+    const path = state.visibleTab;
+    if (path && !path.startsWith('diff:') && state.drafts[path]) state.drafts[path].viewState = { monaco: true, value: state.editor.saveViewState() };
+    state.editor.dispose();
+    state.editor = null;
+  }
+  if (state.diffEditor) {
+    state.diffEditor.dispose();
+    state.diffEditor = null;
+  }
+  state.visibleTab = null;
+}
+
+function disposeEditor(state) {
+  disposeVisibleEditor(state);
+  state.resizeObserver?.disconnect();
+  state.models.forEach(model => model.dispose());
+  state.diffModels.forEach(pair => { pair.original.dispose(); pair.modified.dispose(); });
+  state.models.clear();
+  state.diffModels.clear();
+}
+
+function activateTab(state, tab) {
+  state.active = tab;
+  state.editorToken += 1;
+  renderTabs(state);
+  const draft = state.drafts[tab];
+  if (tab.startsWith('diff:')) mountDiff(state, draft?.path || tab.slice(5), draft, state.editorToken, tab);
+  else mountEditor(state, tab, draft, state.editorToken);
+  state.persist();
+}
+
+function modelUri(state, path) {
+  return state.monaco.Uri.parse(`petri://worktree/${state.worktreeId}/${path.split('/').map(encodeURIComponent).join('/')}`);
+}
+
+async function mountEditor(state, path, draft, token) {
+  disposeVisibleEditor(state);
+  state.host.replaceChildren();
+  if (!draft) return editorEmpty(state);
+  state.status.textContent = 'Loading editor…';
+  try {
+    const monaco = await ensureMonaco(state);
+    if (token !== state.editorToken || state.active !== path) return;
+    let model = state.models.get(path);
+    if (!model) {
+      model = monaco.editor.createModel(draft.content, monacoLanguageFor(path), modelUri(state, path));
+      state.models.set(path, model);
+    } else {
+      monaco.editor.setModelLanguage(model, monacoLanguageFor(path));
+      if (model.getValue() !== draft.content) model.setValue(draft.content);
+    }
+    state.editor = monaco.editor.create(state.host, {
+      model, automaticLayout: false, lineNumbers: 'on', minimap: { enabled: state.host.clientWidth >= 720 },
+      folding: true, bracketPairColorization: { enabled: true }, selectionHighlight: true,
+      scrollBeyondLastLine: false, renderWhitespace: 'selection', fontSize: 13, tabSize: 4,
+      smoothScrolling: true, padding: { top: 10, bottom: 10 }
+    });
+    state.visibleTab = path;
+    if (draft.viewState?.monaco === true && draft.viewState.value) state.editor.restoreViewState(draft.viewState.value);
+    state.editor.onDidChangeModelContent(() => {
+      draft.content = model.getValue();
+      draft.dirty = draft.content !== draft.original;
+      state.status.textContent = draft.dirty ? 'Unsaved changes' : 'Saved';
+      renderTabs(state);
+      state.persist();
+    });
+    state.editor.onDidChangeCursorPosition(event => {
+      state.cursor.textContent = `Ln ${event.position.lineNumber}, Col ${event.position.column}`;
+      draft.viewState = { monaco: true, value: state.editor.saveViewState() };
+    });
+    state.editor.addCommand(monaco.KeyMod.CtrlCmd | monaco.KeyCode.KeyS, () => saveActive(state));
+    state.pathStatus.textContent = `${path} · ${monacoLanguageFor(path)}`;
+    state.status.textContent = draft.dirty ? 'Unsaved changes' : 'Saved';
+    const position = state.editor.getPosition();
+    if (position) state.cursor.textContent = `Ln ${position.lineNumber}, Col ${position.column}`;
+    layoutEditor(state);
+    state.editor.focus();
+  } catch (error) {
+    if (token !== state.editorToken) return;
+    editorEmpty(state, `Monaco could not load: ${error.message}`);
+    state.status.textContent = 'Editor unavailable';
+    console.error('Petri Monaco editor failed to load', error);
+  }
+}
+
+async function mountDiff(state, path, diff, token, tab) {
+  disposeVisibleEditor(state);
+  state.host.replaceChildren();
+  if (!diff || diff.binary || diff.truncated) return editorEmpty(state, 'This changed file is binary or too large to display safely.');
+  state.status.textContent = 'Loading diff…';
+  try {
+    const monaco = await ensureMonaco(state);
+    if (token !== state.editorToken || state.active !== tab) return;
+    let pair = state.diffModels.get(tab);
+    if (pair) { pair.original.dispose(); pair.modified.dispose(); }
+    pair = {
+      original: monaco.editor.createModel(diff.beforeContent || '', monacoLanguageFor(path), monaco.Uri.parse(`petri-diff://worktree/${state.worktreeId}/${encodeURIComponent(tab)}/original/${path.split('/').map(encodeURIComponent).join('/')}`)),
+      modified: monaco.editor.createModel(diff.afterContent || '', monacoLanguageFor(path), monaco.Uri.parse(`petri-diff://worktree/${state.worktreeId}/${encodeURIComponent(tab)}/modified/${path.split('/').map(encodeURIComponent).join('/')}`))
+    };
+    state.diffModels.set(tab, pair);
+    state.diffEditor = monaco.editor.createDiffEditor(state.host, {
+      readOnly: true, originalEditable: false, renderSideBySide: state.host.clientWidth >= 840,
+      enableSplitViewResizing: false, renderOverviewRuler: true, renderIndicators: true,
+      minimap: { enabled: false }, scrollBeyondLastLine: false, fontSize: 13, automaticLayout: false,
+      padding: { top: 10, bottom: 10 }
+    });
+    state.visibleTab = tab;
+    state.diffEditor.setModel(pair);
+    state.pathStatus.textContent = `${path} · Git diff`;
+    state.status.textContent = `${diff.status || 'Changed'} · read only`;
+    state.cursor.textContent = 'Read only';
+    layoutEditor(state);
+  } catch (error) {
+    if (token !== state.editorToken) return;
+    editorEmpty(state, `Monaco diff could not load: ${error.message}`);
+    state.status.textContent = 'Diff unavailable';
+    console.error('Petri Monaco diff failed to load', error);
+  }
+}
+
+async function openFile(state, path) {
+  state.root.querySelectorAll('[data-tree-path]').forEach(entry => entry.classList.toggle('is-selected', entry.dataset.treePath === path));
+  if (state.tabs.includes(path)) return activateTab(state, path);
+  try {
+    state.status.textContent = `Opening ${path}…`;
+    const file = await request(`${state.api}/files?path=${encodeURIComponent(path)}`);
+    const saved = state.drafts[path];
+    state.drafts[path] = saved?.originalSha256 === file.sha256 ? saved : { content: file.content, original: file.content, originalSha256: file.sha256, dirty: false };
+    state.tabs.push(path);
+    activateTab(state, path);
+  } catch (error) { state.status.textContent = error.message; }
+}
+
+async function openDiff(state, path, proposalId) {
+  const tab = proposalId ? `diff:proposal:${proposalId}:${path}` : `diff:git:${path}`;
+  const endpoint = proposalId ? `${state.api}/proposals/${proposalId}/diff` : `${state.api}/diff?path=${encodeURIComponent(path)}`;
+  try {
+    state.drafts[tab] = { ...await request(endpoint), path };
+    if (!state.tabs.includes(tab)) state.tabs.push(tab);
+    activateTab(state, tab);
+  } catch (error) { state.status.textContent = error.message; }
+}
+
+function closeTab(state, tab) {
+  if (state.drafts[tab]?.dirty && !confirm(`Discard unsaved changes in ${tab}?`)) return;
+  if (state.active === tab) disposeVisibleEditor(state);
+  const model = state.models.get(tab);
+  model?.dispose();
+  state.models.delete(tab);
+  const pair = state.diffModels.get(tab);
+  if (pair) { pair.original.dispose(); pair.modified.dispose(); }
+  state.diffModels.delete(tab);
+  state.tabs = state.tabs.filter(value => value !== tab);
+  delete state.drafts[tab];
+  state.active = state.tabs.at(-1) || null;
+  renderTabs(state);
+  if (state.active) activateTab(state, state.active); else editorEmpty(state);
+  state.persist();
+}
+
+async function saveActive(state) {
+  const draft = state.drafts[state.active];
+  if (!draft || state.active?.startsWith('diff:') || !draft.dirty) return;
+  try {
+    const saved = await request(`${state.api}/files`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ path: state.active, content: draft.content, expectedSha256: draft.originalSha256 }) });
+    draft.original = draft.content;
+    draft.originalSha256 = saved.sha256;
+    draft.dirty = false;
+    state.status.textContent = 'Saved';
+    renderTabs(state);
+    state.persist();
+    refreshChanges(state);
+  } catch (error) {
+    state.status.textContent = error.status === 409 ? 'Conflict: disk file changed. Keep draft or reload the file.' : error.message;
+  }
+}
 
 function initializeExplorer(state) { const panel = state.root.querySelector('[data-file-tree]'); state.tree = panel; panel.querySelectorAll('[data-server-entry]').forEach(button => { button.addEventListener('click', () => { const path = button.dataset.serverEntry; if (button.dataset.entryType !== 'DIRECTORY') { openFile(state, path); return; } let children = button.nextElementSibling; if (children?.classList.contains('workspace-tree-children')) { children.remove(); return; } children = el('div', 'workspace-tree-children'); button.after(children); loadTree(state, path, children); }); }); state.root.querySelectorAll('[data-explorer-mode]').forEach(button => button.addEventListener('click', () => { state.mode = button.dataset.explorerMode; state.root.querySelectorAll('[data-explorer-mode]').forEach(item => item.classList.toggle('is-active', item === button)); state.mode === 'files' ? loadTree(state) : renderChanges(state); })); state.root.querySelector('[data-refresh-explorer]')?.addEventListener('click', () => { loadTree(state); refreshChanges(state); }); state.root.querySelectorAll('[data-create-entry]').forEach(button => button.addEventListener('click', () => entryDialog(state, button.dataset.createEntry))); loadTree(state); }
 async function loadTree(state, path = '', target = state.tree) { if (state.mode !== 'files') return; if (target === state.tree) target.replaceChildren(el('div', 'workspace-loading', 'Loading files…')); try { const tree = await request(`${state.api}/tree?path=${encodeURIComponent(path)}`); target.replaceChildren(); if (!tree.entries.length) target.append(el('div', 'workspace-empty', path ? 'Empty directory' : 'No files in this worktree.')); for (const item of tree.entries) target.append(treeRow(state, item)); } catch (error) { target.replaceChildren(); const retry = el('button', 'workspace-error', `Could not load files: ${error.message}. Retry`); retry.addEventListener('click', () => loadTree(state, path, target)); target.append(retry); } }

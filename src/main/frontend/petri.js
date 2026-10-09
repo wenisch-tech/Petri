@@ -10,6 +10,7 @@ const initialTheme = storedTheme || (matchMedia('(prefers-color-scheme: light)')
 function applyTheme(theme) {
   document.documentElement.dataset.theme = theme;
   document.documentElement.classList.toggle('light', theme === 'light');
+  window.dispatchEvent(new CustomEvent('petri-theme-change', { detail: { theme } }));
 }
 
 applyTheme(initialTheme);
