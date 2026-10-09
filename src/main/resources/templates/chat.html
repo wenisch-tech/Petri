@@ -107,7 +107,7 @@
               <h2 class="text-sm font-semibold">Proposed file changes</h2>
               <article th:each="proposal : ${changeProposals}" class="rounded-xl border border-brand-400/30 bg-brand-500/5 p-4">
                 <div class="flex flex-wrap items-center justify-between gap-3">
-                  <div><i data-lucide="FileCode2"></i><strong class="ml-2" th:text="${proposal.filePath}">file</strong><span class="ml-2 badge" th:text="${proposal.status}">status</span></div>
+                  <div><i data-lucide="FileCode2"></i><strong class="ml-2" th:text="|${proposal.changeType.name() == 'CREATE' ? 'New file: ' : ''}${proposal.filePath}|">file</strong><span class="ml-2 badge" th:text="${proposal.status}">status</span></div>
                   <div class="flex gap-2">
                     <form th:if="${proposal.status.name() == 'PROPOSED'}" method="post" th:action="@{/chat/runs/{runId}/changes/{id}/approve(runId=${selectedRun.id},id=${proposal.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-primary" type="submit">Approve</button></form>
                     <form th:if="${proposal.status.name() == 'PROPOSED'}" method="post" th:action="@{/chat/runs/{runId}/changes/{id}/reject(runId=${selectedRun.id},id=${proposal.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-secondary" type="submit">Reject</button></form>

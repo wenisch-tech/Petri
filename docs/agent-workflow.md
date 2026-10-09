@@ -23,7 +23,7 @@ OpenAI and LiteLLM continue through provider response IDs. Ollama and generic Ch
 
 ### File changes
 
-`create_patch` does not write a file. It persists replacement content, the expected SHA-256 hash and a unified diff. An administrator must approve and separately apply the proposal. Application becomes `CONFLICT` when the file no longer matches the expected hash.
+`create_patch` and `create_file` never write a file. `create_patch` replaces an existing file and persists replacement content, the expected SHA-256 hash and a unified diff. `create_file` adds a file that does not exist yet; the expected hash is null and the diff is generated against an empty file. An administrator must approve and separately apply the proposal. Application becomes `CONFLICT` when the file no longer matches the expected hash, or when a file to be created already exists. Applying a creation also materializes any missing parent directories inside the worktree.
 
 ### Test runs
 

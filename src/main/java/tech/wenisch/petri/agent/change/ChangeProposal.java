@@ -23,7 +23,11 @@ class ChangeProposal {
   @Column(name = "file_path", nullable = false, length = 2048)
   private String filePath;
 
-  @Column(name = "expected_sha256", nullable = false, length = 64)
+  @Enumerated(EnumType.STRING)
+  @Column(name = "change_type", nullable = false, length = 16)
+  private ChangeType changeType;
+
+  @Column(name = "expected_sha256", length = 64)
   private String expectedSha256;
 
   @Column(name = "replacement_sha256", nullable = false, length = 64)
@@ -64,6 +68,7 @@ class ChangeProposal {
       UUID worktreeId,
       UUID agentRunId,
       String filePath,
+      ChangeType changeType,
       String expectedSha256,
       String replacementSha256,
       String replacementContent,
@@ -73,6 +78,7 @@ class ChangeProposal {
     this.worktreeId = worktreeId;
     this.agentRunId = agentRunId;
     this.filePath = filePath;
+    this.changeType = changeType;
     this.expectedSha256 = expectedSha256;
     this.replacementSha256 = replacementSha256;
     this.replacementContent = replacementContent;
@@ -116,6 +122,7 @@ class ChangeProposal {
   UUID worktreeId() { return worktreeId; }
   UUID agentRunId() { return agentRunId; }
   String filePath() { return filePath; }
+  ChangeType changeType() { return changeType; }
   String expectedSha256() { return expectedSha256; }
   String replacementSha256() { return replacementSha256; }
   String replacementContent() { return replacementContent; }

@@ -8,6 +8,7 @@ public record ChangeProposalView(
     UUID worktreeId,
     UUID agentRunId,
     String filePath,
+    ChangeType changeType,
     String expectedSha256,
     String replacementSha256,
     String unifiedDiff,

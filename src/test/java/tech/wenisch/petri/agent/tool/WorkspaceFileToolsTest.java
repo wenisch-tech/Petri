@@ -19,6 +19,7 @@ class WorkspaceFileToolsTest {
   @TempDir Path temporaryDirectory;
 
   private Path worktree;
+  private WorkspaceFileService files;
   private AgentToolRegistry registry;
   private UUID worktreeId;
 
@@ -45,7 +46,7 @@ class WorkspaceFileToolsTest {
             null,
             null),
         null);
-    WorkspaceFileService files = new WorkspaceFileService(properties);
+    files = new WorkspaceFileService(properties);
     WorktreeLocator locator = ignored -> worktree;
     registry = new AgentToolRegistry(List.of(
         new ListFilesTool(locator, files),
@@ -112,6 +113,40 @@ class WorkspaceFileToolsTest {
         "read_file", context, Map.of("path", "large.txt")));
     assertThatIllegalArgumentException().isThrownBy(() -> registry.execute(
         "read_file", context, Map.of("path", ".git")));
+  }
+
+  @Test
+  void createsNewFileThroughCreateFileTool() throws Exception {
+    ToolExecutionContext context = new ToolExecutionContext(worktreeId);
+
+    assertThatIllegalArgumentException().isThrownBy(() -> registry.execute(
+        "create_file", context, Map.of("path", "README.md", "content", "overwrite\n")));
+    assertThatIllegalArgumentException().isThrownBy(() -> registry.execute(
+        "create_file", context, Map.of("path", "../outside.md", "content", "x\n")));
+    assertThatIllegalArgumentException().isThrownBy(() -> registry.execute(
+        "create_file", context, Map.of("path", "docs/Notes.md")));
+
+    ReadFileResult created = (ReadFileResult) files.applyCreation(
+        worktree, "src/main/Notes.md", "new file\n");
+    assertThat(created.path()).isEqualTo("src/main/Notes.md");
+    assertThat(worktree.resolve("src/main/Notes.md")).hasContent("new file\n");
+
+    ReadFileResult nested = (ReadFileResult) files.applyCreation(
+        worktree, "missing/dir/Notes.md", "nested\n");
+    assertThat(nested.path()).isEqualTo("missing/dir/Notes.md");
+    assertThat(worktree.resolve("missing/dir/Notes.md")).hasContent("nested\n");
+
+    assertThatIllegalArgumentException().isThrownBy(() -> files.applyCreation(
+        worktree, "README.md/blocked.md", "blocked\n"));
+
+    ReplacementPreview preview = files.previewCreation(worktree, "src/main/More.md", "more\n");
+    assertThat(preview.path()).isEqualTo("src/main/More.md");
+    assertThat(preview.expectedSha256()).isNull();
+    assertThat(preview.diff()).contains("--- /dev/null", "+++ b/src/main/More.md", "+more");
+
+    ReplacementPreview deferred = files.previewCreation(worktree, "deferred/Deep.md", "deep\n");
+    assertThat(deferred.path()).isEqualTo("deferred/Deep.md");
+    assertThat(worktree.resolve("deferred")).doesNotExist();
   }
 
   @Test

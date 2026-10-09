@@ -54,12 +54,13 @@
 - `read_file`
 - `search_files`
 - `create_patch`
+- `create_file`
 - `show_diff`
 - `run_tests`
 - `list_skills`
 - `load_skill`
 
-File edits are optimistic: a proposal includes the hash observed during the read and becomes `CONFLICT` if the file changed before application. Test execution is limited to recognized Maven or Gradle wrappers and requires separate approval.
+File edits are optimistic: a proposal includes the hash observed during the read and becomes `CONFLICT` if the file changed before application. `create_file` proposals for new files become `CONFLICT` if the file exists before application. Test execution is limited to recognized Maven or Gradle wrappers and requires separate approval.
 
 ## Current boundaries
 

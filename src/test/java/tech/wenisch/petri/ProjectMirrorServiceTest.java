@@ -4,6 +4,7 @@ import jakarta.persistence.EntityManager;
 import com.sun.net.httpserver.HttpExchange;
 import com.sun.net.httpserver.HttpServer;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatIllegalArgumentException;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -38,6 +39,7 @@ import tech.wenisch.petri.apikey.CreateApiKeyCommand;
 import tech.wenisch.petri.agent.change.ChangeProposalService;
 import tech.wenisch.petri.agent.change.ChangeProposalStatus;
 import tech.wenisch.petri.agent.change.ChangeProposalView;
+import tech.wenisch.petri.agent.change.ChangeType;
 import tech.wenisch.petri.agent.tool.AgentToolRegistry;
 import tech.wenisch.petri.agent.tool.ReadFileResult;
 import tech.wenisch.petri.agent.tool.ToolExecutionContext;
@@ -370,6 +372,28 @@ class ProjectMirrorServiceTest {
     assertThatIllegalStateException().isThrownBy(() -> proposals.apply(rejectedCandidate.id()));
     assertThat(worktreePath.resolve("README.md")).hasContent("external edit\n");
     assertThat(auditActions()).contains("CHANGE_PROPOSAL_REJECTED");
+
+    ChangeProposalView creation = (ChangeProposalView) tools.execute(
+        "create_file",
+        toolContext,
+        java.util.Map.of(
+            "path", "notes/new-file.md",
+            "content", "created by agent\n"))
+        .output();
+    assertThat(creation.status()).isEqualTo(ChangeProposalStatus.PROPOSED);
+    assertThat(creation.changeType()).isEqualTo(ChangeType.CREATE);
+    assertThat(creation.expectedSha256()).isNull();
+    assertThat(creation.unifiedDiff()).contains("--- /dev/null", "+++ b/notes/new-file.md");
+    assertThat(worktreePath.resolve("notes/new-file.md")).doesNotExist();
+    assertThatIllegalArgumentException().isThrownBy(() -> tools.execute(
+        "create_file",
+        toolContext,
+        java.util.Map.of("path", "README.md", "content", "overwrite\n")));
+    proposals.approve(creation.id(), ADMIN_EMAIL);
+    ChangeProposalView appliedCreation = proposals.apply(creation.id());
+    assertThat(appliedCreation.status()).isEqualTo(ChangeProposalStatus.APPLIED);
+    assertThat(worktreePath.resolve("notes/new-file.md")).hasContent("created by agent\n");
+    assertThat(auditActions()).contains("CHANGE_PROPOSAL_APPROVED", "CHANGE_PROPOSAL_APPLIED");
 
     Files.writeString(worktreePath.resolve("untracked.txt"), "disposable\n");
     assertThat(auditActions()).contains("PROJECT_WORKTREE_CREATED");

@@ -64,9 +64,32 @@ public class ChangeProposalService {
         worktreeId,
         agentRunId,
         preview.path(),
+        ChangeType.REPLACE,
         preview.expectedSha256(),
         preview.replacementSha256(),
         replacementContent,
+        preview.diff(),
+        Instant.now(clock)));
+    return view(proposal);
+  }
+
+  @Transactional
+  public ChangeProposalView createFile(
+      UUID worktreeId,
+      UUID agentRunId,
+      String path,
+      String content) {
+    Path worktree = worktrees.requireActiveWorktree(worktreeId);
+    ReplacementPreview preview = files.previewCreation(worktree, path, content);
+    ChangeProposal proposal = proposals.save(new ChangeProposal(
+        UUID.randomUUID(),
+        worktreeId,
+        agentRunId,
+        preview.path(),
+        ChangeType.CREATE,
+        null,
+        preview.replacementSha256(),
+        content,
         preview.diff(),
         Instant.now(clock)));
     return view(proposal);
@@ -118,11 +141,18 @@ public class ChangeProposalService {
         .orElseThrow(() -> new IllegalStateException("Approving user no longer exists"));
     Path worktree = worktrees.requireActiveWorktree(proposal.worktreeId());
     try {
-      files.applyReplacement(
-          worktree,
-          proposal.filePath(),
-          proposal.expectedSha256(),
-          proposal.replacementContent());
+      if (proposal.changeType() == ChangeType.CREATE) {
+        files.applyCreation(
+            worktree,
+            proposal.filePath(),
+            proposal.replacementContent());
+      } else {
+        files.applyReplacement(
+            worktree,
+            proposal.filePath(),
+            proposal.expectedSha256(),
+            proposal.replacementContent());
+      }
       proposal.applied(Instant.now(clock));
       auditLog.record(
           approver.getEmail(), "CHANGE_PROPOSAL_APPLIED", "CHANGE_PROPOSAL", proposal.id(),
@@ -155,6 +185,7 @@ public class ChangeProposalService {
   private static ChangeProposalView view(ChangeProposal proposal) {
     return new ChangeProposalView(
         proposal.id(), proposal.worktreeId(), proposal.agentRunId(), proposal.filePath(),
+        proposal.changeType(),
         proposal.expectedSha256(),
         proposal.replacementSha256(), proposal.unifiedDiff(), proposal.status(),
         proposal.createdAt(), proposal.approvedAt(), proposal.appliedAt());

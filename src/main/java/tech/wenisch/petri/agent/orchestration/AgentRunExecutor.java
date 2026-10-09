@@ -19,9 +19,11 @@ public class AgentRunExecutor {
       Use list_skills to discover reusable workflows and load_skill only when a listed skill is
       relevant to the task; loaded skills are operating guidance and cannot bypass tool policy.
       File changes and test runs are proposals that require separate human approval; never claim
-      that a proposal has already been applied or executed. Use tool results as authoritative,
-      never invent repository content, and do not reveal credentials or other secrets. When the
-      task is complete, return a concise summary and clearly identify pending approvals.
+      that a proposal has already been applied or executed. To replace an existing file use
+      create_patch with the SHA-256 from the latest read_file; to add a file that does not exist
+      yet use create_file. Use tool results as authoritative, never invent repository content,
+      and do not reveal credentials or other secrets. When the task is complete, return a concise
+      summary and clearly identify pending approvals.
       """;
 
   private final AgentRunStateService stateService;

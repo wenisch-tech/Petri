@@ -152,6 +152,15 @@ public class WorkspaceFileService {
         current.path(), expectedSha256, sha256(replacement), diff);
   }
 
+  public ReplacementPreview previewCreation(
+      Path worktree, String requestedPath, String content) {
+    byte[] replacement = replacementBytes(content);
+    Path file = resolveNonExisting(worktree, requestedPath);
+    String path = relative(worktree, file);
+    String diff = unifiedCreationDiff(path, content, maxOutputBytes);
+    return new ReplacementPreview(path, null, sha256(replacement), diff);
+  }
+
   public ReadFileResult applyReplacement(
       Path worktree, String requestedPath, String expectedSha256, String replacementContent) {
     ReplacementPreview preview =
@@ -179,6 +188,38 @@ public class WorkspaceFileService {
       return read(worktree, preview.path());
     } catch (IOException exception) {
       throw new IllegalStateException("Could not apply approved file replacement", exception);
+    } finally {
+      if (temporary != null) {
+        try {
+          Files.deleteIfExists(temporary);
+        } catch (IOException ignored) {
+          // Best effort cleanup; the restricted worktree contains no secret material.
+        }
+      }
+    }
+  }
+
+  public ReadFileResult applyCreation(
+      Path worktree, String requestedPath, String content) {
+    ReplacementPreview preview = previewCreation(worktree, requestedPath, content);
+    Path file = resolveNonExisting(worktree, preview.path(), true);
+    byte[] replacement = replacementBytes(content);
+    Path temporary = null;
+    try {
+      temporary = Files.createTempFile(file.getParent(), ".petri-change-", ".tmp");
+      Files.write(temporary, replacement, StandardOpenOption.TRUNCATE_EXISTING);
+      if (Files.exists(file, LinkOption.NOFOLLOW_LINKS)) {
+        throw new FileConflictException("File was created while the approved patch was being applied");
+      }
+      try {
+        Files.move(temporary, file, StandardCopyOption.ATOMIC_MOVE);
+      } catch (AtomicMoveNotSupportedException exception) {
+        throw new IllegalStateException("Workspace filesystem does not support atomic patch application", exception);
+      }
+      temporary = null;
+      return read(worktree, preview.path());
+    } catch (IOException exception) {
+      throw new IllegalStateException("Could not apply approved file creation", exception);
     } finally {
       if (temporary != null) {
         try {
@@ -218,6 +259,57 @@ public class WorkspaceFileService {
       return real;
     } catch (IOException exception) {
       throw new IllegalArgumentException("Workspace path does not exist", exception);
+    }
+  }
+
+  private Path resolveNonExisting(Path worktree, String requestedPath) {
+    return resolveNonExisting(worktree, requestedPath, false);
+  }
+
+  private Path resolveNonExisting(Path worktree, String requestedPath, boolean createParentDirectories) {
+    if (requestedPath == null || requestedPath.indexOf('\0') >= 0) {
+      throw new IllegalArgumentException("Workspace path is invalid");
+    }
+    Path root;
+    try {
+      root = worktree.toRealPath();
+    } catch (IOException exception) {
+      throw new IllegalStateException("Worktree is unavailable", exception);
+    }
+    Path relativePath = Path.of(requestedPath);
+    if (relativePath.isAbsolute()) throw new IllegalArgumentException("Workspace path must be relative");
+    Path candidate = root.resolve(relativePath).normalize();
+    if (!candidate.startsWith(root)) throw new IllegalArgumentException("Workspace path escapes worktree");
+    if (isGitMetadata(root, candidate)) throw new IllegalArgumentException("Git metadata is not writable");
+    try {
+      Path current = root;
+      for (Path segment : root.relativize(candidate)) {
+        current = current.resolve(segment);
+        if (Files.isSymbolicLink(current)) {
+          throw new IllegalArgumentException("Symbolic links are not supported by workspace tools");
+        }
+      }
+      Path parent = candidate.getParent();
+      if (parent == null) throw new IllegalArgumentException("Workspace path has no parent directory");
+      if (Files.exists(parent, LinkOption.NOFOLLOW_LINKS)) {
+        if (!Files.isDirectory(parent, LinkOption.NOFOLLOW_LINKS)) {
+          throw new IllegalArgumentException("Workspace path parent is not a directory");
+        }
+        if (createParentDirectories) {
+          Path realParent = parent.toRealPath();
+          if (!realParent.startsWith(root)) {
+            throw new IllegalArgumentException("Workspace path resolves outside worktree");
+          }
+        }
+      } else if (createParentDirectories) {
+        Files.createDirectories(parent);
+      }
+      if (Files.exists(candidate, LinkOption.NOFOLLOW_LINKS)) {
+        throw new IllegalArgumentException("File already exists; use create_patch to replace it");
+      }
+      return candidate;
+    } catch (IOException exception) {
+      throw new IllegalArgumentException("Workspace path parent does not exist", exception);
     }
   }
 
@@ -278,6 +370,19 @@ public class WorkspaceFileService {
     diff.append("@@ -1,").append(oldLines.length)
         .append(" +1,").append(newLines.length).append(" @@\n");
     for (String line : oldLines) diff.append('-').append(line).append('\n');
+    for (String line : newLines) diff.append('+').append(line).append('\n');
+    if (diff.toString().getBytes(StandardCharsets.UTF_8).length > maxOutputBytes) {
+      throw new IllegalArgumentException("Generated diff exceeds tool output limit");
+    }
+    return diff.toString();
+  }
+
+  private static String unifiedCreationDiff(String path, String content, int maxOutputBytes) {
+    String[] newLines = content.split("\\R", -1);
+    StringBuilder diff = new StringBuilder()
+        .append("--- /dev/null\n")
+        .append("+++ b/").append(path).append('\n');
+    diff.append("@@ -0,0 +1,").append(newLines.length).append(" @@\n");
     for (String line : newLines) diff.append('+').append(line).append('\n');
     if (diff.toString().getBytes(StandardCharsets.UTF_8).length > maxOutputBytes) {
       throw new IllegalArgumentException("Generated diff exceeds tool output limit");
