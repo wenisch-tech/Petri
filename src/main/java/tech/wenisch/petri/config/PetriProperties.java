@@ -14,7 +14,7 @@ public record PetriProperties(Security security, Secrets secrets, Workspace work
     workspace = workspace == null
         ? new Workspace(null, null, null, null, null, null, null, null)
         : workspace;
-    agent = agent == null ? new Agent(null, null, null, null) : agent;
+    agent = agent == null ? new Agent(null, null, null, null, null, null) : agent;
   }
 
   public record Security(String initialAdminEmail, String initialAdminPassword) {
@@ -83,7 +83,9 @@ public record PetriProperties(Security security, Secrets secrets, Workspace work
       String openAiBaseUrl,
       Duration modelRequestTimeout,
       Integer maxModelResponseBytes,
-      Integer maxOutputTokens) {
+      Integer maxOutputTokens,
+      String skillsRoot,
+      Integer maxSkillBytes) {
     public Agent {
       openAiBaseUrl = openAiBaseUrl == null || openAiBaseUrl.isBlank()
           ? "https://api.openai.com/v1"
@@ -93,6 +95,8 @@ public record PetriProperties(Security security, Secrets secrets, Workspace work
           : modelRequestTimeout;
       maxModelResponseBytes = maxModelResponseBytes == null ? 2_000_000 : maxModelResponseBytes;
       maxOutputTokens = maxOutputTokens == null ? 4096 : maxOutputTokens;
+      skillsRoot = skillsRoot == null || skillsRoot.isBlank() ? "./skills" : skillsRoot;
+      maxSkillBytes = maxSkillBytes == null ? 200_000 : maxSkillBytes;
       URI baseUri = URI.create(openAiBaseUrl);
       boolean secure = "https".equalsIgnoreCase(baseUri.getScheme());
       boolean local = "http".equalsIgnoreCase(baseUri.getScheme())
@@ -109,6 +113,9 @@ public record PetriProperties(Security security, Secrets secrets, Workspace work
       }
       if (maxOutputTokens < 1) {
         throw new IllegalArgumentException("Maximum model output tokens must be positive");
+      }
+      if (maxSkillBytes < 1024) {
+        throw new IllegalArgumentException("Maximum skill size must be at least 1024 bytes");
       }
     }
   }

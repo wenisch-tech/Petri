@@ -6,6 +6,7 @@ import java.util.UUID;
 public record ChangeProposalView(
     UUID id,
     UUID worktreeId,
+    UUID agentRunId,
     String filePath,
     String expectedSha256,
     String replacementSha256,

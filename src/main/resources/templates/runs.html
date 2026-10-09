@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="_csrf" th:content="${_csrf.token}">
+  <meta name="_csrf_header" th:content="${_csrf.headerName}">
+  <title>Agent runs · Petri</title>
+  <link rel="stylesheet" href="/css/petri.css">
+  <script defer src="/js/petri.js"></script>
+</head>
+<body>
+  <header class="topbar">
+    <div class="page flex items-center justify-between py-4">
+      <a href="/" class="flex items-center gap-3 font-semibold">
+        <span class="grid size-9 place-items-center rounded-xl bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span>
+        <span>Petri</span>
+      </a>
+      <nav class="hidden items-center gap-1 sm:flex" aria-label="Primary navigation">
+        <a class="nav-link" href="/projects">Projects</a>
+        <a class="nav-link bg-ink-800 text-ink-100" href="/runs">Runs</a>
+        <a class="nav-link" href="/audit">Audit</a>
+        <a class="nav-link" href="/api-keys">API keys</a>
+      </nav>
+      <div class="flex items-center gap-2">
+        <button class="btn-secondary" type="button" x-data @click="$store.theme.toggle()" aria-label="Toggle theme"><i data-lucide="Sun"></i></button>
+        <form method="post" action="/logout">
+          <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+          <button class="btn-secondary" type="submit"><i data-lucide="LogOut"></i> Sign out</button>
+        </form>
+      </div>
+    </div>
+  </header>
+
+  <main class="page">
+    <section class="panel p-6 sm:p-8">
+      <p class="text-xs font-bold uppercase tracking-[.2em] text-brand-400">Agent operations</p>
+      <h1 class="mt-2 flex items-center gap-3 text-3xl font-semibold tracking-tight"><i data-lucide="Workflow"></i> Agent runs</h1>
+      <p class="mt-2 text-ink-500">Persistent model and tool executions across controlled worktrees.</p>
+
+      <p th:if="${#lists.isEmpty(runs)}" class="mt-8 rounded-xl border border-dashed border-ink-700 p-8 text-center text-sm text-ink-500">No agent runs have been created.</p>
+      <div th:unless="${#lists.isEmpty(runs)}" class="table-shell mt-8">
+        <table class="data-table">
+          <thead><tr><th>Created</th><th>Status</th><th>Provider / model</th><th>Turns</th><th>Worktree</th><th></th></tr></thead>
+          <tbody>
+            <tr th:each="run : ${runs}">
+              <td class="whitespace-nowrap font-mono text-xs" th:text="${run.createdAt}">time</td>
+              <td><span class="badge" th:text="${run.status}">PENDING</span></td>
+              <td><span th:text="${run.provider}">OPENAI</span><code class="mt-1 block" th:text="${run.model}">model</code></td>
+              <td th:text="|${run.modelTurnCount} / ${run.maxModelTurns}|">0 / 20</td>
+              <td><code class="text-xs" th:text="${run.worktreeId}">worktree</code></td>
+              <td class="text-right"><a class="btn-secondary" th:href="@{/runs/{id}(id=${run.id})}"><i data-lucide="Eye"></i> Inspect</a></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+  </main>
+</body>
+</html>
+

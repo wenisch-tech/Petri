@@ -6,4 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 interface AgentRunEventRepository extends JpaRepository<AgentRunEvent, UUID> {
   List<AgentRunEvent> findTop200ByWorktreeIdOrderByOccurredAtDesc(UUID worktreeId);
+
+  List<AgentRunEvent> findTop200ByAgentRunIdOrderByOccurredAtDesc(UUID agentRunId);
 }

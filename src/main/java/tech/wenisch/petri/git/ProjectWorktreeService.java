@@ -101,8 +101,17 @@ public class ProjectWorktreeService {
 
   @Transactional
   public ProjectWorktreeView remove(UUID worktreeId, String actorEmail) {
+    return remove(worktreeId, null, actorEmail);
+  }
+
+  @Transactional
+  public ProjectWorktreeView remove(
+      UUID worktreeId, UUID expectedProjectId, String actorEmail) {
     ProjectWorktree record = worktrees.findById(worktreeId)
         .orElseThrow(() -> new IllegalArgumentException("Unknown worktree"));
+    if (expectedProjectId != null && !expectedProjectId.equals(record.projectId())) {
+      throw new IllegalArgumentException("Worktree belongs to another project");
+    }
     if (record.status() == ProjectWorktreeStatus.REMOVED) return view(record);
     Project project = project(record.projectId());
     AppUser actor = actor(actorEmail);

@@ -33,6 +33,8 @@ An instance administrator can configure or remove an HTTPS token or username/pas
 
 Petri stores bare project mirrors and disposable run worktrees below `PETRI_WORKSPACE_ROOT` (default `./data/workspaces`). Git is executed directly without a shell, with interactive prompts disabled, a configurable timeout, bounded and redacted output, and global/system Git configuration disabled. HTTPS credentials are supplied through a temporary owner-only askpass helper and never through command arguments.
 
+After an administrator has synchronized a project mirror, API clients can create, list and remove disposable worktrees through `/api/v1/projects/{projectId}/worktrees`. Removal verifies both the project association and the UUID-derived safe path before invoking Git.
+
 ```bash
 export PETRI_WORKSPACE_ROOT=/var/lib/petri/workspaces
 export PETRI_GIT_COMMAND_TIMEOUT=2m
@@ -52,13 +54,30 @@ The test process receives a reduced environment, has its process tree terminated
 
 Tool file/output sizes and search result counts are bounded through `PETRI_MAX_TOOL_FILE_BYTES`, `PETRI_MAX_TOOL_OUTPUT_BYTES` and `PETRI_MAX_SEARCH_RESULTS`.
 
+## Skills
+
+Petri discovers reusable workflows from `<skills-root>/<skill-name>/SKILL.md`. The model first calls `list_skills`, which returns only names and short descriptions, and loads the full instructions with `load_skill` only when a workflow is relevant. Skills provide operating guidance but cannot add capabilities or bypass tool and approval policy.
+
+Skill directories use lowercase names with digits and hyphens. Each UTF-8 `SKILL.md` starts with bounded YAML-style front matter containing a matching `name` and a one-line `description`. Symlinked roots, directories and files are rejected. The repository includes `spring-boot-change` as the first workflow.
+
+```bash
+export PETRI_SKILLS_ROOT=/etc/petri/skills
+export PETRI_MAX_SKILL_BYTES=200000
+```
+
 API clients can discover and invoke tools below `/api/v1/agent`. Tool lifecycle events are stored, mirrored into the audit log, available as recent JSON events, and streamed live as Server-Sent Events from `/api/v1/agent/worktrees/{worktreeId}/events/stream`. API clients may request privileged work but cannot approve it. Approval, rejection and execution endpoints live below `/operations` and require an authenticated instance administrator plus CSRF protection.
 
 ## Model providers and agent runs
 
 Model access is isolated behind a provider-neutral client boundary. The first implementation uses OpenAI's Responses API with strict function schemas, one tool call at a time, bounded responses and no redirects. An instance administrator stores an OpenAI API key plus an explicit model name through `/operations/model-credentials/OPENAI`; the API key is encrypted before persistence and is never returned by status responses.
 
-API clients can create, inspect, list and cancel persistent runs below `/api/v1/agent/worktrees/{worktreeId}/runs`. Runs and their ordered turns are separate from disposable worktree lifecycle records. The execution loop is the next slice; newly created runs therefore remain `PENDING` unless cancelled.
+API clients can create, inspect, list, execute and cancel persistent runs below `/api/v1/agent/worktrees/{worktreeId}/runs`. A new run starts as `PENDING`; `POST /api/v1/agent/worktrees/{worktreeId}/runs/{runId}/execute` drives the synchronous model/tool loop until it completes, fails, is cancelled or exhausts its model-turn budget. Runs and their ordered turns are separate from disposable worktree lifecycle records.
+
+Run-scoped tool lifecycle events are available as replayable JSON and Server-Sent Events at `/api/v1/agent/worktrees/{worktreeId}/runs/{runId}/events` and `/events/stream`. Worktree-wide event endpoints remain available for broader monitoring.
+
+Each model response, tool call and tool result is persisted before the next model request. Continuations use the provider response ID and original tool-call ID. An execution lease prevents concurrent workers from driving the same run and allows an interrupted `RUNNING` run to be resumed after the lease expires. Cancellation is checked between external calls and tools. File changes and tests remain proposals: model execution never bypasses their administrator approval gates.
+
+Instance administrators can inspect all runs at `/runs`. The detail view shows the prompt, ordered persisted turns, final output or failure, and patch/test proposals linked to that exact run. Proposed operations can be approved or rejected there; approved changes and tests still require a separate explicit apply or execute action.
 
 ```bash
 export PETRI_OPENAI_BASE_URL=https://api.openai.com/v1
@@ -88,7 +107,7 @@ spring:
 
 ## Status
 
-Phase 1 is in progress. The current slices provide the reproducible backend/frontend build, Flyway-managed persistence, local and optional OIDC authentication, project registry, audit events, administrator-managed API keys, encrypted Git/model credentials, controlled repository mirrors, disposable worktrees, approval-gated file/test tools, REST invocation, persisted SSE lifecycle events and the persistent provider-neutral model/run foundation.
+Phase 1 is in progress. The current slices provide the reproducible backend/frontend build, Flyway-managed persistence, local and optional OIDC authentication, project registry, audit events, administrator-managed API keys, encrypted Git/model credentials, controlled repository mirrors, disposable worktrees, approval-gated file/test tools, lazy-loaded skills, REST invocation, persisted SSE lifecycle events and persistent provider-neutral model/tool orchestration.
 
 ## License
 

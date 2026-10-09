@@ -10,6 +10,8 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 interface AgentRunRepository extends JpaRepository<AgentRun, UUID> {
+  List<AgentRun> findAllByOrderByCreatedAtDesc();
+
   List<AgentRun> findByWorktreeIdOrderByCreatedAtDesc(UUID worktreeId);
 
   @Lock(LockModeType.PESSIMISTIC_WRITE)

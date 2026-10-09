@@ -18,6 +18,8 @@ public class AgentRunEventStream {
 
   private final Map<UUID, CopyOnWriteArrayList<SseEmitter>> subscribers =
       new ConcurrentHashMap<>();
+  private final Map<UUID, CopyOnWriteArrayList<SseEmitter>> runSubscribers =
+      new ConcurrentHashMap<>();
 
   public synchronized SseEmitter subscribe(UUID worktreeId) {
     CopyOnWriteArrayList<SseEmitter> worktreeSubscribers =
@@ -41,21 +43,55 @@ public class AgentRunEventStream {
     return emitter;
   }
 
+  public synchronized SseEmitter subscribeToRun(
+      UUID runId, List<AgentRunEventView> replayEvents) {
+    CopyOnWriteArrayList<SseEmitter> listeners =
+        runSubscribers.computeIfAbsent(runId, ignored -> new CopyOnWriteArrayList<>());
+    if (listeners.size() >= MAX_SUBSCRIBERS_PER_WORKTREE) {
+      throw new IllegalStateException("Too many event stream subscribers for this run");
+    }
+    SseEmitter emitter = new SseEmitter(EMITTER_TIMEOUT_MILLIS);
+    listeners.add(emitter);
+    emitter.onCompletion(() -> removeRun(runId, emitter));
+    emitter.onTimeout(() -> removeRun(runId, emitter));
+    emitter.onError(ignored -> removeRun(runId, emitter));
+    try {
+      emitter.send(SseEmitter.event().name("connected").data(Map.of("agentRunId", runId)));
+      for (AgentRunEventView event : replayEvents) send(emitter, event);
+    } catch (IOException | IllegalStateException exception) {
+      removeRun(runId, emitter);
+      throw new IllegalStateException("Could not open event stream", exception);
+    }
+    return emitter;
+  }
+
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-  public void publish(AgentRunEventView event) {
-    List<SseEmitter> worktreeSubscribers = subscribers.get(event.worktreeId());
-    if (worktreeSubscribers == null) return;
-    for (SseEmitter emitter : worktreeSubscribers) {
+  public synchronized void publish(AgentRunEventView event) {
+    publishTo(subscribers.get(event.worktreeId()), event, event.worktreeId(), false);
+    if (event.agentRunId() != null) {
+      publishTo(runSubscribers.get(event.agentRunId()), event, event.agentRunId(), true);
+    }
+  }
+
+  private void publishTo(
+      List<SseEmitter> listeners, AgentRunEventView event, UUID key, boolean runStream) {
+    if (listeners == null) return;
+    for (SseEmitter emitter : listeners) {
       try {
-        emitter.send(SseEmitter.event()
-            .id(event.id().toString())
-            .name("agent-run-event")
-            .data(event));
+        send(emitter, event);
       } catch (IOException | IllegalStateException exception) {
-        remove(event.worktreeId(), emitter);
+        if (runStream) removeRun(key, emitter);
+        else remove(key, emitter);
         emitter.completeWithError(exception);
       }
     }
+  }
+
+  private static void send(SseEmitter emitter, AgentRunEventView event) throws IOException {
+    emitter.send(SseEmitter.event()
+        .id(event.id().toString())
+        .name("agent-run-event")
+        .data(event));
   }
 
   private synchronized void remove(UUID worktreeId, SseEmitter emitter) {
@@ -63,5 +99,12 @@ public class AgentRunEventStream {
     if (worktreeSubscribers == null) return;
     worktreeSubscribers.remove(emitter);
     if (worktreeSubscribers.isEmpty()) subscribers.remove(worktreeId, worktreeSubscribers);
+  }
+
+  private synchronized void removeRun(UUID runId, SseEmitter emitter) {
+    CopyOnWriteArrayList<SseEmitter> listeners = runSubscribers.get(runId);
+    if (listeners == null) return;
+    listeners.remove(emitter);
+    if (listeners.isEmpty()) runSubscribers.remove(runId, listeners);
   }
 }

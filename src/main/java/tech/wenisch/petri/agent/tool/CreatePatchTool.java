@@ -32,6 +32,7 @@ public class CreatePatchTool implements AgentTool {
     if (replacement == null) throw new IllegalArgumentException("replacementContent is required");
     return proposals.create(
         context.worktreeId(),
+        context.agentRunId(),
         ToolInputs.requiredString(input, "path", 2048),
         ToolInputs.requiredString(input, "expectedSha256", 64),
         replacement);

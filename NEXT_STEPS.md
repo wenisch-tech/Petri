@@ -1,6 +1,6 @@
 # Next implementation steps
 
-Status: authentication, encrypted credentials, controlled Git mirrors/worktrees and automatic filesystem master-key management are committed. The complete first controlled tool slice and the persistent provider/model foundation are implemented locally and verified; no commit or push was created by the agent for these latest slices.
+Status: authentication, encrypted credentials, controlled Git mirrors/worktrees and automatic filesystem master-key management are committed. The complete controlled tool slice, provider/model execution loop, administrator run view and first lazy-loaded skill slice are implemented locally and verified; no commit or push was created by the agent for these latest slices.
 
 ## 1. Finish and review the current security slices
 
@@ -35,10 +35,31 @@ Status: authentication, encrypted credentials, controlled Git mirrors/worktrees 
 
 1. [x] Persist an agent run and its ordered model/tool turns independently from disposable worktree lifecycle records.
 2. [x] Add a provider-neutral model client boundary and an OpenAI Responses API implementation with encrypted credentials.
-3. Drive the tool loop with explicit budgets, cancellation and resumable terminal states.
-4. Surface pending approvals, model output, tool results and terminal status in an administrator run view.
+3. [x] Drive the tool loop with explicit budgets, cancellation, execution leases and resumable persisted state.
+4. [x] Surface pending approvals, model output, tool results and terminal status in an administrator run view.
 
-## 6. Verification discipline for every slice
+## 6. Add lazy-loaded skills — completed locally
+
+1. [x] Discover bounded `SKILL.md` files from an operator-controlled, non-symlink root.
+2. [x] Expose only skill names/descriptions through `list_skills` and load full instructions on demand through `load_skill`.
+3. [x] Keep skills subordinate to native tool and approval policy and ship an initial Spring Boot change workflow.
+4. [x] Test traversal, symlink, metadata and size boundaries.
+
+## 7. Complete the client-facing session API
+
+1. [x] Expose controlled worktree creation and removal for authenticated API clients.
+2. [x] Attach run IDs to streamed lifecycle events and provide a run-specific SSE endpoint with replay.
+3. Make create-and-execute/resume ergonomics suitable for a VS Code client without weakening approval boundaries.
+4. Add API rate limits and integration tests for concurrent runs, reconnects and cancellation.
+
+## 8. Build the first VS Code extension
+
+1. Add a TypeScript extension package with secure endpoint/API-key configuration and workspace selection.
+2. Implement a chat view that creates runs, consumes SSE progress and renders terminal state.
+3. Show patch/test approval requests and open diffs through VS Code APIs before administrator-authorized application.
+4. Send active workspace, file and optional selection context without uploading unrelated files.
+
+## 9. Verification discipline for every slice
 
 1. Add focused unit/integration tests first, then run `./mvnw -o test` and `./mvnw -o package`.
 2. Run `git diff --check` before handoff.

@@ -35,13 +35,21 @@ class TestRunStateService {
   }
 
   @Transactional
-  public TestRunView request(UUID worktreeId, TestCommand command) {
+  public TestRunView request(UUID worktreeId, UUID agentRunId, TestCommand command) {
     TestRun testRun = testRuns.save(new TestRun(
-        UUID.randomUUID(), worktreeId, command.buildSystem(), command.display(), Instant.now(clock)));
+        UUID.randomUUID(), worktreeId, agentRunId, command.buildSystem(), command.display(),
+        Instant.now(clock)));
     auditLog.record(
         "agent", "TEST_RUN_REQUESTED", "TEST_RUN", testRun.id(),
         "Requested approved execution of " + command.display());
     return view(testRun);
+  }
+
+  @Transactional(readOnly = true)
+  public java.util.List<TestRunView> listForAgentRun(UUID agentRunId) {
+    return testRuns.findByAgentRunIdOrderByRequestedAtAsc(agentRunId).stream()
+        .map(TestRunStateService::view)
+        .toList();
   }
 
   @Transactional(readOnly = true)
@@ -130,8 +138,9 @@ class TestRunStateService {
 
   private static TestRunView view(TestRun testRun) {
     return new TestRunView(
-        testRun.id(), testRun.worktreeId(), testRun.buildSystem(), testRun.commandDisplay(),
-        testRun.status(), testRun.exitCode(), testRun.output(), testRun.outputTruncated(),
-        testRun.requestedAt(), testRun.approvedAt(), testRun.startedAt(), testRun.completedAt());
+        testRun.id(), testRun.worktreeId(), testRun.agentRunId(), testRun.buildSystem(),
+        testRun.commandDisplay(), testRun.status(), testRun.exitCode(), testRun.output(),
+        testRun.outputTruncated(), testRun.requestedAt(), testRun.approvedAt(),
+        testRun.startedAt(), testRun.completedAt());
   }
 }

@@ -6,6 +6,7 @@ import java.util.UUID;
 public record AgentRunEventView(
     UUID id,
     UUID worktreeId,
+    UUID agentRunId,
     AgentRunEventType type,
     String toolName,
     String summary,

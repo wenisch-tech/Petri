@@ -1,9 +1,12 @@
 package tech.wenisch.petri;
 
 import jakarta.persistence.EntityManager;
+import com.sun.net.httpserver.HttpExchange;
+import com.sun.net.httpserver.HttpServer;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatIllegalStateException;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -13,8 +16,11 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.net.InetSocketAddress;
 import java.util.List;
 import java.util.UUID;
+import java.util.concurrent.atomic.AtomicInteger;
+import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -54,12 +60,22 @@ import tech.wenisch.petri.workspace.WorktreeLocator;
 @Transactional
 class ProjectMirrorServiceTest {
   private static final String ADMIN_EMAIL = "test-admin@petri.local";
+  private static final AtomicInteger MODEL_REQUESTS = new AtomicInteger();
+  private static final HttpServer MODEL_SERVER = modelServer();
 
   @TempDir static Path temporaryDirectory;
 
   @DynamicPropertySource
   static void workspaceProperties(DynamicPropertyRegistry registry) {
     registry.add("petri.workspace.root", () -> temporaryDirectory.resolve("workspace").toString());
+    registry.add(
+        "petri.agent.open-ai-base-url",
+        () -> "http://localhost:" + MODEL_SERVER.getAddress().getPort());
+  }
+
+  @AfterAll
+  static void stopModelServer() {
+    MODEL_SERVER.stop(0);
   }
 
   @Autowired ProjectService projectService;
@@ -110,6 +126,27 @@ class ProjectMirrorServiceTest {
     ToolExecutionContext toolContext = new ToolExecutionContext(worktree.id());
     String apiKey = apiKeys.create(new CreateApiKeyCommand("Agent integration", null), ADMIN_EMAIL)
         .rawKey();
+    String apiWorktree = mockMvc.perform(post(
+            "/api/v1/projects/{projectId}/worktrees", project.getId())
+            .header("Authorization", "Bearer " + apiKey)
+            .contentType("application/json")
+            .content("{\"revision\":\"main\"}"))
+        .andExpect(status().isCreated())
+        .andExpect(jsonPath("$.projectId").value(project.getId().toString()))
+        .andExpect(jsonPath("$.status").value("ACTIVE"))
+        .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+    UUID apiWorktreeId = UUID.fromString(objectMapper.readTree(apiWorktree).path("id").asText());
+    mockMvc.perform(get("/api/v1/projects/{projectId}/worktrees", project.getId())
+            .header("Authorization", "Bearer " + apiKey))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[*].id").value(org.hamcrest.Matchers.hasItem(
+            apiWorktreeId.toString())));
+    mockMvc.perform(delete(
+            "/api/v1/projects/{projectId}/worktrees/{worktreeId}",
+            project.getId(), apiWorktreeId)
+            .header("Authorization", "Bearer " + apiKey))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("REMOVED"));
     modelCredentials.save(
         ModelProvider.OPENAI,
         new SaveModelCredentialCommand("provider-secret", "configured-model"),
@@ -125,7 +162,8 @@ class ProjectMirrorServiceTest {
             .header("Authorization", "Bearer " + apiKey))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$[*].name").value(org.hamcrest.Matchers.hasItems(
-            "list_files", "read_file", "search_files", "create_patch", "show_diff", "run_tests")));
+            "list_files", "read_file", "search_files", "create_patch", "show_diff", "run_tests",
+            "list_skills", "load_skill")));
     mockMvc.perform(post("/api/v1/agent/worktrees/{worktreeId}/tools/read_file", worktree.id())
             .header("Authorization", "Bearer " + apiKey)
             .contentType("application/json")
@@ -155,7 +193,93 @@ class ProjectMirrorServiceTest {
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.turns[0].content").value("Inspect this repository"));
     mockMvc.perform(post(
-            "/api/v1/agent/worktrees/{worktreeId}/runs/{runId}/cancel", worktree.id(), agentRunId)
+            "/api/v1/agent/worktrees/{worktreeId}/runs/{runId}/execute",
+            worktree.id(), agentRunId)
+            .header("Authorization", "Bearer " + apiKey))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("COMPLETED"))
+        .andExpect(jsonPath("$.modelTurnCount").value(4))
+        .andExpect(jsonPath("$.finalOutput").value("Repository inspection complete."))
+        .andExpect(jsonPath("$.turns[*].kind").value(org.hamcrest.Matchers.hasItems(
+            "MODEL_RESPONSE", "TOOL_CALL", "TOOL_RESULT")))
+        .andExpect(jsonPath("$.turns[3].content")
+            .value(org.hamcrest.Matchers.containsString("second revision")));
+    assertThat(MODEL_REQUESTS.get()).isEqualTo(4);
+    mockMvc.perform(get(
+            "/api/v1/agent/worktrees/{worktreeId}/runs/{runId}/events",
+            worktree.id(), agentRunId)
+            .header("Authorization", "Bearer " + apiKey))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[*].agentRunId").value(org.hamcrest.Matchers.everyItem(
+            org.hamcrest.Matchers.is(agentRunId.toString()))))
+        .andExpect(jsonPath("$[*].type").value(org.hamcrest.Matchers.hasItems(
+            "TOOL_STARTED", "TOOL_SUCCEEDED")));
+    assertThat(proposals.listForAgentRun(agentRunId))
+        .singleElement()
+        .satisfies(candidate -> {
+          assertThat(candidate.agentRunId()).isEqualTo(agentRunId);
+          assertThat(candidate.status()).isEqualTo(ChangeProposalStatus.PROPOSED);
+        });
+    assertThat(testRuns.listForAgentRun(agentRunId))
+        .singleElement()
+        .satisfies(candidate -> {
+          assertThat(candidate.agentRunId()).isEqualTo(agentRunId);
+          assertThat(candidate.status()).isEqualTo(TestRunStatus.PROPOSED);
+        });
+    mockMvc.perform(get("/runs/{runId}", agentRunId)
+            .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN")))
+        .andExpect(status().isOk())
+        .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+            .content().string(org.hamcrest.Matchers.containsString("Change approvals")))
+        .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers
+            .content().string(org.hamcrest.Matchers.containsString("agent revision")));
+    UUID runProposalId = proposals.listForAgentRun(agentRunId).getFirst().id();
+    UUID runTestId = testRuns.listForAgentRun(agentRunId).getFirst().id();
+    mockMvc.perform(post("/runs/{runId}/changes/{proposalId}/reject", agentRunId, runProposalId)
+            .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN"))
+            .with(csrf()))
+        .andExpect(status().is3xxRedirection());
+    mockMvc.perform(post("/runs/{runId}/tests/{testRunId}/reject", agentRunId, runTestId)
+            .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN"))
+            .with(csrf()))
+        .andExpect(status().is3xxRedirection());
+    assertThat(proposals.listForAgentRun(agentRunId).getFirst().status())
+        .isEqualTo(ChangeProposalStatus.REJECTED);
+    assertThat(testRuns.listForAgentRun(agentRunId).getFirst().status())
+        .isEqualTo(TestRunStatus.REJECTED);
+    mockMvc.perform(get("/runs")
+            .header("Authorization", "Bearer " + apiKey))
+        .andExpect(status().is3xxRedirection());
+
+    String budgetRun = mockMvc.perform(post(
+            "/api/v1/agent/worktrees/{worktreeId}/runs", worktree.id())
+            .header("Authorization", "Bearer " + apiKey)
+            .contentType("application/json")
+            .content("{\"prompt\":\"Inspect within one turn\",\"maxModelTurns\":1}"))
+        .andExpect(status().isCreated())
+        .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+    UUID budgetRunId = UUID.fromString(objectMapper.readTree(budgetRun).path("id").asText());
+    mockMvc.perform(post(
+            "/api/v1/agent/worktrees/{worktreeId}/runs/{runId}/execute",
+            worktree.id(), budgetRunId)
+            .header("Authorization", "Bearer " + apiKey))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$.status").value("BUDGET_EXHAUSTED"))
+        .andExpect(jsonPath("$.modelTurnCount").value(1))
+        .andExpect(jsonPath("$.errorMessage").value("Maximum model turns reached"));
+
+    String cancellableRun = mockMvc.perform(post(
+            "/api/v1/agent/worktrees/{worktreeId}/runs", worktree.id())
+            .header("Authorization", "Bearer " + apiKey)
+            .contentType("application/json")
+            .content("{\"prompt\":\"Cancel this run\"}"))
+        .andExpect(status().isCreated())
+        .andReturn().getResponse().getContentAsString(StandardCharsets.UTF_8);
+    UUID cancellableRunId = UUID.fromString(
+        objectMapper.readTree(cancellableRun).path("id").asText());
+    mockMvc.perform(post(
+            "/api/v1/agent/worktrees/{worktreeId}/runs/{runId}/cancel",
+            worktree.id(), cancellableRunId)
             .header("Authorization", "Bearer " + apiKey))
         .andExpect(status().isOk())
         .andExpect(jsonPath("$.status").value("CANCELLED"));
@@ -283,6 +407,58 @@ class ProjectMirrorServiceTest {
     int exitCode = process.waitFor();
     if (exitCode != 0) throw new AssertionError("Git test setup failed: " + output);
     return output;
+  }
+
+  private static HttpServer modelServer() {
+    try {
+      HttpServer server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+      server.createContext("/responses", ProjectMirrorServiceTest::respondAsModel);
+      server.start();
+      return server;
+    } catch (java.io.IOException exception) {
+      throw new ExceptionInInitializerError(exception);
+    }
+  }
+
+  private static void respondAsModel(HttpExchange exchange) throws java.io.IOException {
+    String request = new String(exchange.getRequestBody().readAllBytes(), StandardCharsets.UTF_8);
+    int requestNumber = MODEL_REQUESTS.incrementAndGet();
+    boolean continuation = request.contains("\"previous_response_id\"");
+    String response;
+    if (requestNumber == 2) {
+      response = """
+          {"id":"resp_patch_2","status":"completed","output":[
+            {"type":"function_call","call_id":"call_2","name":"create_patch",
+             "arguments":"{\\\"path\\\":\\\"README.md\\\",\\\"expectedSha256\\\":\\\"efb3539512cde51a50afa53ba67d29102829c744a5506119674e4e31f3737ee6\\\",\\\"replacementContent\\\":\\\"agent revision\\\\n\\\"}"}
+          ],"usage":{"input_tokens":20,"output_tokens":8}}
+          """;
+    } else if (requestNumber == 3) {
+      response = """
+          {"id":"resp_tests_3","status":"completed","output":[
+            {"type":"function_call","call_id":"call_3","name":"run_tests","arguments":"{}"}
+          ],"usage":{"input_tokens":24,"output_tokens":4}}
+          """;
+    } else if (continuation) {
+      response = """
+          {"id":"resp_final_%d","status":"completed","output":[
+            {"type":"message","content":[
+              {"type":"output_text","text":"Repository inspection complete."}
+            ]}
+          ],"usage":{"input_tokens":20,"output_tokens":5}}
+          """.formatted(requestNumber);
+    } else {
+      response = """
+          {"id":"resp_tool_%d","status":"completed","output":[
+            {"type":"function_call","call_id":"call_%d","name":"read_file",
+             "arguments":"{\\\"path\\\":\\\"README.md\\\"}"}
+          ],"usage":{"input_tokens":10,"output_tokens":4}}
+          """.formatted(requestNumber, requestNumber);
+    }
+    byte[] body = response.getBytes(StandardCharsets.UTF_8);
+    exchange.getResponseHeaders().set("Content-Type", "application/json");
+    exchange.sendResponseHeaders(200, body.length);
+    exchange.getResponseBody().write(body);
+    exchange.close();
   }
 
   private List<String> auditActions() {

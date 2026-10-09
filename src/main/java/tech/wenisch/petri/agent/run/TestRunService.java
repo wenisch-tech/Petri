@@ -29,12 +29,20 @@ public class TestRunService {
   }
 
   public TestRunView request(UUID worktreeId) {
+    return request(worktreeId, null);
+  }
+
+  public TestRunView request(UUID worktreeId, UUID agentRunId) {
     Path worktree = worktrees.requireActiveWorktree(worktreeId);
-    return state.request(worktreeId, policy.detect(worktree));
+    return state.request(worktreeId, agentRunId, policy.detect(worktree));
   }
 
   public TestRunView get(UUID testRunId, UUID expectedWorktreeId) {
     return state.get(testRunId, expectedWorktreeId);
+  }
+
+  public java.util.List<TestRunView> listForAgentRun(UUID agentRunId) {
+    return state.listForAgentRun(agentRunId);
   }
 
   public TestRunView approve(UUID testRunId, String actorEmail) {

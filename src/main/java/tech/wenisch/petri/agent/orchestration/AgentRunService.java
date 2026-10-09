@@ -89,8 +89,14 @@ public class AgentRunService {
 
   @Transactional(readOnly = true)
   public AgentRunView get(UUID runId, UUID expectedWorktreeId) {
-    AgentRun run = run(runId);
+    AgentRun run = requireRun(runId);
     requireWorktree(run, expectedWorktreeId);
+    return view(run, turns.findByRunIdOrderByIndexAsc(run.id()));
+  }
+
+  @Transactional(readOnly = true)
+  public AgentRunView get(UUID runId) {
+    AgentRun run = requireRun(runId);
     return view(run, turns.findByRunIdOrderByIndexAsc(run.id()));
   }
 
@@ -98,6 +104,13 @@ public class AgentRunService {
   public List<AgentRunView> list(UUID worktreeId) {
     worktrees.requireActiveWorktree(worktreeId);
     return runs.findByWorktreeIdOrderByCreatedAtDesc(worktreeId).stream()
+        .map(run -> view(run, List.of()))
+        .toList();
+  }
+
+  @Transactional(readOnly = true)
+  public List<AgentRunView> listAll() {
+    return runs.findAllByOrderByCreatedAtDesc().stream()
         .map(run -> view(run, List.of()))
         .toList();
   }
@@ -118,7 +131,7 @@ public class AgentRunService {
     return view(run, turns.findByRunIdOrderByIndexAsc(run.id()));
   }
 
-  private AgentRun run(UUID id) {
+  private AgentRun requireRun(UUID id) {
     return runs.findById(id)
         .orElseThrow(() -> new IllegalArgumentException("Unknown agent run"));
   }

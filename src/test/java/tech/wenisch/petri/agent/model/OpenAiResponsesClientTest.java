@@ -53,7 +53,9 @@ class OpenAiResponsesClientTest {
               "http://localhost:" + server.getAddress().getPort() + "/v1",
               Duration.ofSeconds(5),
               20_000,
-              1000));
+              1000,
+              null,
+              null));
       OpenAiResponsesClient client = new OpenAiResponsesClient(
           credentials,
           HttpClient.newHttpClient(),

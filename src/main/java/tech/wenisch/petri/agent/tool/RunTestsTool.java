@@ -24,6 +24,6 @@ public class RunTestsTool implements AgentTool {
   @Override
   public Object execute(ToolExecutionContext context, Map<String, Object> input) {
     if (!input.isEmpty()) throw new IllegalArgumentException("run_tests does not accept arguments");
-    return testRuns.request(context.worktreeId());
+    return testRuns.request(context.worktreeId(), context.agentRunId());
   }
 }

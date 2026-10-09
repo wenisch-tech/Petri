@@ -17,6 +17,9 @@ class TestRun {
   @Column(name = "worktree_id", nullable = false)
   private UUID worktreeId;
 
+  @Column(name = "agent_run_id")
+  private UUID agentRunId;
+
   @Enumerated(EnumType.STRING)
   @Column(name = "build_system", nullable = false, length = 16)
   private TestBuildSystem buildSystem;
@@ -63,11 +66,13 @@ class TestRun {
   TestRun(
       UUID id,
       UUID worktreeId,
+      UUID agentRunId,
       TestBuildSystem buildSystem,
       String commandDisplay,
       Instant requestedAt) {
     this.id = id;
     this.worktreeId = worktreeId;
+    this.agentRunId = agentRunId;
     this.buildSystem = buildSystem;
     this.commandDisplay = commandDisplay;
     this.status = TestRunStatus.PROPOSED;
@@ -120,6 +125,7 @@ class TestRun {
 
   UUID id() { return id; }
   UUID worktreeId() { return worktreeId; }
+  UUID agentRunId() { return agentRunId; }
   TestBuildSystem buildSystem() { return buildSystem; }
   String commandDisplay() { return commandDisplay; }
   TestRunStatus status() { return status; }

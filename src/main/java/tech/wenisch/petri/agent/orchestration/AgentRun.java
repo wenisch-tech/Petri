@@ -7,6 +7,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.time.Duration;
 import java.util.UUID;
 import tech.wenisch.petri.agent.model.ModelProvider;
 
@@ -59,6 +60,12 @@ class AgentRun {
   @Column(name = "completed_at")
   private Instant completedAt;
 
+  @Column(name = "execution_claim_id")
+  private UUID executionClaimId;
+
+  @Column(name = "execution_claimed_at")
+  private Instant executionClaimedAt;
+
   protected AgentRun() {}
 
   AgentRun(
@@ -89,6 +96,29 @@ class AgentRun {
     startedAt = now;
   }
 
+  void claimExecution(UUID claimId, Instant now, Duration leaseDuration) {
+    if (terminal()) throw new IllegalStateException("Agent run is already terminal");
+    if (executionClaimId != null
+        && executionClaimedAt != null
+        && executionClaimedAt.plus(leaseDuration).isAfter(now)) {
+      throw new IllegalStateException("Agent run is already being executed");
+    }
+    if (status == AgentRunStatus.PENDING) start(now);
+    executionClaimId = claimId;
+    executionClaimedAt = now;
+  }
+
+  void refreshExecutionClaim(UUID claimId, Instant now) {
+    requireExecutionClaim(claimId);
+    executionClaimedAt = now;
+  }
+
+  void requireExecutionClaim(UUID claimId) {
+    if (executionClaimId == null || !executionClaimId.equals(claimId)) {
+      throw new IllegalStateException("Agent run execution claim was lost");
+    }
+  }
+
   int nextTurnIndex() {
     return nextTurnIndex++;
   }
@@ -105,6 +135,7 @@ class AgentRun {
     status = AgentRunStatus.COMPLETED;
     finalOutput = output;
     completedAt = now;
+    clearExecutionClaim();
   }
 
   void fail(String safeMessage, Instant now) {
@@ -112,6 +143,7 @@ class AgentRun {
     status = AgentRunStatus.FAILED;
     errorMessage = safeMessage;
     completedAt = now;
+    clearExecutionClaim();
   }
 
   void budgetExhausted(Instant now) {
@@ -119,12 +151,14 @@ class AgentRun {
     status = AgentRunStatus.BUDGET_EXHAUSTED;
     errorMessage = "Maximum model turns reached";
     completedAt = now;
+    clearExecutionClaim();
   }
 
   void requestCancellation(Instant now) {
     if (status == AgentRunStatus.PENDING) {
       status = AgentRunStatus.CANCELLED;
       completedAt = now;
+      clearExecutionClaim();
     } else if (status == AgentRunStatus.RUNNING) {
       status = AgentRunStatus.CANCELLATION_REQUESTED;
     }
@@ -136,6 +170,7 @@ class AgentRun {
     }
     status = AgentRunStatus.CANCELLED;
     completedAt = now;
+    clearExecutionClaim();
   }
 
   boolean terminal() {
@@ -149,6 +184,11 @@ class AgentRun {
     if (status != AgentRunStatus.RUNNING && status != AgentRunStatus.CANCELLATION_REQUESTED) {
       throw new IllegalStateException("Agent run is not active");
     }
+  }
+
+  private void clearExecutionClaim() {
+    executionClaimId = null;
+    executionClaimedAt = null;
   }
 
   private void requireStatus(AgentRunStatus expected) {

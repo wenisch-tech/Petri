@@ -17,6 +17,9 @@ class AgentRunEvent {
   @Column(name = "worktree_id", nullable = false)
   private UUID worktreeId;
 
+  @Column(name = "agent_run_id")
+  private UUID agentRunId;
+
   @Enumerated(EnumType.STRING)
   @Column(name = "event_type", nullable = false, length = 32)
   private AgentRunEventType eventType;
@@ -35,12 +38,14 @@ class AgentRunEvent {
   AgentRunEvent(
       UUID id,
       UUID worktreeId,
+      UUID agentRunId,
       AgentRunEventType eventType,
       String toolName,
       String summary,
       Instant occurredAt) {
     this.id = id;
     this.worktreeId = worktreeId;
+    this.agentRunId = agentRunId;
     this.eventType = eventType;
     this.toolName = toolName;
     this.summary = summary;
@@ -49,6 +54,7 @@ class AgentRunEvent {
 
   UUID id() { return id; }
   UUID worktreeId() { return worktreeId; }
+  UUID agentRunId() { return agentRunId; }
   AgentRunEventType eventType() { return eventType; }
   String toolName() { return toolName; }
   String summary() { return summary; }

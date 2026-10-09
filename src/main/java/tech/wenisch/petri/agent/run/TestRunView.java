@@ -6,6 +6,7 @@ import java.util.UUID;
 public record TestRunView(
     UUID id,
     UUID worktreeId,
+    UUID agentRunId,
     TestBuildSystem buildSystem,
     String command,
     TestRunStatus status,

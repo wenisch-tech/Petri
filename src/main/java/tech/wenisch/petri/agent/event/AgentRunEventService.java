@@ -45,11 +45,23 @@ public class AgentRunEventService {
       String toolName,
       String actor,
       String summary) {
+    return record(worktreeId, null, type, toolName, actor, summary);
+  }
+
+  @Transactional
+  public AgentRunEventView record(
+      UUID worktreeId,
+      UUID agentRunId,
+      AgentRunEventType type,
+      String toolName,
+      String actor,
+      String summary) {
     String safeToolName = required(toolName, "Tool name", 80);
     String safeActor = required(actor, "Actor", 320);
     String safeSummary = required(summary, "Summary", 1000);
     AgentRunEvent event = events.save(new AgentRunEvent(
-        UUID.randomUUID(), worktreeId, type, safeToolName, safeSummary, Instant.now(clock)));
+        UUID.randomUUID(), worktreeId, agentRunId, type, safeToolName, safeSummary,
+        Instant.now(clock)));
     AgentRunEventView view = view(event);
     auditLog.record(safeActor, type.name(), "PROJECT_WORKTREE", worktreeId, safeSummary);
     publisher.publishEvent(view);
@@ -67,6 +79,17 @@ public class AgentRunEventService {
     return List.copyOf(result);
   }
 
+  @Transactional(readOnly = true)
+  public List<AgentRunEventView> recentForRun(UUID agentRunId) {
+    List<AgentRunEventView> result = new ArrayList<>(events
+        .findTop200ByAgentRunIdOrderByOccurredAtDesc(agentRunId)
+        .stream()
+        .map(AgentRunEventService::view)
+        .toList());
+    Collections.reverse(result);
+    return List.copyOf(result);
+  }
+
   private static String required(String value, String label, int maxLength) {
     if (value == null || value.isBlank()) throw new IllegalArgumentException(label + " is required");
     String stripped = value.strip();
@@ -76,7 +99,7 @@ public class AgentRunEventService {
 
   private static AgentRunEventView view(AgentRunEvent event) {
     return new AgentRunEventView(
-        event.id(), event.worktreeId(), event.eventType(), event.toolName(), event.summary(),
-        event.occurredAt());
+        event.id(), event.worktreeId(), event.agentRunId(), event.eventType(), event.toolName(),
+        event.summary(), event.occurredAt());
   }
 }

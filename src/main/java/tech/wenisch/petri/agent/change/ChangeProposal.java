@@ -17,6 +17,9 @@ class ChangeProposal {
   @Column(name = "worktree_id", nullable = false)
   private UUID worktreeId;
 
+  @Column(name = "agent_run_id")
+  private UUID agentRunId;
+
   @Column(name = "file_path", nullable = false, length = 2048)
   private String filePath;
 
@@ -59,6 +62,7 @@ class ChangeProposal {
   ChangeProposal(
       UUID id,
       UUID worktreeId,
+      UUID agentRunId,
       String filePath,
       String expectedSha256,
       String replacementSha256,
@@ -67,6 +71,7 @@ class ChangeProposal {
       Instant createdAt) {
     this.id = id;
     this.worktreeId = worktreeId;
+    this.agentRunId = agentRunId;
     this.filePath = filePath;
     this.expectedSha256 = expectedSha256;
     this.replacementSha256 = replacementSha256;
@@ -109,6 +114,7 @@ class ChangeProposal {
 
   UUID id() { return id; }
   UUID worktreeId() { return worktreeId; }
+  UUID agentRunId() { return agentRunId; }
   String filePath() { return filePath; }
   String expectedSha256() { return expectedSha256; }
   String replacementSha256() { return replacementSha256; }

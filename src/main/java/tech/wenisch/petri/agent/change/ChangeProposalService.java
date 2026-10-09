@@ -51,13 +51,18 @@ public class ChangeProposalService {
 
   @Transactional
   public ChangeProposalView create(
-      UUID worktreeId, String path, String expectedSha256, String replacementContent) {
+      UUID worktreeId,
+      UUID agentRunId,
+      String path,
+      String expectedSha256,
+      String replacementContent) {
     Path worktree = worktrees.requireActiveWorktree(worktreeId);
     ReplacementPreview preview =
         files.previewReplacement(worktree, path, expectedSha256, replacementContent);
     ChangeProposal proposal = proposals.save(new ChangeProposal(
         UUID.randomUUID(),
         worktreeId,
+        agentRunId,
         preview.path(),
         preview.expectedSha256(),
         preview.replacementSha256(),
@@ -65,6 +70,13 @@ public class ChangeProposalService {
         preview.diff(),
         Instant.now(clock)));
     return view(proposal);
+  }
+
+  @Transactional(readOnly = true)
+  public java.util.List<ChangeProposalView> listForAgentRun(UUID agentRunId) {
+    return proposals.findByAgentRunIdOrderByCreatedAtAsc(agentRunId).stream()
+        .map(ChangeProposalService::view)
+        .toList();
   }
 
   @Transactional(readOnly = true)
@@ -142,7 +154,8 @@ public class ChangeProposalService {
 
   private static ChangeProposalView view(ChangeProposal proposal) {
     return new ChangeProposalView(
-        proposal.id(), proposal.worktreeId(), proposal.filePath(), proposal.expectedSha256(),
+        proposal.id(), proposal.worktreeId(), proposal.agentRunId(), proposal.filePath(),
+        proposal.expectedSha256(),
         proposal.replacementSha256(), proposal.unifiedDiff(), proposal.status(),
         proposal.createdAt(), proposal.approvedAt(), proposal.appliedAt());
   }
