@@ -206,6 +206,15 @@ public class AgentRunService {
     lockedChat(chatId).pauseQueue(Instant.now(clock));
   }
 
+  @Transactional
+  public AgentChatView updateAutomation(
+      UUID chatId, UUID actorId, boolean autoApproveChanges, boolean autoApproveTests) {
+    AgentChat chat = lockedChat(chatId);
+    if (!chat.createdBy().equals(actorId)) throw new IllegalArgumentException("Chat belongs to another creator");
+    chat.setAutomation(autoApproveChanges, autoApproveTests, Instant.now(clock));
+    return chatView(chat);
+  }
+
   @Transactional(readOnly = true)
   public AgentRunView get(UUID runId, UUID expectedWorktreeId) {
     AgentRun run = requireRun(runId);
@@ -298,7 +307,7 @@ public class AgentRunService {
     boolean active = values.stream().anyMatch(run -> !terminal(run.status()));
     int queued = (int) values.stream().filter(run -> run.status() == AgentRunStatus.PENDING).count();
     return new AgentChatView(chat.id(), chat.worktreeId(), chat.title(), chat.queuePaused(),
-        chat.approvalGateOverridden(), queued, active, chat.createdBy(), chat.createdAt(),
+        chat.approvalGateOverridden(), chat.autoApproveChanges(), chat.autoApproveTests(), queued, active, chat.createdBy(), chat.createdAt(),
         chat.updatedAt(), values);
   }
 

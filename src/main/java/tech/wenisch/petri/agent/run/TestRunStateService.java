@@ -4,9 +4,11 @@ import java.time.Clock;
 import java.time.Instant;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tech.wenisch.petri.audit.AuditLogService;
+import tech.wenisch.petri.agent.orchestration.AgentActionRequestedEvent;
 import tech.wenisch.petri.security.AppUser;
 import tech.wenisch.petri.security.AppUserRepository;
 
@@ -16,11 +18,13 @@ class TestRunStateService {
   private final AppUserRepository users;
   private final AuditLogService auditLog;
   private final Clock clock;
+  private final ApplicationEventPublisher events;
 
   @Autowired
   TestRunStateService(
-      TestRunRepository testRuns, AppUserRepository users, AuditLogService auditLog) {
-    this(testRuns, users, auditLog, Clock.systemUTC());
+      TestRunRepository testRuns, AppUserRepository users, AuditLogService auditLog,
+      ApplicationEventPublisher events) {
+    this(testRuns, users, auditLog, Clock.systemUTC(), events);
   }
 
   TestRunStateService(
@@ -28,10 +32,20 @@ class TestRunStateService {
       AppUserRepository users,
       AuditLogService auditLog,
       Clock clock) {
+    this(testRuns, users, auditLog, clock, null);
+  }
+
+  TestRunStateService(
+      TestRunRepository testRuns,
+      AppUserRepository users,
+      AuditLogService auditLog,
+      Clock clock,
+      ApplicationEventPublisher events) {
     this.testRuns = testRuns;
     this.users = users;
     this.auditLog = auditLog;
     this.clock = clock;
+    this.events = events;
   }
 
   @Transactional
@@ -42,6 +56,10 @@ class TestRunStateService {
     auditLog.record(
         "agent", "TEST_RUN_REQUESTED", "TEST_RUN", testRun.id(),
         "Requested approved execution of " + command.display());
+    if (events != null && agentRunId != null) {
+      events.publishEvent(new AgentActionRequestedEvent(
+          agentRunId, testRun.id(), AgentActionRequestedEvent.AgentActionKind.TEST_RUN));
+    }
     return view(testRun);
   }
 

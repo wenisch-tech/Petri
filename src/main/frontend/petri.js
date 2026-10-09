@@ -1,60 +1,7 @@
 import Alpine from 'alpinejs';
-import {
-  ArrowLeft,
-  Bot,
-  Boxes,
-  CircleCheck,
-  Eye,
-  FileCode2,
-  FilePlus2,
-  FolderPlus,
-  FolderGit2,
-  GitBranch,
-  History,
-  KeyRound,
-  LockKeyhole,
-  LogOut,
-  MessageSquare,
-  Moon,
-  Plus,
-  RefreshCw,
-  Save,
-  Send,
-  Settings,
-  ShieldCheck,
-  Square,
-  Sun,
-  Trash2,
-  Workflow
-} from 'lucide';
+import { hydrateIcons } from './icons';
 import { initializeWorkspace } from './workspace';
 
-const icons = {
-  ArrowLeft,
-  Bot,
-  Boxes,
-  CircleCheck,
-  Eye,
-  FileCode2,
-  FolderGit2,
-  GitBranch,
-  History,
-  KeyRound,
-  LockKeyhole,
-  LogOut,
-  MessageSquare,
-  Moon,
-  Plus,
-  RefreshCw,
-  Save,
-  Send,
-  Settings,
-  ShieldCheck,
-  Square,
-  Sun,
-  Trash2,
-  Workflow
-};
 const storedTheme = (() => {
   try { return localStorage.getItem('petri-theme'); } catch { return null; }
 })();
@@ -77,13 +24,7 @@ Alpine.store('theme', {
 });
 
 document.addEventListener('DOMContentLoaded', () => {
-  document.querySelectorAll('[data-lucide]').forEach(element => {
-    const icon = icons[element.dataset.lucide];
-    if (!icon) return;
-    const wrapper = document.createElement('span');
-    wrapper.innerHTML = icon.toSvg({ width: 18, height: 18, 'stroke-width': 1.8 });
-    element.replaceWith(wrapper.firstElementChild);
-  });
+  hydrateIcons();
 
   const chat = document.querySelector('[data-chat-run]');
   const scroller = document.querySelector('[data-chat-scroll]');

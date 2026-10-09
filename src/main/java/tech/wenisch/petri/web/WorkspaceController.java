@@ -27,6 +27,8 @@ import tech.wenisch.petri.project.Project;
 import tech.wenisch.petri.project.ProjectRepository;
 import tech.wenisch.petri.security.AppUser;
 import tech.wenisch.petri.security.AppUserRepository;
+import tech.wenisch.petri.workspace.WorkspaceModelPreferenceService;
+import tech.wenisch.petri.workspace.WorkspaceModelPreferenceView;
 
 /** The project-centric shell. Chat endpoints stay separate so their SSE contract remains stable. */
 @Controller
@@ -39,6 +41,7 @@ public class WorkspaceController {
   private final AppUserRepository users;
   private final ChangeProposalService changes;
   private final TestRunService testRuns;
+  private final WorkspaceModelPreferenceService preferences;
 
   public WorkspaceController(
       ProjectRepository projects,
@@ -47,7 +50,8 @@ public class WorkspaceController {
       ModelCredentialService modelCredentials,
       AppUserRepository users,
       ChangeProposalService changes,
-      TestRunService testRuns) {
+      TestRunService testRuns,
+      WorkspaceModelPreferenceService preferences) {
     this.projects = projects;
     this.worktrees = worktrees;
     this.runs = runs;
@@ -55,6 +59,7 @@ public class WorkspaceController {
     this.users = users;
     this.changes = changes;
     this.testRuns = testRuns;
+    this.preferences = preferences;
   }
 
   @GetMapping("/projects/{projectId}")
@@ -97,6 +102,16 @@ public class WorkspaceController {
         .filter(value -> value.provider() == ModelProvider.OLLAMA).findFirst()
         .orElseGet(() -> configuredModels.isEmpty()
             ? modelCredentials.status(ModelProvider.OLLAMA) : configuredModels.getFirst());
+    WorkspaceModelPreferenceView savedPreference = preferences.get(projectId, actor.getId());
+    ModelCredentialStatus selectedModel = savedPreference != null
+        ? configuredModels.stream().filter(value -> value.provider() == savedPreference.provider())
+            .findFirst().orElse(preferredModel)
+        : preferredModel;
+    String selectedModelName = savedPreference != null
+        && selectedModel.provider() == savedPreference.provider()
+        ? savedPreference.model() : selectedModel.model();
+    boolean savedModelUnavailable = savedPreference != null
+        && configuredModels.stream().noneMatch(value -> value.provider() == savedPreference.provider());
 
     model.addAttribute("project", project);
     model.addAttribute("worktrees", activeWorktrees);
@@ -113,6 +128,10 @@ public class WorkspaceController {
         AgentRunView::id, value -> testRuns.listForAgentRun(value.id()))));
     model.addAttribute("configuredModels", configuredModels);
     model.addAttribute("modelCredential", preferredModel);
+    model.addAttribute("selectedModelCredential", selectedModel);
+    model.addAttribute("selectedModelName", selectedModelName);
+    model.addAttribute("workspaceModelPreference", savedPreference);
+    model.addAttribute("savedModelUnavailable", savedModelUnavailable);
     model.addAttribute("modelConfigured", !configuredModels.isEmpty());
     model.addAttribute("reasoningEfforts", ReasoningEffort.values());
     model.addAttribute("textVerbosities", TextVerbosity.values());

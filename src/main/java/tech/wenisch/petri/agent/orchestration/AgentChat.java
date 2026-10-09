@@ -24,6 +24,12 @@ class AgentChat {
   @Column(name = "approval_gate_overridden", nullable = false)
   private boolean approvalGateOverridden;
 
+  @Column(name = "auto_approve_changes", nullable = false)
+  private boolean autoApproveChanges;
+
+  @Column(name = "auto_approve_tests", nullable = false)
+  private boolean autoApproveTests;
+
   @Column(name = "next_message_index", nullable = false)
   private int nextMessageIndex;
 
@@ -69,11 +75,19 @@ class AgentChat {
     updatedAt = now;
   }
 
+  void setAutomation(boolean changes, boolean tests, Instant now) {
+    autoApproveChanges = changes;
+    autoApproveTests = tests;
+    updatedAt = now;
+  }
+
   UUID id() { return id; }
   UUID worktreeId() { return worktreeId; }
   String title() { return title; }
   boolean queuePaused() { return queuePaused; }
   boolean approvalGateOverridden() { return approvalGateOverridden; }
+  boolean autoApproveChanges() { return autoApproveChanges; }
+  boolean autoApproveTests() { return autoApproveTests; }
   UUID createdBy() { return createdBy; }
   Instant createdAt() { return createdAt; }
   Instant updatedAt() { return updatedAt; }

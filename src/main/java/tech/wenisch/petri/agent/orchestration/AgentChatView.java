@@ -10,6 +10,8 @@ public record AgentChatView(
     String title,
     boolean queuePaused,
     boolean approvalGateOverridden,
+    boolean autoApproveChanges,
+    boolean autoApproveTests,
     int queuedRunCount,
     boolean active,
     UUID createdBy,

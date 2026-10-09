@@ -81,6 +81,60 @@
   .workspace-tree-actions { @apply hidden shrink-0 rounded px-2 py-1 text-ink-500 hover:bg-ink-800 hover:text-ink-100; }
   .workspace-tree-row:hover .workspace-tree-actions { @apply block; }
   .workspace-tree-children { @apply ml-3 border-l border-ink-700/60 pl-1; }
+  .workspace-select, .workspace-model-selector, .workspace-chat-selector { @apply rounded-lg border border-ink-700 bg-ink-900 px-2 py-1.5 text-xs text-ink-300; }
+  .workspace-panel-header { @apply flex h-12 items-center justify-between border-b border-ink-700/70 px-2; }
+  .workspace-panel-content { @apply min-h-0 flex-1 overflow-auto p-2; }
+  .workspace-switcher { @apply flex items-center gap-1 text-xs font-semibold; }
+  .workspace-switcher button { @apply rounded-md px-2 py-1.5 text-ink-500 hover:text-ink-100; }
+  .workspace-switcher button.is-active { @apply bg-ink-800 text-ink-100; }
+  .workspace-count { @apply ml-1 rounded-full bg-ink-700 px-1.5 py-0.5 text-[10px]; }
+  .workspace-loading, .workspace-empty, .workspace-error { @apply flex w-full items-center gap-2 rounded-lg px-3 py-3 text-left text-sm text-ink-500; }
+  .workspace-error { @apply border border-red-400/30 bg-red-400/10 text-red-300; }
+  .workspace-tree-name, .workspace-change-path { @apply min-w-0 flex-1 truncate; }
+  .workspace-change-badge { @apply ml-2 shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] text-ink-500; }
+  .workspace-change-badge.is-modified { @apply bg-amber-400/10 text-amber-300; }
+  .workspace-change-badge.is-added, .workspace-change-badge.is-untracked { @apply bg-good-500/10 text-good-500; }
+  .workspace-change-badge.is-deleted { @apply bg-red-400/10 text-red-300; }
+  .workspace-change-row { @apply flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-ink-300 hover:bg-ink-800; }
+  .workspace-editor-empty { @apply grid h-full place-content-center justify-items-center gap-3 p-8 text-center text-ink-500; }
+  .workspace-editor-empty h1 { @apply text-base font-semibold text-ink-300; }
+  .workspace-editor-empty p { @apply max-w-sm text-sm; }
+  .workspace-statusbar { @apply flex h-7 items-center gap-4 border-t border-ink-700/70 px-3 font-mono text-[11px] text-ink-500; }
+  .workspace-statusbar span:nth-child(2) { @apply min-w-0 flex-1 truncate; }
+  .workspace-dirty-dot { @apply text-brand-400; }
+  .workspace-chat-header { @apply flex min-h-12 items-center justify-between gap-2 border-b border-ink-700/70 px-3; }
+  .workspace-chat-selector { @apply max-w-64 min-w-0 flex-1 bg-transparent; }
+  .workspace-chat-tools { @apply flex items-center gap-2 border-b border-ink-700/70 px-3 py-2; }
+  .workspace-model-selector { @apply min-w-0 flex-1; }
+  .workspace-model-unavailable { @apply text-[11px] text-amber-300; }
+  .workspace-automation { @apply space-y-2 border-b border-ink-700/70 bg-ink-950/40 px-3 py-2 text-xs text-ink-300; }
+  .workspace-automation label { @apply flex items-center gap-2; }
+  .workspace-review-tray { @apply max-h-52 overflow-auto border-b border-ink-700/70 bg-amber-400/5 px-3 py-2; }
+  .workspace-review-tray > div:first-child { @apply mb-2 flex items-center gap-2 text-xs font-semibold text-amber-200; }
+  .workspace-chat-timeline { @apply min-h-0 flex-1 overflow-y-auto px-3 py-4; }
+  .workspace-chat-empty { @apply grid h-full place-content-center justify-items-center gap-3 text-center text-sm text-ink-500; }
+  .workspace-message { @apply mb-3 rounded-xl px-3 py-2.5 text-sm leading-6; }
+  .workspace-message-user { @apply ml-5 rounded-br-sm bg-brand-600 text-white; }
+  .workspace-message-assistant { @apply mr-5 rounded-bl-sm border border-ink-700 bg-ink-800 text-ink-300; }
+  .workspace-message-error { @apply mb-3 rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs text-red-300; }
+  .workspace-message-meta { @apply mt-2 text-[10px] font-medium text-white/65; }
+  .workspace-writing { @apply mb-1 block text-[10px] font-bold uppercase tracking-wider text-brand-400; }
+  .workspace-tool-turn { @apply mb-3 rounded-lg border border-ink-700/70 px-3 py-2 text-xs text-ink-500; }
+  .workspace-tool-turn summary { @apply cursor-pointer; }
+  .workspace-tool-turn pre { @apply mt-2 max-h-48 overflow-auto whitespace-pre-wrap; }
+  .workspace-review-card { @apply mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-ink-700/70 bg-ink-900 px-2.5 py-2 text-xs text-ink-300; }
+  .workspace-review-card strong { @apply min-w-0 flex-1 truncate; }
+  .workspace-review-state { @apply rounded bg-ink-800 px-1.5 py-0.5 text-[10px] text-ink-500; }
+  .workspace-new-response { @apply mx-auto mb-2 rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white shadow-lg; }
+  .workspace-composer { @apply border-t border-ink-700/70 bg-ink-900 p-3; }
+  .workspace-composer textarea { @apply min-h-20 resize-y text-sm; }
+  .workspace-composer > div { @apply mt-2 flex items-center justify-between gap-2; }
+  .workspace-dialog { @apply w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-ink-700 bg-ink-900 p-0 text-ink-100 shadow-2xl backdrop:bg-black/60; }
+  .workspace-dialog form { @apply space-y-4 p-5; }
+  .workspace-dialog h2 { @apply text-base font-semibold; }
+  .workspace-dialog p { @apply text-sm text-ink-500; }
+  .workspace-dialog label { @apply grid gap-1.5 text-sm font-medium text-ink-300; }
+  .workspace-dialog-actions { @apply flex justify-end gap-2 pt-2; }
   .cm-editor { @apply h-full text-sm; }
   .cm-scroller { @apply overflow-auto font-mono; }
   .cm-gutters { @apply bg-ink-900 text-ink-500; }
