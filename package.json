@@ -10,7 +10,10 @@
   },
   "dependencies": {
     "alpinejs": "3.17.4",
+    "dompurify": "3.2.7",
+    "highlight.js": "11.11.1",
     "lucide": "0.577.0",
+    "marked": "14.0.0",
     "monaco-editor": "^0.55.1"
   },
   "devDependencies": {

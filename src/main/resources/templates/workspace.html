@@ -94,10 +94,10 @@
         <th:block th:each="chatRun : ${chatRuns}">
           <article class="workspace-message workspace-message-user"><p th:text="${chatRun.prompt}">Prompt</p><div class="workspace-message-meta" th:text="|Turn ${chatRun.chatMessageIndex + 1} · ${chatRun.status}|">Turn</div></article>
           <th:block th:each="turn : ${chatRun.turns}">
-            <article th:if="${turn.kind.name() == 'MODEL_RESPONSE'}" class="workspace-message workspace-message-assistant"><p th:text="${turn.content}">Response</p></article>
+            <article th:if="${turn.kind.name() == 'MODEL_RESPONSE'}" class="workspace-message workspace-message-assistant"><p data-markdown th:text="${turn.content}">Response</p></article>
             <article th:if="${turn.kind.name() == 'ERROR'}" class="workspace-message-error" th:text="${turn.content}">Error</article>
           </th:block>
-          <article th:if="${chatRun.partialOutput != null}" class="workspace-message workspace-message-assistant"><small class="workspace-writing">Petri · writing…</small><p th:attr="data-run-output=${chatRun.id}" th:text="${chatRun.partialOutput}">Partial response</p></article>
+          <article th:if="${chatRun.partialOutput != null}" class="workspace-message workspace-message-assistant"><small class="workspace-writing">Petri · writing…</small><p data-markdown th:attr="data-run-output=${chatRun.id}" th:text="${chatRun.partialOutput}">Partial response</p></article>
         </th:block>
       </div>
       <button class="workspace-new-response" data-new-response hidden>New response ↓</button>

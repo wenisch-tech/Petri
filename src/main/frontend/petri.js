@@ -1,6 +1,7 @@
 import Alpine from 'alpinejs';
 import { hydrateIcons } from './icons';
 import { initializeWorkspace } from './workspace';
+import { hydrateMarkdown, scheduleMarkdown } from './markdown';
 
 const storedTheme = (() => {
   try { return localStorage.getItem('petri-theme'); } catch { return null; }
@@ -26,6 +27,7 @@ Alpine.store('theme', {
 
 function bootPetri() {
   hydrateIcons();
+  hydrateMarkdown(document);
 
   const chat = document.querySelector('[data-chat-run]');
   const scroller = document.querySelector('[data-chat-scroll]');
@@ -76,7 +78,8 @@ function bootPetri() {
       try {
         const value = JSON.parse(event.data);
         const follow = atBottom();
-        ensureOutput(value.runId).textContent += value.delta;
+        const output = ensureOutput(value.runId);
+        scheduleMarkdown(output, (output.dataset.raw ?? output.textContent ?? '') + value.delta);
         if (follow && scroller) scroller.scrollTop = scroller.scrollHeight;
       } catch { /* ignore malformed stream data; state polling recovers */ }
     });
