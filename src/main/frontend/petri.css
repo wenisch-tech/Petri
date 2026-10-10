@@ -59,12 +59,31 @@
   .icon-button { @apply inline-grid size-8 place-items-center rounded-md text-ink-500 transition hover:bg-ink-800 hover:text-ink-100; }
   .workspace-body { @apply h-dvh overflow-hidden; }
   .workspace-topbar { @apply h-14; }
+  .workspace-gitbar { @apply relative flex h-20 min-w-0 flex-col items-stretch justify-center gap-1 border-b border-ink-700/70 bg-ink-900 px-3 py-1 text-xs text-ink-300; }
+  .workspace-gitbar-primary, .workspace-gitbar-secondary { @apply flex min-w-0 shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden; }
+  .workspace-gitbar-group { @apply flex shrink-0 items-center gap-1.5; }
+  .workspace-gitbar-group > svg { @apply size-4 text-ink-500; }
+  .workspace-branch-select { @apply min-w-40; }
+  .workspace-git-indicators { @apply flex shrink-0 items-center gap-2 font-mono text-[11px] text-ink-500; }
+  .workspace-git-indicators .is-dirty { @apply text-amber-300; }
+  .workspace-rebase-badge { @apply rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-1 font-sans font-semibold text-amber-200; }
+  .workspace-git-actions { @apply flex shrink-0 items-center gap-0.5; }
+  .workspace-git-button { @apply inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-ink-300 hover:bg-ink-800 hover:text-ink-100 disabled:cursor-not-allowed disabled:opacity-40; }
+  .workspace-git-button svg { @apply size-4; }
+  .workspace-git-new-branch { @apply shrink-0 border border-brand-500/30 bg-brand-500/10 text-brand-400 hover:border-brand-500/60 hover:bg-brand-500/20 hover:text-white; }
+  .workspace-git-menu { @apply absolute left-64 top-[4.5rem] z-40 min-w-52 rounded-lg border border-ink-700 bg-ink-900 p-1 shadow-2xl; }
+  .workspace-git-menu button { @apply flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs text-ink-300 hover:bg-ink-800 disabled:opacity-40; }
+  .workspace-git-menu svg { @apply size-4; }
+  .workspace-git-rebase-actions { @apply flex shrink-0 items-center gap-1; }
+  .workspace-git-output { @apply absolute left-3 right-3 top-[4.5rem] z-30 rounded-lg border border-red-400/30 bg-ink-950 p-3 text-red-200 shadow-2xl; }
+  .workspace-git-output summary { @apply cursor-pointer font-semibold; }
+  .workspace-git-output pre { @apply mt-2 max-h-52 overflow-auto whitespace-pre-wrap text-xs; }
   .workspace-shell {
     --explorer-width: 17rem;
     --chat-width: 25rem;
     display: grid;
     grid-template-columns: var(--explorer-width) 5px minmax(0, 1fr) 5px var(--chat-width);
-    height: calc(100dvh - 3.5rem);
+    height: calc(100dvh - 8.5rem);
     min-height: 0;
   }
   .workspace-explorer, .workspace-chat { @apply min-h-0 bg-ink-900; }
@@ -118,6 +137,11 @@
   .workspace-change-badge.is-added, .workspace-change-badge.is-untracked { @apply bg-good-500/10 text-good-500; }
   .workspace-change-badge.is-deleted { @apply bg-red-400/10 text-red-300; }
   .workspace-change-row { @apply flex w-full items-center gap-2 rounded-md px-2 py-2 text-left text-sm text-ink-300 hover:bg-ink-800; }
+  .workspace-change-section { @apply border-b border-ink-700/50 py-1; }
+  .workspace-change-section-header { @apply flex items-center gap-2 px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide text-ink-500; }
+  .workspace-change-section-header span { @apply min-w-0 flex-1; }
+  .workspace-change-section-action { @apply rounded px-1.5 py-1 text-[10px] normal-case text-ink-500 hover:bg-ink-800 hover:text-ink-100; }
+  .workspace-change-row-action { @apply rounded px-1.5 py-1 text-[10px] text-ink-500 hover:bg-ink-700 hover:text-ink-100; }
   .workspace-editor-empty { @apply grid h-full place-content-center justify-items-center gap-3 p-8 text-center text-ink-500; }
   .workspace-editor-empty h1 { @apply text-base font-semibold text-ink-300; }
   .workspace-editor-empty p { @apply max-w-sm text-sm; }
@@ -156,6 +180,8 @@
   .workspace-dialog h2 { @apply text-base font-semibold; }
   .workspace-dialog p { @apply text-sm text-ink-500; }
   .workspace-dialog label { @apply grid gap-1.5 text-sm font-medium text-ink-300; }
+  .workspace-dialog .workspace-check { @apply flex items-center gap-2; }
+  .workspace-dialog-error { @apply min-h-5 text-sm text-red-300; }
   .workspace-dialog-actions { @apply flex justify-end gap-2 pt-2; }
   [data-editor-host] > .monaco-editor, [data-editor-host] > .monaco-diff-editor { @apply h-full w-full; }
   .chat-collapsed { grid-template-columns: var(--explorer-width) 5px minmax(0, 1fr) 0 0; }
@@ -163,7 +189,7 @@
   @media (max-width: 900px) {
     .workspace-shell { grid-template-columns: minmax(0, 1fr); }
     .workspace-resizer { @apply hidden; }
-    .workspace-explorer, .workspace-chat { @apply fixed inset-y-14 z-20 w-[min(88vw,24rem)] shadow-2xl; }
+    .workspace-explorer, .workspace-chat { @apply fixed bottom-0 top-[8.5rem] z-20 w-[min(88vw,24rem)] shadow-2xl; }
     .workspace-explorer { @apply left-0 -translate-x-full; }
     .workspace-chat { @apply right-0; }
     .chat-collapsed .workspace-chat { @apply hidden; }

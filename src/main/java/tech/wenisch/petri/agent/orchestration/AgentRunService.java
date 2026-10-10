@@ -13,6 +13,7 @@ import tech.wenisch.petri.agent.model.ModelProvider;
 import tech.wenisch.petri.audit.AuditLogService;
 import tech.wenisch.petri.security.AppUserRepository;
 import tech.wenisch.petri.workspace.WorktreeLocator;
+import tech.wenisch.petri.git.WorkspaceGitOperationCoordinator;
 
 @Service
 public class AgentRunService {
@@ -27,6 +28,7 @@ public class AgentRunService {
   private final AppUserRepository users;
   private final WorktreeLocator worktrees;
   private final AuditLogService auditLog;
+  private final WorkspaceGitOperationCoordinator gitOperations;
   private final Clock clock;
 
   @Autowired
@@ -38,8 +40,10 @@ public class AgentRunService {
       ModelCredentialService credentials,
       AppUserRepository users,
       WorktreeLocator worktrees,
-      AuditLogService auditLog) {
-    this(runs, chats, summaries, turns, credentials, users, worktrees, auditLog, Clock.systemUTC());
+      AuditLogService auditLog,
+      WorkspaceGitOperationCoordinator gitOperations) {
+    this(runs, chats, summaries, turns, credentials, users, worktrees, auditLog,
+        gitOperations, Clock.systemUTC());
   }
 
   AgentRunService(
@@ -51,6 +55,7 @@ public class AgentRunService {
       AppUserRepository users,
       WorktreeLocator worktrees,
       AuditLogService auditLog,
+      WorkspaceGitOperationCoordinator gitOperations,
       Clock clock) {
     this.runs = runs;
     this.chats = chats;
@@ -60,6 +65,7 @@ public class AgentRunService {
     this.users = users;
     this.worktrees = worktrees;
     this.auditLog = auditLog;
+    this.gitOperations = gitOperations;
     this.clock = clock;
   }
 
@@ -70,6 +76,7 @@ public class AgentRunService {
       UUID actorId,
       String auditActor) {
     worktrees.requireActiveWorktree(worktreeId);
+    gitOperations.assertAgentAllowed(worktreeId);
     if (!users.existsById(actorId)) throw new IllegalArgumentException("Unknown run creator");
     String prompt = required(command.prompt(), "Prompt", MAX_PROMPT_LENGTH);
     ModelProvider provider = command.provider() == null ? ModelProvider.OPENAI : command.provider();
@@ -116,6 +123,7 @@ public class AgentRunService {
     AgentChat chat = lockedChat(chatId);
     if (!chat.createdBy().equals(actorId)) throw new IllegalArgumentException("Chat belongs to another creator");
     worktrees.requireActiveWorktree(chat.worktreeId());
+    gitOperations.assertAgentAllowed(chat.worktreeId());
     if (!users.existsById(actorId)) throw new IllegalArgumentException("Unknown run creator");
     String prompt = required(command.prompt(), "Prompt", MAX_PROMPT_LENGTH);
     ModelProvider provider = command.provider() == null ? ModelProvider.OPENAI : command.provider();
@@ -241,6 +249,13 @@ public class AgentRunService {
     return runs.findAllByOrderByCreatedAtDesc().stream()
         .map(run -> view(run, List.of()))
         .toList();
+  }
+
+  @Transactional(readOnly = true)
+  public boolean hasActiveForWorktree(UUID worktreeId) {
+    return runs.existsByWorktreeIdAndStatusIn(worktreeId, java.util.EnumSet.of(
+        AgentRunStatus.PENDING, AgentRunStatus.RUNNING,
+        AgentRunStatus.CANCELLATION_REQUESTED));
   }
 
   @Transactional

@@ -6,8 +6,8 @@
   <meta name="_csrf" th:content="${_csrf.token}">
   <meta name="_csrf_header" th:content="${_csrf.headerName}">
   <title th:text="|${project.name} · Workspace · Petri|">Workspace · Petri</title>
-  <link rel="stylesheet" href="/css/petri.css?v=22">
-  <script defer src="/js/petri.js?v=22"></script>
+  <link rel="stylesheet" href="/css/petri.css?v=23">
+  <script defer src="/js/petri.js?v=23"></script>
 </head>
 <body class="workspace-body">
   <header class="topbar workspace-topbar">
@@ -19,12 +19,6 @@
         </a>
         <span class="hidden h-5 border-l border-ink-700 sm:block"></span>
         <span class="truncate text-sm font-medium" th:text="${project.name}">Project</span>
-        <select class="workspace-select" data-worktree-selector th:disabled="${#lists.isEmpty(worktrees)}">
-          <option th:if="${#lists.isEmpty(worktrees)}">No active worktree</option>
-          <option th:each="item : ${worktrees}" th:value="${item.id}"
-                  th:selected="${selectedWorktree != null && item.id == selectedWorktree.id}"
-                  th:text="|${item.gitRevision} · ${#strings.substring(item.id.toString(), 0, 8)}|">worktree</option>
-        </select>
       </div>
       <nav class="hidden items-center gap-1 lg:flex">
         <a class="nav-link bg-ink-800 text-ink-100" href="/projects">Workspace</a>
@@ -37,8 +31,69 @@
     </div>
   </header>
 
+  <section class="workspace-gitbar" data-git-bar>
+    <div class="workspace-gitbar-primary">
+      <div class="workspace-gitbar-group">
+        <i data-lucide="GitBranch"></i>
+        <select class="workspace-select workspace-branch-select" data-branch-selector aria-label="Active branch">
+          <option value="">Select branch…</option>
+          <optgroup label="Local branches">
+            <option th:each="branch : ${branches}" th:if="${branch.kind.name() == 'LOCAL'}"
+                    th:value="|LOCAL:${branch.name}|"
+                    th:selected="${selectedWorktree != null && !selectedWorktree.detached && selectedWorktree.branchName == branch.name}"
+                    th:text="${branch.name}">main</option>
+          </optgroup>
+          <optgroup label="Remote branches">
+            <option th:each="branch : ${branches}" th:if="${branch.kind.name() == 'REMOTE'}"
+                    th:value="|REMOTE:${branch.name}|" th:text="|origin/${branch.name}|">origin/main</option>
+          </optgroup>
+        </select>
+      </div>
+      <button class="workspace-git-button workspace-git-new-branch" type="button" data-git-new-branch title="Create a new branch and worktree">
+        <i data-lucide="GitBranchPlus"></i><span>New branch</span>
+      </button>
+      <div class="workspace-gitbar-group">
+        <i data-lucide="FolderGit2"></i>
+        <select class="workspace-select" data-worktree-selector th:disabled="${#lists.isEmpty(worktrees)}" aria-label="Active worktree">
+          <option th:if="${#lists.isEmpty(worktrees)}" value="">No active worktree</option>
+          <option th:each="item : ${worktrees}" th:value="${item.id}"
+                  th:selected="${selectedWorktree != null && item.id == selectedWorktree.id}"
+                  th:text="${item.detached ? 'detached · ' + #strings.substring(item.id.toString(), 0, 8) : item.branchName}">worktree</option>
+        </select>
+      </div>
+      <div class="workspace-git-indicators" data-git-indicators>
+        <span data-git-sync th:text="${gitStatus == null ? 'No worktree' : '↑' + gitStatus.ahead + ' ↓' + gitStatus.behind}">↑0 ↓0</span>
+        <span data-git-dirty th:classappend="${gitStatus != null && !gitStatus.clean} ? ' is-dirty'"
+              th:text="${gitStatus == null ? '' : (gitStatus.clean ? 'Clean' : 'Changes')}">Clean</span>
+        <span class="workspace-rebase-badge" data-git-rebase
+              th:hidden="${gitStatus == null || gitStatus.operation.name() != 'REBASE_IN_PROGRESS'}">Rebase in progress</span>
+      </div>
+    </div>
+    <div class="workspace-gitbar-secondary">
+      <div class="workspace-git-actions">
+        <button class="workspace-git-button" type="button" data-git-fetch><i data-lucide="CloudDownload"></i><span>Fetch</span></button>
+        <button class="workspace-git-button" type="button" data-git-pull th:disabled="${selectedWorktree == null || selectedWorktree.detached}"><i data-lucide="GitPullRequestArrow"></i><span>Pull</span></button>
+        <button class="workspace-git-button" type="button" data-git-rebase-action th:disabled="${selectedWorktree == null || selectedWorktree.detached}"><i data-lucide="GitCompare"></i><span>Rebase</span></button>
+        <button class="workspace-git-button" type="button" data-git-push th:disabled="${selectedWorktree == null || selectedWorktree.detached}"><i data-lucide="CloudUpload"></i><span>Push</span></button>
+        <button class="workspace-git-button" type="button" data-git-commit th:disabled="${selectedWorktree == null}"><i data-lucide="GitCommitHorizontal"></i><span>Commit</span></button>
+        <button class="workspace-git-button" type="button" data-git-more title="More Git actions" aria-label="More Git actions"><i data-lucide="MoreHorizontal"></i><span>More</span></button>
+      </div>
+      <div class="workspace-git-rebase-actions" data-git-rebase-controls
+           th:hidden="${gitStatus == null || gitStatus.operation.name() != 'REBASE_IN_PROGRESS'}">
+        <button class="btn-primary !min-h-8 !px-3 text-xs" type="button" data-git-rebase-continue>Continue</button>
+        <button class="btn-secondary !min-h-8 !px-3 text-xs" type="button" data-git-rebase-abort>Abort</button>
+      </div>
+    </div>
+    <div class="workspace-git-menu" data-git-menu hidden>
+      <button type="button" data-git-force-push th:disabled="${selectedWorktree == null || selectedWorktree.detached}"><i data-lucide="CloudUpload"></i>Force with lease…</button>
+      <button type="button" data-git-delete-branch th:disabled="${selectedWorktree == null || selectedWorktree.detached}"><i data-lucide="Trash2"></i>Delete branch…</button>
+      <button type="button" data-git-delete-remote><i data-lucide="Trash2"></i>Delete remote branch…</button>
+    </div>
+    <details class="workspace-git-output" data-git-output hidden><summary>Git details</summary><pre data-git-output-text></pre></details>
+  </section>
+
   <main class="workspace-shell" data-workspace
-        th:attr="data-project-id=${project.id},data-worktree-id=${selectedWorktree != null ? selectedWorktree.id : null},data-chat-id=${selectedChat != null ? selectedChat.id : null},data-selected-file=${selectedFile}">
+        th:attr="data-project-id=${project.id},data-worktree-id=${selectedWorktree != null ? selectedWorktree.id : null},data-branch=${selectedWorktree != null ? selectedWorktree.branchName : null},data-detached=${selectedWorktree != null ? selectedWorktree.detached : true},data-chat-id=${selectedChat != null ? selectedChat.id : null},data-selected-file=${selectedFile}">
     <aside class="workspace-explorer" data-workspace-explorer>
       <div class="workspace-panel-header">
         <div class="workspace-switcher">
@@ -105,6 +160,10 @@
     </aside>
 
     <dialog class="workspace-dialog" data-workspace-dialog><form method="dialog" data-dialog-form><h2 data-dialog-title>Workspace action</h2><p data-dialog-description></p><label data-dialog-path-label>Path<input class="field" data-dialog-path required></label><label data-dialog-confirmation-label hidden>Type the exact path to confirm<input class="field" data-dialog-confirmation></label><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm" data-dialog-confirm>Continue</button></div></form></dialog>
+    <dialog class="workspace-dialog" data-git-branch-dialog><form method="dialog"><h2>New branch</h2><p>Create a local branch and its dedicated worktree.</p><label>Branch name<input class="field" data-git-branch-name required autocomplete="off" placeholder="feature/my-change"></label><label>Start from<select class="field" data-git-branch-start><option th:each="branch : ${branches}" th:value="${branch.kind.name() == 'REMOTE' ? 'origin/' + branch.name : branch.name}" th:text="${branch.kind.name() == 'REMOTE' ? 'origin/' + branch.name : branch.name}">main</option></select></label><div class="workspace-dialog-error" data-git-dialog-error></div><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm">Create branch</button></div></form></dialog>
+    <dialog class="workspace-dialog" data-git-commit-dialog><form method="dialog"><h2>Commit changes</h2><p>Commit staged changes, or stage every visible worktree change first.</p><label>Commit message<textarea class="field" data-git-commit-message required maxlength="10000" rows="4"></textarea></label><label class="workspace-check"><input type="checkbox" data-git-stage-all> Stage all changes before committing</label><div class="workspace-dialog-error" data-git-dialog-error></div><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm">Commit</button></div></form></dialog>
+    <dialog class="workspace-dialog" data-git-rebase-dialog><form method="dialog"><h2>Rebase branch</h2><p>The worktree must be clean. Conflicts remain in the editor for manual resolution.</p><label>Rebase onto<select class="field" data-git-rebase-target><option value="">Configured upstream</option><option th:each="branch : ${branches}" th:value="${branch.kind.name() == 'REMOTE' ? 'origin/' + branch.name : branch.name}" th:text="${branch.kind.name() == 'REMOTE' ? 'origin/' + branch.name : branch.name}">origin/main</option></select></label><div class="workspace-dialog-error" data-git-dialog-error></div><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm">Start rebase</button></div></form></dialog>
+    <dialog class="workspace-dialog" data-git-confirm-dialog><form method="dialog"><h2 data-git-confirm-title>Confirm Git action</h2><p data-git-confirm-description></p><label data-git-target-label hidden>Remote branch<select class="field" data-git-confirm-target><option th:each="branch : ${branches}" th:if="${branch.kind.name() == 'REMOTE'}" th:value="${branch.name}" th:text="|origin/${branch.name}|">origin/main</option></select></label><label data-git-confirm-label>Type the branch name to confirm<input class="field" data-git-confirm-input autocomplete="off"></label><label class="workspace-check" data-git-force-label hidden><input type="checkbox" data-git-force> Force-delete an unmerged local branch</label><div class="workspace-dialog-error" data-git-dialog-error></div><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm" data-git-confirm-button>Continue</button></div></form></dialog>
   </main>
 </body>
 </html>

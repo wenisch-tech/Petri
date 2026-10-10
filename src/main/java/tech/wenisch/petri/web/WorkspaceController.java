@@ -24,6 +24,9 @@ import tech.wenisch.petri.agent.run.TestRunService;
 import tech.wenisch.petri.git.ProjectWorktreeService;
 import tech.wenisch.petri.git.ProjectWorktreeStatus;
 import tech.wenisch.petri.git.ProjectWorktreeView;
+import tech.wenisch.petri.git.GitBranchView;
+import tech.wenisch.petri.git.WorkspaceGitService;
+import tech.wenisch.petri.git.WorkspaceGitStatusView;
 import tech.wenisch.petri.project.Project;
 import tech.wenisch.petri.project.ProjectRepository;
 import tech.wenisch.petri.security.AppUser;
@@ -45,6 +48,7 @@ public class WorkspaceController {
   private final TestRunService testRuns;
   private final WorkspaceModelPreferenceService preferences;
   private final WorkspaceEditorService workspaceEditor;
+  private final WorkspaceGitService git;
 
   public WorkspaceController(
       ProjectRepository projects,
@@ -55,7 +59,8 @@ public class WorkspaceController {
       ChangeProposalService changes,
       TestRunService testRuns,
       WorkspaceModelPreferenceService preferences,
-      WorkspaceEditorService workspaceEditor) {
+      WorkspaceEditorService workspaceEditor,
+      WorkspaceGitService git) {
     this.projects = projects;
     this.worktrees = worktrees;
     this.runs = runs;
@@ -65,6 +70,7 @@ public class WorkspaceController {
     this.testRuns = testRuns;
     this.preferences = preferences;
     this.workspaceEditor = workspaceEditor;
+    this.git = git;
   }
 
   @GetMapping("/projects/{projectId}")
@@ -117,10 +123,15 @@ public class WorkspaceController {
         ? savedPreference.model() : selectedModel.model();
     boolean savedModelUnavailable = savedPreference != null
         && configuredModels.stream().noneMatch(value -> value.provider() == savedPreference.provider());
+    List<GitBranchView> branches = gitData(() -> git.branches(projectId), List.of());
+    WorkspaceGitStatusView gitStatus = selectedWorktree == null ? null
+        : gitData(() -> git.status(selectedWorktree.id()), null);
 
     model.addAttribute("project", project);
     model.addAttribute("worktrees", activeWorktrees);
     model.addAttribute("selectedWorktree", selectedWorktree);
+    model.addAttribute("branches", branches);
+    model.addAttribute("gitStatus", gitStatus);
     model.addAttribute("selectedFile", file);
     model.addAttribute("workspaceEntries", workspaceEntries(selectedWorktree));
     model.addAttribute("chats", chats);
@@ -164,5 +175,13 @@ public class WorkspaceController {
   private AppUser actor(Principal principal) {
     return users.findByEmailIgnoreCase(principal.getName())
         .orElseThrow(() -> new IllegalArgumentException("Unknown user"));
+  }
+
+  private static <T> T gitData(java.util.function.Supplier<T> supplier, T fallback) {
+    try {
+      return supplier.get();
+    } catch (IllegalArgumentException | IllegalStateException exception) {
+      return fallback;
+    }
   }
 }

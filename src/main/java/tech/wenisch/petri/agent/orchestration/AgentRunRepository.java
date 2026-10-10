@@ -21,6 +21,8 @@ interface AgentRunRepository extends JpaRepository<AgentRun, UUID> {
 
   List<AgentRun> findByStatusOrderByCreatedAtAsc(AgentRunStatus status);
 
+  boolean existsByWorktreeIdAndStatusIn(UUID worktreeId, java.util.Collection<AgentRunStatus> statuses);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select run from AgentRun run where run.id = :id")
   Optional<AgentRun> findForUpdateById(@Param("id") UUID id);

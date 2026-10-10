@@ -12,6 +12,8 @@ import org.springframework.data.repository.query.Param;
 interface TestRunRepository extends JpaRepository<TestRun, UUID> {
   List<TestRun> findByAgentRunIdOrderByRequestedAtAsc(UUID agentRunId);
 
+  boolean existsByWorktreeIdAndStatusIn(UUID worktreeId, java.util.Collection<TestRunStatus> statuses);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   @Query("select testRun from TestRun testRun where testRun.id = :id")
   Optional<TestRun> findForUpdateById(@Param("id") UUID id);

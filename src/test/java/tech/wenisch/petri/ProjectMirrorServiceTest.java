@@ -52,6 +52,9 @@ import tech.wenisch.petri.agent.model.SaveModelCredentialCommand;
 import tech.wenisch.petri.git.ProjectMirrorService;
 import tech.wenisch.petri.git.ProjectWorktreeService;
 import tech.wenisch.petri.git.ProjectWorktreeStatus;
+import tech.wenisch.petri.git.GitBranchKind;
+import tech.wenisch.petri.git.WorkspaceGitService;
+import tech.wenisch.petri.git.WorkspaceGitOperationState;
 import tech.wenisch.petri.project.CreateProjectCommand;
 import tech.wenisch.petri.project.Project;
 import tech.wenisch.petri.project.ProjectService;
@@ -83,6 +86,7 @@ class ProjectMirrorServiceTest {
   @Autowired ProjectService projectService;
   @Autowired ProjectMirrorService mirrors;
   @Autowired ProjectWorktreeService worktrees;
+  @Autowired WorkspaceGitService workspaceGit;
   @Autowired WorktreeLocator worktreeLocator;
   @Autowired AgentToolRegistry tools;
   @Autowired ChangeProposalService proposals;
@@ -420,6 +424,129 @@ class ProjectMirrorServiceTest {
     assertThat(worktree.gitRevision()).isEqualTo("master");
     assertThat(worktreeLocator.requireActiveWorktree(worktree.id()).resolve("README.md"))
         .hasContent("first revision\n");
+  }
+
+  @Test
+  void managesBranchBoundWorktreeStageAndCommit() throws Exception {
+    Path source = createSourceRepository();
+    Project project = projectService.create(
+        new CreateProjectCommand(
+            "Branch workflow " + UUID.randomUUID(), source.toString(), "main"),
+        ADMIN_EMAIL);
+    mirrors.synchronize(project.getId(), ADMIN_EMAIL);
+
+    Path mirror = temporaryDirectory.resolve("workspace/mirrors/" + project.getId() + ".git");
+    assertThat(git("--git-dir=" + mirror, "rev-parse", "refs/remotes/origin/main"))
+        .isNotBlank();
+    assertThat(workspaceGit.branches(project.getId()))
+        .anySatisfy(branch -> {
+          assertThat(branch.name()).isEqualTo("main");
+          assertThat(branch.kind()).isEqualTo(GitBranchKind.LOCAL);
+        })
+        .anySatisfy(branch -> {
+          assertThat(branch.name()).isEqualTo("main");
+          assertThat(branch.kind()).isEqualTo(GitBranchKind.REMOTE);
+        });
+
+    var worktree = workspaceGit.createBranch(
+        project.getId(), "feature/api", "origin/main", ADMIN_EMAIL);
+    assertThat(worktree.branchName()).isEqualTo("feature/api");
+    assertThat(worktree.upstreamBranch()).isNull();
+    assertThat(worktree.detached()).isFalse();
+
+    Path root = worktreeLocator.requireActiveWorktree(worktree.id());
+    Files.writeString(root.resolve("README.md"), "branch revision\n");
+    Files.writeString(root.resolve(".gitignore"), "target/\n");
+    assertThat(workspaceGit.status(worktree.id()).unstaged())
+        .extracting(value -> value.path())
+        .contains("README.md");
+    assertThat(workspaceGit.status(worktree.id()).untracked())
+        .extracting(value -> value.path())
+        .contains(".gitignore");
+
+    workspaceGit.stage(worktree.id(), List.of("README.md", ".gitignore"), ADMIN_EMAIL);
+    assertThat(workspaceGit.status(worktree.id()).staged())
+        .extracting(value -> value.path())
+        .contains("README.md", ".gitignore");
+    workspaceGit.commit(worktree.id(), "Implement branch workflow", false, ADMIN_EMAIL);
+
+    assertThat(workspaceGit.status(worktree.id()).clean()).isTrue();
+    assertThat(git("-C", root.toString(), "log", "-1", "--pretty=%s"))
+        .isEqualTo("Implement branch workflow");
+    assertThatIllegalArgumentException()
+        .isThrownBy(() -> workspaceGit.stage(
+            worktree.id(), List.of(".git/config"), ADMIN_EMAIL));
+
+    mockMvc.perform(get("/workspace/api/projects/{projectId}/branches", project.getId())
+            .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN")))
+        .andExpect(status().isOk())
+        .andExpect(jsonPath("$[?(@.name == 'feature/api')].worktreeId")
+            .value(org.hamcrest.Matchers.hasItem(worktree.id().toString())));
+    mockMvc.perform(get("/workspace/projects/{projectId}", project.getId())
+            .param("worktree", worktree.id().toString())
+            .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN")))
+        .andExpect(status().isOk())
+        .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+            .string(org.hamcrest.Matchers.containsString("data-git-bar")))
+        .andExpect(org.springframework.test.web.servlet.result.MockMvcResultMatchers.content()
+            .string(org.hamcrest.Matchers.containsString("feature/api")));
+    mockMvc.perform(post("/workspace/api/worktrees/{worktreeId}/git/stage", worktree.id())
+            .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN"))
+            .contentType("application/json")
+            .content("{\"paths\":[\"README.md\"]}"))
+        .andExpect(status().isForbidden());
+
+    assertThat(workspaceGit.push(worktree.id(), false, ADMIN_EMAIL).upstreamBranch())
+        .isEqualTo("origin/feature/api");
+    assertThat(git("-C", source.toString(), "rev-parse", "refs/heads/feature/api"))
+        .isNotBlank();
+    worktrees.remove(worktree.id(), ADMIN_EMAIL);
+    workspaceGit.deleteBranch(
+        project.getId(), "feature/api", GitBranchKind.REMOTE, false, "feature/api", ADMIN_EMAIL);
+    workspaceGit.deleteBranch(
+        project.getId(), "feature/api", GitBranchKind.LOCAL, true, "feature/api", ADMIN_EMAIL);
+    assertThat(workspaceGit.branches(project.getId()))
+        .noneSatisfy(branch -> assertThat(branch.name()).isEqualTo("feature/api"));
+  }
+
+  @Test
+  void preservesAndRecoversAConflictingRebase() throws Exception {
+    Path source = createSourceRepository();
+    Project project = projectService.create(
+        new CreateProjectCommand(
+            "Rebase workflow " + UUID.randomUUID(), source.toString(), "main"),
+        ADMIN_EMAIL);
+    mirrors.synchronize(project.getId(), ADMIN_EMAIL);
+    var worktree = workspaceGit.createBranch(
+        project.getId(), "feature/rebase", "main", ADMIN_EMAIL);
+    Path root = worktreeLocator.requireActiveWorktree(worktree.id());
+
+    Files.writeString(root.resolve("README.md"), "feature revision\n");
+    workspaceGit.stage(worktree.id(), List.of("README.md"), ADMIN_EMAIL);
+    workspaceGit.commit(worktree.id(), "Feature revision", false, ADMIN_EMAIL);
+
+    Files.writeString(source.resolve("README.md"), "main revision\n");
+    git("-C", source.toString(), "add", "README.md");
+    git("-C", source.toString(), "commit", "-m", "Main revision");
+    workspaceGit.fetch(project.getId(), ADMIN_EMAIL);
+
+    var conflicted = workspaceGit.rebase(
+        worktree.id(), "origin/main", ADMIN_EMAIL);
+    assertThat(conflicted.operation()).isEqualTo(WorkspaceGitOperationState.REBASE_IN_PROGRESS);
+    assertThat(conflicted.conflicts()).contains("README.md");
+
+    var aborted = workspaceGit.abortRebase(worktree.id(), ADMIN_EMAIL);
+    assertThat(aborted.operation()).isEqualTo(WorkspaceGitOperationState.IDLE);
+    assertThat(root.resolve("README.md")).hasContent("feature revision\n");
+
+    workspaceGit.rebase(worktree.id(), "origin/main", ADMIN_EMAIL);
+    Files.writeString(root.resolve("README.md"), "resolved revision\n");
+    workspaceGit.stage(worktree.id(), List.of("README.md"), ADMIN_EMAIL);
+    var completed = workspaceGit.continueRebase(worktree.id(), ADMIN_EMAIL);
+    assertThat(completed.operation()).isEqualTo(WorkspaceGitOperationState.IDLE);
+    assertThat(completed.clean()).isTrue();
+    assertThat(git("-C", root.toString(), "merge-base", "--is-ancestor", "origin/main", "HEAD"))
+        .isEmpty();
   }
 
   private Path createSourceRepository() throws Exception {

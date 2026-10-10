@@ -108,6 +108,47 @@ public class ProjectWorktreeService {
   }
 
   @Transactional
+  ProjectWorktreeView createBranchWorktree(
+      UUID projectId,
+      String branchName,
+      String startPoint,
+      String upstreamBranch,
+      String actorEmail) {
+    Project project = project(projectId);
+    AppUser actor = actor(actorEmail);
+    if (worktrees.existsByProjectIdAndBranchNameAndStatus(
+        projectId, branchName, ProjectWorktreeStatus.ACTIVE)) {
+      return worktrees.findByProjectIdAndStatusOrderByCreatedAtDesc(
+              projectId, ProjectWorktreeStatus.ACTIVE).stream()
+          .filter(value -> branchName.equals(value.branchName()))
+          .findFirst().map(ProjectWorktreeService::view)
+          .orElseThrow(() -> new IllegalStateException("Branch already has an active worktree"));
+    }
+    UUID worktreeId = UUID.randomUUID();
+    try {
+      Path mirror = paths.mirror(projectId);
+      Path worktree = paths.runWorktree(projectId, worktreeId);
+      String relativePath = paths.root().relativize(worktree).toString();
+      GitCommandResult result = git.run(
+          paths.root(),
+          List.of(
+              "--git-dir=" + mirror,
+              "worktree", "add", "--", worktree.toString(), branchName));
+      requireSuccess(result, "create branch worktree");
+      Instant now = Instant.now(clock);
+      ProjectWorktree record = worktrees.save(new ProjectWorktree(
+          worktreeId, projectId, startPoint, branchName, upstreamBranch,
+          relativePath, actor.getId(), now));
+      auditLog.record(
+          actor.getEmail(), "PROJECT_BRANCH_WORKTREE_CREATED", "PROJECT_WORKTREE", worktreeId,
+          "Created worktree for branch " + branchName + " in project " + project.getName());
+      return view(record);
+    } catch (IOException exception) {
+      throw new GitOperationException("Could not create branch worktree", exception);
+    }
+  }
+
+  @Transactional
   public ProjectWorktreeView remove(UUID worktreeId, String actorEmail) {
     return remove(worktreeId, null, actorEmail);
   }
@@ -213,7 +254,8 @@ public class ProjectWorktreeService {
 
   private static ProjectWorktreeView view(ProjectWorktree worktree) {
     return new ProjectWorktreeView(
-        worktree.id(), worktree.projectId(), worktree.gitRevision(), worktree.status(),
+        worktree.id(), worktree.projectId(), worktree.gitRevision(), worktree.branchName(),
+        worktree.upstreamBranch(), worktree.detached(), worktree.status(),
         worktree.createdAt(), worktree.removedAt());
   }
 }

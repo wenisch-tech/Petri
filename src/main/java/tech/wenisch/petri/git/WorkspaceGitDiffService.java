@@ -29,7 +29,7 @@ public class WorkspaceGitDiffService {
     GitCommandResult result = run(root, List.of("status", "--porcelain=v1", "-z", "--untracked-files=all"));
     if (!result.succeeded()) throw new IllegalStateException("Git failed to inspect workspace changes");
     List<WorkspaceChangeView> changes = new ArrayList<>();
-    String[] records = result.output().split("\\0", -1);
+    String[] records = result.output().split("\\x00", -1);
     for (int index = 0; index < records.length; index++) {
       String record = records[index];
       if (record.isEmpty() || record.startsWith("!!")) continue;
@@ -49,17 +49,51 @@ public class WorkspaceGitDiffService {
   }
 
   public WorkspaceDiffView diff(UUID worktreeId, String requestedPath) {
+    return diff(worktreeId, requestedPath, WorkspaceDiffScope.COMBINED);
+  }
+
+  WorkspaceChangeView scopedChange(
+      UUID worktreeId, WorkspaceChangeView change, WorkspaceDiffScope scope) {
+    Path root = worktrees.requireActiveWorktree(worktreeId);
+    ChangeStats stats = stats(
+        root, change.path(), change.previousPath(), change.status(), scope);
+    return new WorkspaceChangeView(
+        change.path(), change.previousPath(), change.status(), change.staged(), change.unstaged(),
+        stats.binary(), stats.additions(), stats.deletions());
+  }
+
+  public WorkspaceDiffView diff(
+      UUID worktreeId, String requestedPath, WorkspaceDiffScope requestedScope) {
     Path root = worktrees.requireActiveWorktree(worktreeId);
     String path = safePath(requestedPath);
+    WorkspaceDiffScope scope = requestedScope == null ? WorkspaceDiffScope.COMBINED : requestedScope;
     WorkspaceChangeView change = changes(worktreeId).stream()
         .filter(value -> value.path().equals(path) || path.equals(value.previousPath()))
         .findFirst().orElseThrow(() -> new IllegalArgumentException("File has no Git changes"));
     String beforePath = change.previousPath() == null ? change.path() : change.previousPath();
-    Content before = change.status() == WorkspaceChangeStatus.UNTRACKED
-        || change.status() == WorkspaceChangeStatus.ADDED ? Content.empty() : fromHead(root, beforePath);
-    Content after = change.status() == WorkspaceChangeStatus.DELETED ? Content.empty() : fromWorktree(root, change.path());
-    GitCommandResult patch = run(root, List.of(
-        "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--find-renames", "HEAD", "--", path));
+    Content before;
+    Content after;
+    List<String> patchArguments = new ArrayList<>(List.of(
+        "diff", "--no-ext-diff", "--no-textconv", "--no-color", "--find-renames"));
+    if (scope == WorkspaceDiffScope.STAGED) {
+      before = change.status() == WorkspaceChangeStatus.ADDED ? Content.empty() : fromHead(root, beforePath);
+      after = fromIndex(root, change.path());
+      patchArguments.add("--cached");
+    } else if (scope == WorkspaceDiffScope.UNSTAGED) {
+      before = change.status() == WorkspaceChangeStatus.UNTRACKED
+          ? Content.empty() : fromIndex(root, beforePath);
+      after = change.status() == WorkspaceChangeStatus.DELETED
+          ? Content.empty() : fromWorktree(root, change.path());
+    } else {
+      before = change.status() == WorkspaceChangeStatus.UNTRACKED
+          || change.status() == WorkspaceChangeStatus.ADDED ? Content.empty() : fromHead(root, beforePath);
+      after = change.status() == WorkspaceChangeStatus.DELETED
+          ? Content.empty() : fromWorktree(root, change.path());
+      patchArguments.add("HEAD");
+    }
+    patchArguments.add("--");
+    patchArguments.add(path);
+    GitCommandResult patch = run(root, patchArguments);
     String unified = patch.succeeded() || patch.exitCode() == 1 ? patch.output() : "";
     boolean binary = before.binary() || after.binary() || change.binary();
     return new WorkspaceDiffView(change.path(), change.previousPath(), change.status(), binary,
@@ -67,12 +101,31 @@ public class WorkspaceGitDiffService {
         binary ? null : before.text(), binary ? null : after.text(), unified);
   }
 
+  private Content fromIndex(Path root, String path) {
+    GitCommandResult result = run(root, List.of("show", ":" + path));
+    if (!result.succeeded()) return Content.empty();
+    return content(result.output(), result.truncated());
+  }
+
   private ChangeStats stats(Path root, String path, String previousPath, WorkspaceChangeStatus status) {
+    return stats(root, path, previousPath, status, WorkspaceDiffScope.COMBINED);
+  }
+
+  private ChangeStats stats(
+      Path root,
+      String path,
+      String previousPath,
+      WorkspaceChangeStatus status,
+      WorkspaceDiffScope scope) {
     if (status == WorkspaceChangeStatus.UNTRACKED) {
       Content value = fromWorktree(root, path);
       return value.binary() ? ChangeStats.binaryStats() : new ChangeStats(lines(value.text()), 0, false);
     }
-    List<String> arguments = new ArrayList<>(List.of("diff", "--numstat", "--no-ext-diff", "--no-textconv", "HEAD", "--"));
+    List<String> arguments = new ArrayList<>(List.of(
+        "diff", "--numstat", "--no-ext-diff", "--no-textconv"));
+    if (scope == WorkspaceDiffScope.STAGED) arguments.addAll(List.of("--cached", "HEAD"));
+    else if (scope == WorkspaceDiffScope.COMBINED) arguments.add("HEAD");
+    arguments.add("--");
     if (previousPath != null) arguments.add(previousPath);
     arguments.add(path);
     GitCommandResult result = run(root, arguments);
@@ -124,6 +177,9 @@ public class WorkspaceGitDiffService {
 
   private static WorkspaceChangeStatus status(String xy) {
     if ("??".equals(xy)) return WorkspaceChangeStatus.UNTRACKED;
+    if (xy.indexOf('U') >= 0 || "AA".equals(xy) || "DD".equals(xy)) {
+      return WorkspaceChangeStatus.CONFLICT;
+    }
     if (xy.indexOf('R') >= 0) return WorkspaceChangeStatus.RENAMED;
     if (xy.indexOf('C') >= 0) return WorkspaceChangeStatus.COPIED;
     if (xy.indexOf('D') >= 0) return WorkspaceChangeStatus.DELETED;

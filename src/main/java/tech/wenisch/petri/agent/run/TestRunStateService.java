@@ -71,6 +71,12 @@ class TestRunStateService {
   }
 
   @Transactional(readOnly = true)
+  public boolean hasActiveForWorktree(UUID worktreeId) {
+    return testRuns.existsByWorktreeIdAndStatusIn(worktreeId, java.util.EnumSet.of(
+        TestRunStatus.PROPOSED, TestRunStatus.APPROVED, TestRunStatus.RUNNING));
+  }
+
+  @Transactional(readOnly = true)
   public TestRunView get(UUID testRunId, UUID expectedWorktreeId) {
     TestRun testRun = testRun(testRunId);
     requireWorktree(testRun, expectedWorktreeId);

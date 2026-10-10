@@ -20,6 +20,12 @@ class ProjectWorktree {
   @Column(name = "git_revision", nullable = false, length = 255)
   private String gitRevision;
 
+  @Column(name = "branch_name", length = 255)
+  private String branchName;
+
+  @Column(name = "upstream_branch", length = 255)
+  private String upstreamBranch;
+
   @Column(name = "relative_path", nullable = false, unique = true, length = 255)
   private String relativePath;
 
@@ -57,6 +63,20 @@ class ProjectWorktree {
     this.createdAt = createdAt;
   }
 
+  ProjectWorktree(
+      UUID id,
+      UUID projectId,
+      String gitRevision,
+      String branchName,
+      String upstreamBranch,
+      String relativePath,
+      UUID createdBy,
+      Instant createdAt) {
+    this(id, projectId, gitRevision, relativePath, createdBy, createdAt);
+    this.branchName = branchName;
+    this.upstreamBranch = upstreamBranch;
+  }
+
   void removed(UUID actorId, Instant now) {
     status = ProjectWorktreeStatus.REMOVED;
     removedBy = actorId;
@@ -66,6 +86,10 @@ class ProjectWorktree {
   UUID id() { return id; }
   UUID projectId() { return projectId; }
   String gitRevision() { return gitRevision; }
+  String branchName() { return branchName; }
+  String upstreamBranch() { return upstreamBranch; }
+  boolean detached() { return branchName == null; }
+  void upstreamBranch(String value) { upstreamBranch = value; }
   String relativePath() { return relativePath; }
   ProjectWorktreeStatus status() { return status; }
   Instant createdAt() { return createdAt; }

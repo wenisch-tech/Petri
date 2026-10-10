@@ -18,11 +18,11 @@ Petri is a self-hosted Java coding agent. It works on disposable Git worktrees, 
 
 | Page | Purpose |
 | --- | --- |
-| `/chat` | Start and follow coding tasks. |
+| `/workspace/projects/{projectId}` | Browse/edit files, review Git changes and work with durable chats. |
 | `/projects` | Register repositories and open project settings. |
 | `/model-settings` | Configure model providers and local endpoints. |
 | `/runs` | Inspect persisted runs and approvals. |
 | `/api-keys` | Create or revoke API-client credentials. |
 | `/audit` | Inspect security and lifecycle events. |
 
-The browser console is intended for instance administrators. Programmatic clients use `/api/v1/**` with a Petri API key.
+Legacy `/chat` links redirect into the corresponding project workspace. The browser console is intended for instance administrators. Programmatic clients use `/api/v1/**` with a Petri API key.

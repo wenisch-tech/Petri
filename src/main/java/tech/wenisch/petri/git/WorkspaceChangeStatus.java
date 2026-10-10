@@ -6,5 +6,6 @@ public enum WorkspaceChangeStatus {
   DELETED,
   RENAMED,
   COPIED,
-  UNTRACKED
+  UNTRACKED,
+  CONFLICT
 }

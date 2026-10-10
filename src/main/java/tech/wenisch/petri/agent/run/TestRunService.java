@@ -51,6 +51,10 @@ public class TestRunService {
             || value.status() == TestRunStatus.RUNNING);
   }
 
+  public boolean hasActiveForWorktree(UUID worktreeId) {
+    return state.hasActiveForWorktree(worktreeId);
+  }
+
   public TestRunView approve(UUID testRunId, String actorEmail) {
     return state.approve(testRunId, actorEmail);
   }

@@ -87,3 +87,25 @@ Worktree-wide events are available from `/api/v1/agent/worktrees/{worktreeId}/ev
 ## Approvals
 
 API clients may request tools and create proposals but cannot approve privileged actions. Approval, rejection, patch application and test execution are administrator operations below `/operations/**` or equivalent browser run/chat actions.
+
+## Browser workspace Git API
+
+The workspace uses administrator-only, CSRF-protected JSON endpoints under `/workspace/api`. These are session APIs rather than API-key routes:
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET /projects/{projectId}/branches` | Cached local and `origin/*` branches, upstreams and bindings. |
+| `POST /projects/{projectId}/git/fetch` | Authenticated explicit fetch with prune. |
+| `POST /projects/{projectId}/branches` | Create a branch and dedicated worktree. |
+| `POST /projects/{projectId}/branches/open` | Open/create a local or remote-tracking worktree. |
+| `POST /projects/{projectId}/branches/delete` | Confirmed local or remote deletion. |
+| `GET /worktrees/{id}/git/status` | HEAD, upstream, ahead/behind, rebase and grouped changes. |
+| `GET /worktrees/{id}/git/diff` | `COMBINED`, `STAGED` or `UNSTAGED` file diff. |
+| `POST /worktrees/{id}/git/stage` | Stage an explicit safe path list. |
+| `POST /worktrees/{id}/git/unstage` | Unstage an explicit safe path list. |
+| `POST /worktrees/{id}/git/commit` | Commit staged changes or stage all and commit. |
+| `POST /worktrees/{id}/git/pull` | Fetch and fast-forward only. |
+| `POST /worktrees/{id}/git/rebase` | Rebase onto an explicit cached branch or upstream. |
+| `POST /worktrees/{id}/git/rebase/continue` | Continue a resolved and staged rebase. |
+| `POST /worktrees/{id}/git/rebase/abort` | Abort an active rebase. |
+| `POST /worktrees/{id}/git/push` | Normal push or separately confirmed force-with-lease. |

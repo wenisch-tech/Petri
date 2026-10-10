@@ -1,17 +1,21 @@
 import {
   ArrowLeft, Bot, Boxes, Check, ChevronDown, ChevronRight, CircleAlert, CircleCheck, Eye, File,
+  CloudDownload, CloudUpload,
   Database, FileArchive, FileBraces, FileCode2, FileCog, FileDiff, FileImage, FileJson,
   FilePlus2, FileSpreadsheet, FileTerminal, FileText, FileType2, Folder, FolderOpen, FolderPlus, FolderGit2,
-  GitCompareArrows, History, KeyRound, LoaderCircle, LockKeyhole, LogOut, MessageSquare,
+  GitBranch, GitBranchPlus, GitCommitHorizontal, GitCompare, GitCompareArrows, GitPullRequestArrow,
+  History, KeyRound, LoaderCircle, LockKeyhole, LogOut, MessageSquare,
   MoreHorizontal, PanelRight, Pencil, Play, Plus, RefreshCw, Save, Send, Settings, Settings2,
   ShieldCheck, Sun, Trash2, Workflow, X, createElement as createLucideElement
 } from 'lucide';
 
 const registry = {
   ArrowLeft, Bot, Boxes, Check, ChevronDown, ChevronRight, CircleAlert, CircleCheck, Database, Eye, File,
+  CloudDownload, CloudUpload,
   FileArchive, FileBraces, FileCode2, FileCog, FileDiff, FileImage, FileJson, FilePlus2,
   FileSpreadsheet, FileTerminal, FileText, FileType2, Folder, FolderOpen, FolderPlus, FolderGit2,
-  GitCompareArrows, History, KeyRound, LoaderCircle, LockKeyhole, LogOut, MessageSquare,
+  GitBranch, GitBranchPlus, GitCommitHorizontal, GitCompare, GitCompareArrows, GitPullRequestArrow,
+  History, KeyRound, LoaderCircle, LockKeyhole, LogOut, MessageSquare,
   MoreHorizontal, PanelRight, Pencil, Play, Plus, RefreshCw, Save, Send, Settings, Settings2,
   ShieldCheck, Sun, Trash2, Workflow, X
 };

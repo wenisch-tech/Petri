@@ -79,6 +79,7 @@ public class ProjectMirrorService {
         String details = result.output().isBlank() ? "" : ": " + result.output().strip();
         throw new GitOperationException(reason + details);
       }
+      configureBranchRefs(project, mirror);
       auditLog.record(
           actor.getEmail(),
           initialized ? "PROJECT_MIRROR_FETCHED" : "PROJECT_MIRROR_CLONED",
@@ -88,6 +89,21 @@ public class ProjectMirrorService {
       return new ProjectMirrorStatus(true);
     } catch (IOException exception) {
       throw new GitOperationException("Could not synchronize project mirror", exception);
+    }
+  }
+
+  GitCommandResult runRemote(UUID projectId, Path workingDirectory, List<String> arguments)
+      throws IOException {
+    Project project = project(projectId);
+    Optional<GitCredentialMaterial> credential = credentials.material(projectId);
+    if (credential.isPresent() && !isHttps(project.getRepositoryUri())) {
+      throw new GitOperationException("Stored credentials can only be used with HTTPS repositories");
+    }
+    if (credential.isEmpty()) return git.run(workingDirectory, arguments);
+    GitCredentialMaterial material = credential.orElseThrow();
+    try (GitAskPassSession askPass =
+        new GitAskPassSession(paths.temporaryDirectory(), material)) {
+      return git.run(workingDirectory, arguments, askPass.environment(), List.of(material.secret()));
     }
   }
 
@@ -113,10 +129,118 @@ public class ProjectMirrorService {
       boolean initialized,
       Map<String, String> environment,
       List<String> secrets) throws IOException {
-    List<String> arguments = initialized
-        ? List.of("--git-dir=" + mirror, "remote", "update", "--prune")
-        : List.of("clone", "--mirror", "--", project.getRepositoryUri(), mirror.toString());
-    return git.run(paths.root(), arguments, environment, secrets);
+    if (!initialized) {
+      return git.run(paths.root(), List.of(
+          "clone", "--mirror", "--", project.getRepositoryUri(), mirror.toString()),
+          environment, secrets);
+    }
+    String branch = project.getDefaultBranch();
+    String localBefore = objectId(mirror, "refs/heads/" + branch);
+    String remoteBefore = objectId(mirror, "refs/remotes/origin/" + branch);
+    GitCommandResult result = git.run(paths.root(), List.of(
+        "--git-dir=" + mirror, "fetch", "--prune", "origin"), environment, secrets);
+    if (result.succeeded() && localBefore != null && localBefore.equals(remoteBefore)
+        && !branchCheckedOut(mirror, branch)) {
+      String remoteAfter = objectId(mirror, "refs/remotes/origin/" + branch);
+      if (remoteAfter != null) {
+        requireSuccess(git.run(paths.root(), List.of(
+            "--git-dir=" + mirror, "update-ref", "refs/heads/" + branch,
+            remoteAfter, localBefore)), "fast-forward default branch");
+      }
+    }
+    return result;
+  }
+
+  private void configureBranchRefs(Project project, Path mirror) throws IOException {
+    GitCommandResult mirrorMode = git.run(
+        paths.root(), List.of("--git-dir=" + mirror, "config", "--get", "remote.origin.mirror"));
+    if (mirrorMode.succeeded() && "true".equalsIgnoreCase(mirrorMode.output().strip())) {
+      String symbolicHead = symbolicHeadBranch(mirror);
+      GitCommandResult heads = git.run(paths.root(), List.of(
+          "--git-dir=" + mirror, "for-each-ref", "--format=%(refname:short) %(objectname)",
+          "refs/heads"));
+      requireSuccess(heads, "inspect mirrored branches");
+      for (String line : heads.output().lines().toList()) {
+        int separator = line.lastIndexOf(' ');
+        if (separator <= 0) continue;
+        String branch = line.substring(0, separator);
+        String object = line.substring(separator + 1);
+        requireSuccess(git.run(paths.root(), List.of(
+            "--git-dir=" + mirror, "update-ref", "refs/petri/mirror-backup/" + branch, object)),
+            "back up mirrored branch " + branch);
+        requireSuccess(git.run(paths.root(), List.of(
+            "--git-dir=" + mirror, "update-ref", "refs/remotes/origin/" + branch, object)),
+            "initialize remote branch " + branch);
+        if (!branch.equals(project.getDefaultBranch()) && !branch.equals(symbolicHead)) {
+          requireSuccess(git.run(paths.root(), List.of(
+              "--git-dir=" + mirror, "update-ref", "-d", "refs/heads/" + branch)),
+              "separate mirrored branch " + branch);
+        }
+      }
+      requireSuccess(git.run(paths.root(), List.of(
+          "--git-dir=" + mirror, "config", "remote.origin.mirror", "false")),
+          "disable mirror ref updates");
+    }
+    git.run(paths.root(), List.of(
+        "--git-dir=" + mirror, "config", "--unset-all", "remote.origin.fetch"));
+    requireSuccess(git.run(paths.root(), List.of(
+        "--git-dir=" + mirror, "config", "--add", "remote.origin.fetch",
+        "+refs/heads/*:refs/remotes/origin/*")), "configure remote branch fetch");
+    ensureDefaultLocalBranch(project, mirror);
+  }
+
+  private String symbolicHeadBranch(Path mirror) throws IOException {
+    GitCommandResult result = git.run(paths.root(), List.of(
+        "--git-dir=" + mirror, "symbolic-ref", "--quiet", "--short", "HEAD"));
+    return result.succeeded() && !result.output().isBlank() ? result.output().strip() : null;
+  }
+
+  private String objectId(Path mirror, String reference) throws IOException {
+    GitCommandResult result = git.run(paths.root(), List.of(
+        "--git-dir=" + mirror, "rev-parse", "--verify", "--quiet", reference + "^{commit}"));
+    return result.succeeded() && !result.output().isBlank() ? result.output().strip() : null;
+  }
+
+  private boolean branchCheckedOut(Path mirror, String branch) throws IOException {
+    GitCommandResult result = git.run(paths.root(), List.of(
+        "--git-dir=" + mirror, "worktree", "list", "--porcelain"));
+    return result.succeeded() && result.output().contains("branch refs/heads/" + branch);
+  }
+
+  private void ensureDefaultLocalBranch(Project project, Path mirror) throws IOException {
+    String branch = project.getDefaultBranch();
+    GitCommandResult local = git.run(paths.root(), List.of(
+        "--git-dir=" + mirror, "rev-parse", "--verify", "--quiet",
+        "refs/heads/" + branch + "^{commit}"));
+    if (local.succeeded()) {
+      requireSuccess(git.run(paths.root(), List.of(
+          "--git-dir=" + mirror, "config", "branch." + branch + ".remote", "origin")),
+          "configure default branch remote");
+      requireSuccess(git.run(paths.root(), List.of(
+          "--git-dir=" + mirror, "config", "branch." + branch + ".merge", "refs/heads/" + branch)),
+          "configure default branch upstream");
+      return;
+    }
+    GitCommandResult remote = git.run(paths.root(), List.of(
+        "--git-dir=" + mirror, "rev-parse", "--verify", "--quiet",
+        "refs/remotes/origin/" + branch + "^{commit}"));
+    if (!remote.succeeded()) return;
+    requireSuccess(git.run(paths.root(), List.of(
+        "--git-dir=" + mirror, "update-ref", "refs/heads/" + branch,
+        remote.output().strip())), "create local default branch");
+    requireSuccess(git.run(paths.root(), List.of(
+        "--git-dir=" + mirror, "config", "branch." + branch + ".remote", "origin")),
+        "configure default branch remote");
+    requireSuccess(git.run(paths.root(), List.of(
+        "--git-dir=" + mirror, "config", "branch." + branch + ".merge", "refs/heads/" + branch)),
+        "configure default branch upstream");
+  }
+
+  static void requireSuccess(GitCommandResult result, String operation) {
+    if (result.succeeded()) return;
+    String reason = result.timedOut() ? "Git timed out while trying to " : "Git failed to ";
+    String details = result.output().isBlank() ? "" : ": " + result.output().strip();
+    throw new GitOperationException(reason + operation + details);
   }
 
   private Project project(UUID projectId) {

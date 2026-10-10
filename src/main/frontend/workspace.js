@@ -51,15 +51,13 @@ export function initializeWorkspace() {
   if (!root || root.dataset.workspaceInitialized === 'true') return;
   root.dataset.workspaceInitialized = 'true';
   const worktreeId = root.dataset.worktreeId;
-  if (!worktreeId) return;
   const state = {
-    root, projectId: root.dataset.projectId, worktreeId, api: `/workspace/api/worktrees/${worktreeId}`,
+    root, projectId: root.dataset.projectId, worktreeId, api: worktreeId ? `/workspace/api/worktrees/${worktreeId}` : null,
+    branch: root.dataset.branch || null, detached: root.dataset.detached === 'true', gitStatus: null,
     changes: new Map(), mode: 'files', tabs: [], active: null, drafts: {}, chatId: root.dataset.chatId || null,
     snapshot: null, monaco: null, monacoPromise: null, models: new Map(), diffModels: new Map(),
     editor: null, diffEditor: null, editorToken: 0, resizeObserver: null
   };
-  const key = `project:${state.projectId}:worktree:${worktreeId}`;
-  try { localStorage.setItem(`petri:last-worktree:${state.projectId}`, worktreeId); } catch {}
   const start = (name, initializer, report) => {
     try { initializer(); }
     catch (error) {
@@ -69,6 +67,10 @@ export function initializeWorkspace() {
     }
   };
   start('layout', () => initializeLayout(state), '[data-editor-status]');
+  start('git', () => initializeGit(state), '[data-git-indicators]');
+  if (!worktreeId) return;
+  const key = `project:${state.projectId}:worktree:${worktreeId}`;
+  try { localStorage.setItem(`petri:last-worktree:${state.projectId}`, worktreeId); } catch {}
   start('editor', () => initializeEditor(state, key), '[data-editor-status]');
   start('explorer', () => initializeExplorer(state), '[data-file-tree]');
   start('changes', () => initializeChanges(state), '[data-change-count]');
@@ -81,6 +83,247 @@ function initializeLayout(state) {
   document.querySelector('[data-toggle-chat]')?.addEventListener('click', () => state.root.classList.toggle('chat-collapsed'));
   state.root.querySelectorAll('[data-resize]').forEach(handle => { const kind = handle.dataset.resize; try { const width = localStorage.getItem(`petri:workspace:${kind}:width`); if (width) state.root.style.setProperty(`--${kind}-width`, width); } catch {} handle.addEventListener('pointerdown', event => { handle.setPointerCapture(event.pointerId); const move = pointer => { const width = kind === 'explorer' ? pointer.clientX : innerWidth - pointer.clientX; state.root.style.setProperty(`--${kind}-width`, `${Math.max(220, Math.min(560, width))}px`); }; const done = () => { try { localStorage.setItem(`petri:workspace:${kind}:width`, getComputedStyle(state.root).getPropertyValue(`--${kind}-width`)); } catch {} handle.removeEventListener('pointermove', move); }; handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', done, { once: true }); }); });
 }
+
+function initializeGit(state) {
+  const bar = document.querySelector('[data-git-bar]');
+  if (!bar) return;
+  state.gitBar = bar;
+  state.branchSelector = bar.querySelector('[data-branch-selector]');
+  state.branchSelector?.addEventListener('change', async event => {
+    const [kind, ...parts] = event.target.value.split(':');
+    const name = parts.join(':');
+    if (!kind || !name) return;
+    try {
+      const worktree = await request(`/workspace/api/projects/${state.projectId}/branches/open`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body: JSON.stringify({ name, kind })
+      });
+      navigateToWorktree(state, worktree.id);
+    } catch (error) { showGitError(state, error); event.target.value = state.branch ? `LOCAL:${state.branch}` : ''; }
+  });
+  bar.querySelector('[data-git-fetch]')?.addEventListener('click', async () => {
+    await performGit(state, `/workspace/api/projects/${state.projectId}/git/fetch`, {}, branches => renderBranches(state, branches), false);
+  });
+  bar.querySelector('[data-git-pull]')?.addEventListener('click', () => performWorktreeGit(state, 'pull'));
+  bar.querySelector('[data-git-push]')?.addEventListener('click', () => performWorktreeGit(state, 'push', { forceWithLease: false }));
+  bar.querySelector('[data-git-commit]')?.addEventListener('click', () => openGitDialog(state, 'commit'));
+  bar.querySelector('[data-git-rebase-action]')?.addEventListener('click', () => openGitDialog(state, 'rebase'));
+  const menu = bar.querySelector('[data-git-menu]');
+  bar.querySelector('[data-git-more]')?.addEventListener('click', () => { menu.hidden = !menu.hidden; });
+  bar.querySelector('[data-git-new-branch]')?.addEventListener('click', () => { menu.hidden = true; openGitDialog(state, 'branch'); });
+  bar.querySelector('[data-git-force-push]')?.addEventListener('click', () => { menu.hidden = true; openGitConfirmation(state, 'force-push'); });
+  bar.querySelector('[data-git-delete-branch]')?.addEventListener('click', () => { menu.hidden = true; openGitConfirmation(state, 'delete-local'); });
+  bar.querySelector('[data-git-delete-remote]')?.addEventListener('click', () => { menu.hidden = true; openGitConfirmation(state, 'delete-remote'); });
+  bar.querySelector('[data-git-rebase-continue]')?.addEventListener('click', () => performWorktreeGit(state, 'rebase/continue'));
+  bar.querySelector('[data-git-rebase-abort]')?.addEventListener('click', () => performWorktreeGit(state, 'rebase/abort'));
+  wireGitDialogs(state);
+  request(`/workspace/api/projects/${state.projectId}/branches`).then(branches => renderBranches(state, branches)).catch(error => showGitError(state, error));
+  if (state.api) refreshGitStatus(state);
+}
+
+function navigateToWorktree(state, worktreeId) {
+  const url = new URL(`/workspace/projects/${state.projectId}`, location.origin);
+  url.searchParams.set('worktree', worktreeId);
+  location.assign(url);
+}
+
+function renderBranches(state, branches) {
+  state.branches = branches || [];
+  const selector = state.branchSelector;
+  if (selector) {
+    selector.replaceChildren(new Option('Select branch…', ''));
+    for (const [kind, label] of [['LOCAL', 'Local branches'], ['REMOTE', 'Remote branches']]) {
+      const group = document.createElement('optgroup');
+      group.label = label;
+      for (const branch of state.branches.filter(value => value.kind === kind)) {
+        const option = new Option(kind === 'REMOTE' ? `origin/${branch.name}` : branch.name, `${kind}:${branch.name}`);
+        option.selected = kind === 'LOCAL' && branch.name === state.branch;
+        group.append(option);
+      }
+      selector.append(group);
+    }
+  }
+  for (const select of state.root.querySelectorAll('[data-git-branch-start],[data-git-rebase-target]')) {
+    const includeDefault = select.matches('[data-git-rebase-target]');
+    select.replaceChildren();
+    if (includeDefault) select.append(new Option('Configured upstream', ''));
+    for (const branch of state.branches) select.append(new Option(
+      branch.kind === 'REMOTE' ? `origin/${branch.name}` : branch.name,
+      branch.kind === 'REMOTE' ? `origin/${branch.name}` : branch.name));
+  }
+  fillDeleteTargets(state, null);
+}
+
+async function refreshGitStatus(state) {
+  if (!state.api) return;
+  try { applyGitStatus(state, await request(`${state.api}/git/status`)); }
+  catch (error) { showGitError(state, error); }
+}
+
+function renderGitIndicators(state, status) {
+  const bar = state.gitBar;
+  if (!bar || !status) return;
+  bar.querySelector('[data-git-sync]').textContent = `↑${status.ahead} ↓${status.behind}`;
+  const dirty = bar.querySelector('[data-git-dirty]');
+  dirty.textContent = status.clean ? 'Clean' : 'Changes';
+  dirty.classList.toggle('is-dirty', !status.clean);
+  const rebase = status.operation === 'REBASE_IN_PROGRESS';
+  bar.querySelector('[data-git-rebase]').hidden = !rebase;
+  bar.querySelector('[data-git-rebase-controls]').hidden = !rebase;
+}
+
+function ensureNoDrafts(state) {
+  const dirty = Object.values(state.drafts || {}).some(value => value?.dirty);
+  if (dirty) showGitError(state, new Error('Save or discard browser drafts before running Git actions.'));
+  return !dirty;
+}
+
+async function performGit(state, url, body, success, checkDrafts = true) {
+  if (checkDrafts && !ensureNoDrafts(state)) return;
+  setGitBusy(state, true);
+  try {
+    const result = await request(url, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+      body: JSON.stringify(body || {})
+    });
+    hideGitError(state);
+    success?.(result);
+    return result;
+  } catch (error) {
+    showGitError(state, error);
+    throw error;
+  } finally { setGitBusy(state, false); }
+}
+
+async function performWorktreeGit(state, action, body = {}) {
+  if (!state.api) return;
+  try {
+    await performGit(state, `${state.api}/git/${action}`, body, status => applyGitStatus(state, status));
+  } catch {}
+}
+
+function setGitBusy(state, busy) {
+  state.gitBar?.querySelectorAll('button,select').forEach(control => {
+    if (busy) { control.dataset.gitWasDisabled = control.disabled ? 'true' : 'false'; control.disabled = true; }
+    else if (control.dataset.gitWasDisabled !== 'true') control.disabled = false;
+  });
+}
+
+function showGitError(state, error) {
+  const output = state.gitBar?.querySelector('[data-git-output]');
+  if (!output) return;
+  output.hidden = false;
+  output.open = true;
+  output.querySelector('[data-git-output-text]').textContent = error?.message || String(error);
+}
+function hideGitError(state) { const output = state.gitBar?.querySelector('[data-git-output]'); if (output) { output.open = false; output.hidden = true; } }
+
+function wireGitDialogs(state) {
+  const branch = state.root.querySelector('[data-git-branch-dialog]');
+  branch.querySelector('form').addEventListener('submit', async event => {
+    if (event.submitter?.value !== 'confirm') return;
+    event.preventDefault();
+    clearDialogError(branch);
+    try {
+      const worktree = await performGit(state, `/workspace/api/projects/${state.projectId}/branches`, {
+        name: branch.querySelector('[data-git-branch-name]').value,
+        startPoint: branch.querySelector('[data-git-branch-start]').value
+      });
+      branch.close();
+      navigateToWorktree(state, worktree.id);
+    } catch (error) { dialogError(branch, error); }
+  });
+  const commit = state.root.querySelector('[data-git-commit-dialog]');
+  commit.querySelector('form').addEventListener('submit', async event => {
+    if (event.submitter?.value !== 'confirm') return;
+    event.preventDefault();
+    clearDialogError(commit);
+    try {
+      const status = await performGit(state, `${state.api}/git/commit`, {
+        message: commit.querySelector('[data-git-commit-message]').value,
+        stageAll: commit.querySelector('[data-git-stage-all]').checked
+      });
+      commit.close();
+      applyGitStatus(state, status);
+      commit.querySelector('[data-git-commit-message]').value = '';
+    } catch (error) { dialogError(commit, error); }
+  });
+  const rebase = state.root.querySelector('[data-git-rebase-dialog]');
+  rebase.querySelector('form').addEventListener('submit', async event => {
+    if (event.submitter?.value !== 'confirm') return;
+    event.preventDefault();
+    clearDialogError(rebase);
+    try {
+      const status = await performGit(state, `${state.api}/git/rebase`, { target: rebase.querySelector('[data-git-rebase-target]').value || null });
+      rebase.close();
+      applyGitStatus(state, status);
+    } catch (error) { dialogError(rebase, error); }
+  });
+  const confirm = state.root.querySelector('[data-git-confirm-dialog]');
+  confirm.querySelector('form').addEventListener('submit', async event => {
+    if (event.submitter?.value !== 'confirm') return;
+    event.preventDefault();
+    clearDialogError(confirm);
+    const mode = confirm.dataset.mode;
+    const target = mode === 'force-push' ? state.branch : confirm.querySelector('[data-git-confirm-target]').value;
+    const typed = confirm.querySelector('[data-git-confirm-input]').value;
+    if (!target || typed !== target) { dialogError(confirm, new Error('Type the exact branch name to confirm.')); return; }
+    try {
+      if (mode === 'force-push') {
+        const status = await performGit(state, `${state.api}/git/push`, { forceWithLease: true });
+        applyGitStatus(state, status);
+      } else {
+        await performGit(state, `/workspace/api/projects/${state.projectId}/branches/delete`, {
+          name: target, kind: mode === 'delete-remote' ? 'REMOTE' : 'LOCAL',
+          force: confirm.querySelector('[data-git-force]').checked, confirmation: typed
+        }, branches => renderBranches(state, branches));
+      }
+      confirm.close();
+    } catch (error) { dialogError(confirm, error); }
+  });
+}
+
+function openGitDialog(state, kind) {
+  if (kind !== 'branch' && !state.api) return;
+  if (kind !== 'branch' && !ensureNoDrafts(state)) return;
+  const dialog = state.root.querySelector(`[data-git-${kind}-dialog]`);
+  clearDialogError(dialog);
+  if (kind === 'branch') dialog.querySelector('[data-git-branch-name]').value = '';
+  dialog.showModal();
+}
+
+function openGitConfirmation(state, mode) {
+  if (mode === 'force-push' && (!state.api || !state.branch || !ensureNoDrafts(state))) return;
+  const dialog = state.root.querySelector('[data-git-confirm-dialog]');
+  dialog.dataset.mode = mode;
+  clearDialogError(dialog);
+  dialog.querySelector('[data-git-confirm-input]').value = '';
+  const targetLabel = dialog.querySelector('[data-git-target-label]');
+  const forceLabel = dialog.querySelector('[data-git-force-label]');
+  targetLabel.hidden = mode === 'force-push';
+  forceLabel.hidden = mode !== 'delete-local';
+  dialog.querySelector('[data-git-force]').checked = false;
+  if (mode === 'force-push') {
+    dialog.querySelector('[data-git-confirm-title]').textContent = 'Force push with lease';
+    dialog.querySelector('[data-git-confirm-description]').textContent = `Type ${state.branch} to push rewritten history safely with --force-with-lease.`;
+  } else {
+    fillDeleteTargets(state, mode === 'delete-remote' ? 'REMOTE' : 'LOCAL');
+    dialog.querySelector('[data-git-confirm-title]').textContent = mode === 'delete-remote' ? 'Delete remote branch' : 'Delete local branch';
+    dialog.querySelector('[data-git-confirm-description]').textContent = 'Select a branch and type its exact name. Protected branches cannot be deleted.';
+  }
+  dialog.showModal();
+}
+
+function fillDeleteTargets(state, kind) {
+  const select = state.root.querySelector('[data-git-confirm-target]');
+  if (!select || !kind) return;
+  select.replaceChildren();
+  for (const branch of (state.branches || []).filter(value => value.kind === kind && !value.protectedBranch)) {
+    select.append(new Option(kind === 'REMOTE' ? `origin/${branch.name}` : branch.name, branch.name));
+  }
+}
+function clearDialogError(dialog) { const error = dialog?.querySelector('[data-git-dialog-error]'); if (error) error.textContent = ''; }
+function dialogError(dialog, error) { const target = dialog.querySelector('[data-git-dialog-error]'); target.textContent = error?.message || String(error); }
 
 function initializeEditor(state, storageKey) {
   state.tabsEl = state.root.querySelector('[data-editor-tabs]');
@@ -312,9 +555,9 @@ async function openFile(state, path) {
   } catch (error) { state.status.textContent = error.message; }
 }
 
-async function openDiff(state, path, proposalId) {
-  const tab = proposalId ? `diff:proposal:${proposalId}:${path}` : `diff:git:${path}`;
-  const endpoint = proposalId ? `${state.api}/proposals/${proposalId}/diff` : `${state.api}/diff?path=${encodeURIComponent(path)}`;
+async function openDiff(state, path, proposalId, scope = 'COMBINED') {
+  const tab = proposalId ? `diff:proposal:${proposalId}:${path}` : `diff:git:${scope}:${path}`;
+  const endpoint = proposalId ? `${state.api}/proposals/${proposalId}/diff` : `${state.api}/git/diff?path=${encodeURIComponent(path)}&scope=${scope}`;
   try {
     state.drafts[tab] = { ...await request(endpoint), path };
     if (!state.tabs.includes(tab)) state.tabs.push(tab);
@@ -363,8 +606,65 @@ function changeBadge(change) { const badge = el('span', `workspace-change-badge 
 function entryDialog(state, type) { const dialog = state.root.querySelector('[data-workspace-dialog]'); const form = dialog.querySelector('[data-dialog-form]'); dialog.querySelector('[data-dialog-title]').textContent = type === 'FILE' ? 'Create file' : 'Create folder'; dialog.querySelector('[data-dialog-description]').textContent = 'Use a relative path inside this worktree.'; const input = dialog.querySelector('[data-dialog-path]'); input.value = ''; dialog.showModal(); form.onsubmit = async event => { if (event.submitter?.value !== 'confirm') return; event.preventDefault(); try { await request(`${state.api}/entries`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ path: input.value, type, content: '' }) }); dialog.close(); loadTree(state); refreshChanges(state); if (type === 'FILE') openFile(state, input.value); } catch (error) { dialog.querySelector('[data-dialog-description]').textContent = error.message; } }; }
 
 function initializeChanges(state) { refreshChanges(state); window.addEventListener('focus', () => refreshChanges(state)); setInterval(() => { if (!document.hidden) refreshChanges(state); }, 8000); }
-async function refreshChanges(state) { try { const values = await request(`${state.api}/changes`); state.changes = new Map(values.map(value => [value.path, value])); state.root.querySelector('[data-change-count]').textContent = values.length; if (state.mode === 'changes') renderChanges(state); } catch {} }
-function renderChanges(state) { state.tree.replaceChildren(); const values = [...state.changes.values()]; if (!values.length) { state.tree.append(el('div', 'workspace-empty', 'Working tree is clean.')); return; } for (const change of values) { const button = el('button', 'workspace-change-row'); button.type = 'button'; button.append(renderIcon('FileDiff'), el('span', 'workspace-change-path', change.path), changeBadge(change)); button.addEventListener('click', () => openDiff(state, change.path)); state.tree.append(button); } }
+async function refreshChanges(state) {
+  if (!state.api) return;
+  try {
+    applyGitStatus(state, await request(`${state.api}/git/status`));
+  } catch (error) {
+    showGitError(state, error);
+  }
+}
+function applyGitStatus(state, status) {
+  state.gitStatus = status;
+  const values = [...(status.conflicts || []).map(path => ({ path, status: 'CONFLICT', staged: false, unstaged: true })), ...(status.staged || []), ...(status.unstaged || []), ...(status.untracked || [])];
+  state.changes = new Map();
+  for (const value of values) if (!state.changes.has(value.path) || value.status === 'CONFLICT') state.changes.set(value.path, value);
+  const count = state.root.querySelector('[data-change-count]');
+  if (count) count.textContent = state.changes.size;
+  renderGitIndicators(state, status);
+  if (state.mode === 'changes' && state.tree) renderChanges(state);
+}
+function renderChanges(state) {
+  state.tree.replaceChildren();
+  const status = state.gitStatus;
+  if (!status || !state.changes.size) { state.tree.append(el('div', 'workspace-empty', 'Working tree is clean.')); return; }
+  const conflictPaths = new Set(status.conflicts || []);
+  appendChangeSection(state, 'Merge Conflicts', [...conflictPaths].map(path => state.changes.get(path)).filter(Boolean), 'UNSTAGED', true);
+  appendChangeSection(state, 'Staged Changes', (status.staged || []).filter(value => !conflictPaths.has(value.path)), 'STAGED', false);
+  appendChangeSection(state, 'Changes', (status.unstaged || []).filter(value => !conflictPaths.has(value.path)), 'UNSTAGED', true);
+  appendChangeSection(state, 'Untracked', status.untracked || [], 'UNSTAGED', true);
+}
+function appendChangeSection(state, title, values, scope, stage) {
+  if (!values.length) return;
+  const section = el('section', 'workspace-change-section');
+  const header = el('div', 'workspace-change-section-header');
+  header.append(el('span', '', `${title} (${values.length})`));
+  const all = el('button', 'workspace-change-section-action', stage ? 'Stage all' : 'Unstage all');
+  all.type = 'button';
+  all.addEventListener('click', event => { event.stopPropagation(); updateIndex(state, stage, values.map(value => value.path)); });
+  header.append(all);
+  section.append(header);
+  for (const change of values) {
+    const row = el('button', 'workspace-change-row');
+    row.type = 'button';
+    row.append(renderIcon('FileDiff'), el('span', 'workspace-change-path', change.path), changeBadge(change));
+    const action = el('span', 'workspace-change-row-action', stage ? '+' : '−');
+    action.title = stage ? 'Stage' : 'Unstage';
+    action.addEventListener('click', event => { event.stopPropagation(); updateIndex(state, stage, [change.path]); });
+    row.append(action);
+    row.addEventListener('click', () => openDiff(state, change.path, null, scope));
+    section.append(row);
+  }
+  state.tree.append(section);
+}
+async function updateIndex(state, stage, paths) {
+  if (!ensureNoDrafts(state)) return;
+  try {
+    applyGitStatus(state, await request(`${state.api}/git/${stage ? 'stage' : 'unstage'}`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ paths })
+    }));
+  } catch (error) { showGitError(state, error); }
+}
 
 function initializeChat(state) {
   const chat = state.root.querySelector('[data-workspace-chat]'), scroller = chat.querySelector('[data-chat-scroll]'), form = chat.querySelector('[data-chat-form]'), input = chat.querySelector('[data-chat-input]'), selector = chat.querySelector('[data-chat-selector]'), model = chat.querySelector('[data-model-selector]'), sendButton = chat.querySelector('[data-chat-send]'); state.chat = chat; state.scroller = scroller; const nearBottom = () => scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 100; const bottom = () => { scroller.scrollTop = scroller.scrollHeight; chat.querySelector('[data-new-response]').hidden = true; }; chat.querySelector('[data-new-response]').addEventListener('click', bottom); scroller.addEventListener('scroll', () => { if (nearBottom()) chat.querySelector('[data-new-response]').hidden = true; });

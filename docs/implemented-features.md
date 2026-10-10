@@ -20,9 +20,10 @@
 
 ## Repository isolation
 
-- Controlled bare mirror per project.
+- Controlled bare repository per project with separate local and cached `origin/*` refs.
 - Clone, fetch and prune without putting credentials in Git command arguments.
-- Disposable detached worktrees under a validated workspace root.
+- Dedicated branch-bound worktrees plus compatible detached legacy/API worktrees.
+- Branch creation/open/delete, staged and unstaged changes, commit, fast-forward pull, rebase/continue/abort, normal push and explicit force-with-lease.
 - Traversal, symlink and `.git` access protections in agent file tools.
 - Bounded Git time, output, file reads, searches and tool results.
 - Default-worktree creation falls back to the mirror's actual `HEAD` branch when the configured default does not exist.
@@ -38,6 +39,15 @@
 - Per-run model setting snapshots and per-task overrides.
 - Full persisted conversation reconstruction for stateless Chat Completions servers.
 - Configurable context-window snapshot per provider and message.
+
+## Workspace UI
+
+- Full-height project workspace with VS Code-style lazy file explorer, tabs and Monaco Editor.
+- Local Monaco language workers and native responsive side-by-side/inline Git and proposal diffs.
+- Persistent browser drafts, cursor/view state, optimistic SHA saves and conflict-safe reload behavior.
+- Files/Changes navigator with Git decorations and staged, unstaged, untracked and conflict groups.
+- Embedded durable streaming chat, persistent project model selection and inline/pinned approvals.
+- Git bar with branch before worktree selection and non-reloading Git status/actions.
 
 ## Agent runtime
 
@@ -69,7 +79,6 @@ File edits are optimistic: a proposal includes the hash observed during the read
 
 ## Current boundaries
 
-- The chat displays plain preformatted text rather than rendered Markdown.
 - Model configurations are one profile per provider; reusable named profiles are not implemented.
 - Test execution is an approval boundary, not an operating-system sandbox.
-- A VS Code client is planned but not yet implemented.
+- Git merge, cherry-pick, tags, interactive rebase, commit signing, submodules, LFS, staging individual hunks and reverting files are not implemented.
