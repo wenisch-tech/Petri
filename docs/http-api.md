@@ -101,6 +101,8 @@ Paths are relative to `/workspace/api`.
 | `POST /workflows/{id}/plan/approve` | Approve an exact plan revision. |
 | `POST /workflows/{id}/plan/revise` | Request a plan revision with feedback. |
 | `POST /workflows/{id}/final/approve` | Finish a workflow waiting at the final gate without executed tests. |
+| `POST /chats/{chatId}/packages/{installId}/approve` | Approve and run a requested package install. |
+| `POST /chats/{chatId}/packages/{installId}/reject` | Reject a requested package install. |
 | `POST /workflows/{id}/guidance` | Send guidance to the active task. |
 | `POST /workflows/{id}/retry` | Restart a held workflow with a fresh attempt budget. |
 | `POST /workflows/{id}/cancel` | Cancel; applied changes are preserved. |

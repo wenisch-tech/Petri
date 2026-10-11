@@ -1,0 +1,30 @@
+{
+  "name": "Petri (Alpine)",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "context": ".."
+  },
+  "remoteUser": "petri",
+  "containerEnv": {
+    "PETRI_TESTS_EXECUTOR": "local",
+    "PETRI_TOOLCHAIN_ROOT": "/workspaces/Petri/data/toolchain",
+    "MAVEN_ARGS": "-Dskip.installnodenpm -Dskip.npm"
+  },
+  "forwardPorts": [8080],
+  "portsAttributes": {
+    "8080": { "label": "Petri", "onAutoForward": "notify" }
+  },
+  "postCreateCommand": "npm ci --no-audit --no-fund && npm run build && ./mvnw -q -DskipTests package",
+  "customizations": {
+    "vscode": {
+      "extensions": [
+        "vscjava.vscode-java-pack",
+        "vmware.vscode-boot-dev-pack",
+        "redhat.vscode-yaml"
+      ],
+      "settings": {
+        "java.jdt.ls.vmargs": "-Xmx2G"
+      }
+    }
+  }
+}

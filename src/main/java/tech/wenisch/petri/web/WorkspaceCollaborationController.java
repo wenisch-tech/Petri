@@ -28,6 +28,8 @@ import tech.wenisch.petri.agent.orchestration.AgentRunView;
 import tech.wenisch.petri.agent.orchestration.CreateAgentRunCommand;
 import tech.wenisch.petri.agent.orchestration.AgentWorkflowService;
 import tech.wenisch.petri.agent.orchestration.AgentWorkflowView;
+import tech.wenisch.petri.agent.run.PackageInstallService;
+import tech.wenisch.petri.agent.run.PackageInstallView;
 import tech.wenisch.petri.agent.run.TestRunService;
 import tech.wenisch.petri.agent.run.TestRunView;
 import tech.wenisch.petri.git.ProjectWorktreeService;
@@ -53,6 +55,7 @@ public class WorkspaceCollaborationController {
   private final AgentChatQueueService queue;
   private final ChangeProposalService changes;
   private final TestRunService tests;
+  private final PackageInstallService packageInstalls;
   private final AppUserRepository users;
   private final AgentChatAutomationService automation;
   private final ProjectAccessService access;
@@ -68,6 +71,7 @@ public class WorkspaceCollaborationController {
       AgentChatQueueService queue,
       ChangeProposalService changes,
       TestRunService tests,
+      PackageInstallService packageInstalls,
       AppUserRepository users,
       AgentChatAutomationService automation,
       ProjectAccessService access) {
@@ -80,6 +84,7 @@ public class WorkspaceCollaborationController {
     this.launcher = launcher;
     this.queue = queue;
     this.changes = changes;
+    this.packageInstalls = packageInstalls;
     this.tests = tests;
     this.users = users;
     this.automation = automation;
@@ -199,11 +204,51 @@ public class WorkspaceCollaborationController {
     return snapshotFor(chatId, actor);
   }
 
+  @PostMapping("/chats/{chatId}/packages/{installId}/approve")
+  public WorkspaceChatSnapshot approvePackages(
+      @PathVariable UUID chatId, @PathVariable UUID installId, Principal principal) {
+    AppUser actor = actor(principal);
+    ownedRunForPackages(chatId, installId, actor);
+    PackageInstallView value = packageInstalls.get(installId);
+    if (value.status() == tech.wenisch.petri.agent.run.PackageInstallStatus.PROPOSED) {
+      packageInstalls.approve(installId, actor.getEmail());
+    }
+    packageInstalls.execute(installId);
+    queue.approvalsChanged(chatId);
+    return snapshotFor(chatId, actor);
+  }
+
+  @PostMapping("/chats/{chatId}/packages/{installId}/reject")
+  public WorkspaceChatSnapshot rejectPackages(
+      @PathVariable UUID chatId, @PathVariable UUID installId, Principal principal) {
+    AppUser actor = actor(principal);
+    ownedRunForPackages(chatId, installId, actor);
+    packageInstalls.reject(installId, actor.getEmail());
+    queue.approvalsChanged(chatId);
+    return snapshotFor(chatId, actor);
+  }
+
+  private void ownedRunForPackages(UUID chatId, UUID installId, AppUser actor) {
+    runs.chat(chatId, actor.getId());
+    for (AgentRunView run : runs.chatRuns(chatId)) {
+      for (PackageInstallView value : packageInstalls.listForAgentRun(run.id())) {
+        if (value.id().equals(installId)) return;
+      }
+    }
+    for (AgentWorkflowView workflow : workflows.chatWorkflows(chatId, actor.getId())) {
+      for (PackageInstallView value : workflow.packageInstalls()) {
+        if (value.id().equals(installId)) return;
+      }
+    }
+    throw new IllegalArgumentException("Package install belongs to another chat");
+  }
+
   private WorkspaceChatSnapshot snapshotFor(UUID chatId, AppUser actor) {
     AgentChatView chat = runs.chat(chatId, actor.getId());
     List<AgentRunView> values = runs.chatRuns(chatId);
     List<WorkspaceChatRun> reviewed = values.stream().map(run -> new WorkspaceChatRun(
-        run, changes.listForAgentRun(run.id()), tests.listForAgentRun(run.id()))).toList();
+        run, changes.listForAgentRun(run.id()), tests.listForAgentRun(run.id()),
+        packageInstalls.listForAgentRun(run.id()))).toList();
     return new WorkspaceChatSnapshot(worktrees.get(chat.worktreeId()).projectId(), chat, reviewed,
         runs.chatSummaries(chatId), workflows.chatWorkflows(chatId, actor.getId()));
   }
@@ -260,7 +305,8 @@ public class WorkspaceCollaborationController {
       ReasoningEffort reasoningEffort, TextVerbosity textVerbosity) {}
   public record AutomationRequest(boolean autoApproveChanges, boolean autoApproveTests) {}
   public record WorkspaceChatRun(
-      AgentRunView run, List<ChangeProposalView> proposals, List<TestRunView> tests) {}
+      AgentRunView run, List<ChangeProposalView> proposals, List<TestRunView> tests,
+      List<PackageInstallView> packageInstalls) {}
   public record WorkspaceChatSnapshot(
       UUID projectId, AgentChatView chat, List<WorkspaceChatRun> runs,
       List<tech.wenisch.petri.agent.orchestration.AgentChatSummaryView> summaries,

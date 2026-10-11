@@ -14,6 +14,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -21,7 +22,8 @@ import tech.wenisch.petri.workspace.WorkspacePaths;
 
 /** Executes approved repository code exclusively in a rootless Podman sandbox. */
 @Component
-class TestCommandRunner {
+@ConditionalOnProperty(name = "petri.tests.executor", havingValue = "podman", matchIfMissing = true)
+class TestCommandRunner implements TestExecutor {
   private final WorkspacePaths paths;
   private final String podmanExecutable;
 
@@ -33,7 +35,8 @@ class TestCommandRunner {
     this.podmanExecutable = podmanExecutable;
   }
 
-  TestCommandResult run(
+  @Override
+  public TestCommandResult run(
       UUID projectId, Path worktree, TestCommand command, TestSandboxProfileView profile)
       throws IOException {
     Path safeWorktree = paths.requireExistingPath(worktree);

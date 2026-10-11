@@ -63,6 +63,7 @@ public class TestSandboxProfileController {
       @RequestParam UUID projectId,
       @RequestParam UUID profileId,
       @RequestParam String networkMode,
+      @RequestParam(defaultValue = "false") boolean autoApprovePackageInstalls,
       Principal principal,
       RedirectAttributes redirect) {
     Boolean network = switch (networkMode) {
@@ -70,7 +71,7 @@ public class TestSandboxProfileController {
       case "DISABLED" -> false;
       default -> null;
     };
-    profiles.configureProject(projectId, profileId, network, principal.getName());
+    profiles.configureProject(projectId, profileId, network, autoApprovePackageInstalls, principal.getName());
     redirect.addFlashAttribute("notice", "Project sandbox configured");
     return "redirect:/sandbox-profiles";
   }

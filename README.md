@@ -69,12 +69,15 @@ PostgreSQL, and works with OpenAI, LiteLLM, Ollama and any OpenAI-compatible end
 ### Tools and testing
 
 - Native tools: `list_files`, `read_file`, `search_files`, `create_patch`, `create_file`,
-  `show_diff`, `run_tests`, `list_skills`, `load_skill`.
+  `show_diff`, `run_tests`, `install_packages`, `list_skills`, `load_skill`.
+- **Approval-gated Alpine package installs:** agents request tools (`jq`, `python3`, `nodejs`, …)
+  with a reason; installs run only after approval (or per-project auto-approve) into an unprivileged
+  toolchain prefix. Models are told they run on Alpine and how installs work.
 - Path, symlink and `.git` protections; SHA-256 guarded edits that record `CONFLICT` instead of
   overwriting concurrent changes.
-- Tests run only as fixed Maven/Gradle commands in **rootless Podman** with an immutable root
-  filesystem, dropped capabilities, resource limits and project-isolated caches. There is no host
-  fallback.
+- Tests run only as fixed Maven/Gradle commands, by default in **rootless Podman** with an immutable root
+  filesystem, dropped capabilities, resource limits and project-isolated caches. An opt-in `local`
+  executor (the Alpine image default) runs them in Petri's own container instead.
 
 ### Platform and security
 
@@ -111,7 +114,7 @@ See [Getting started](docs/getting-started.md) for the full first-task walkthrou
 
 ## Run with Docker or Kubernetes
 
-Images are published to GHCR on every merge to `main`, built on the Chainguard JRE, signed with
+Images are published to GHCR on every merge to `main`, built on Alpine (JDK 25), signed with
 Cosign and shipped with SLSA provenance and a CycloneDX SBOM:
 
 ```bash

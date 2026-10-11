@@ -43,3 +43,22 @@ Execution leases prevent two workers from continuing the same run simultaneously
 ## Skills
 
 Petri discovers `<skills-root>/<name>/SKILL.md`. The model initially receives only names and descriptions through `list_skills`, then calls `load_skill` when relevant. Skills provide instructions but cannot add capabilities or bypass tool and approval policy.
+
+## Waiting for approvals
+
+File changes (`create_patch`, `create_file`), test runs (`run_tests`) and package installs
+(`install_packages`) are approval-gated proposals. After the model requests one, the run **pauses**
+until the action is decided and finished:
+
+- approved by the user, or automatically (chat automation, workflow plan approval for patches and
+  tests, or the project's package auto-approve), then applied/executed;
+- or **declined**.
+
+The persisted tool result is then replaced with the final outcome (`finalStatus`, an `outcome`
+sentence, test or install output) before the next model request. A decline tells the model the user
+declined and that it must not retry unchanged. Several proposals from one model turn are all created
+first and then awaited together. The execution lease is renewed while waiting, cancellation is
+honored, and `PETRI_AGENT_APPROVAL_WAIT` (default `12h`) bounds the wait; on timeout the model is
+told the request is still pending.
+
+A run interrupted by a server restart while waiting resumes with the "pending" tool result.

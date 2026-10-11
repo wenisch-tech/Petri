@@ -60,6 +60,11 @@ Test timeout, output, CPU, memory, PIDs, image and network settings are managed 
 | `PETRI_MODEL_REQUEST_TIMEOUT` | `2m` | Connect/request timeout and execution-lease basis. |
 | `PETRI_MAX_MODEL_RESPONSE_BYTES` | `2000000` | Maximum provider response body. |
 | `PETRI_MODEL_MAX_OUTPUT_TOKENS` | `4096` | Default output budget. |
+| `PETRI_TESTS_EXECUTOR` | `podman` | `podman` (isolated sandbox) or `local` (run tests in Petri's own Alpine container and enable `install_packages`). |
+| `PETRI_TOOLCHAIN_ROOT` | `./data/toolchain` | Unprivileged apk prefix for agent-installed packages (`local` executor). |
+| `PETRI_APK_EXECUTABLE` | `apk` | apk binary used for package installs. |
+| `PETRI_INSTALL_TIMEOUT` | `10m` | Maximum duration of one package install. |
+| `PETRI_AGENT_APPROVAL_WAIT` | `12h` | How long a run waits for a decision on a proposal before continuing with a "still pending" result. |
 | `PETRI_SKILLS_ROOT` | `./skills` | Operator-controlled skill directory. |
 | `PETRI_MAX_SKILL_BYTES` | `200000` | Maximum `SKILL.md` size. |
 

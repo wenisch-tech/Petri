@@ -54,3 +54,12 @@ Use HTTPS whenever bearer credentials cross an untrusted network. Plain HTTP is 
 - Put Petri behind TLS and a trusted reverse proxy.
 - Configure OIDC for centralized identity when appropriate.
 - Review audit events and revoke unused API keys.
+
+## Local executor and package installs
+
+`PETRI_TESTS_EXECUTOR=local` trades Podman isolation for the ability to run tests and agent-approved
+package installs in Petri's own Alpine container. Repository code then shares the Petri process's
+Unix user, filesystem (including `./data`) and network. Package installs fetch and run third-party
+package code, so each is a user-approved proposal: names are strictly validated, apk runs without a
+shell as an unprivileged user into a separate prefix, and the only automatic path is the explicit
+per-project *Auto-approve package installs* setting. Keep the Podman executor for untrusted code.

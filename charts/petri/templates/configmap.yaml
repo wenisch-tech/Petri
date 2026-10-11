@@ -16,4 +16,5 @@ data:
   # Embedded H2 is single-writer only; use PostgreSQL for more than one replica.
   SPRING_DATASOURCE_URL: "jdbc:h2:file:{{ .Values.persistence.mountPath }}/petri;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH"
   {{- end }}
+  PETRI_TOOLCHAIN_ROOT: "{{ .Values.persistence.mountPath }}/toolchain"
   MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,prometheus"

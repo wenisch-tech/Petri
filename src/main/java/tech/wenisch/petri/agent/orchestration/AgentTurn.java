@@ -41,6 +41,11 @@ class AgentTurn {
 
   protected AgentTurn() {}
 
+  void replaceContent(String value) {
+    this.content = value;
+  }
+
+
   AgentTurn(
       UUID id,
       UUID runId,

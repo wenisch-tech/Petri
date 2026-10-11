@@ -4,6 +4,7 @@ import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import tech.wenisch.petri.agent.change.ChangeProposalView;
+import tech.wenisch.petri.agent.run.PackageInstallView;
 import tech.wenisch.petri.agent.run.TestRunView;
 
 public record AgentWorkflowView(
@@ -26,4 +27,5 @@ public record AgentWorkflowView(
     List<AgentWorkflowTransitionView> transitions,
     List<AgentRunView> stageRuns,
     List<ChangeProposalView> proposals,
-    List<TestRunView> tests) {}
+    List<TestRunView> tests,
+    List<PackageInstallView> packageInstalls) {}

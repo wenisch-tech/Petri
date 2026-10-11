@@ -15,7 +15,7 @@ public class TestRunService {
 
   private final WorktreeLocator worktrees;
   private final TestCommandPolicy policy;
-  private final TestCommandRunner runner;
+  private final TestExecutor runner;
   private final TestRunStateService state;
   private final ProjectWorktreeService projectWorktrees;
   private final TestSandboxProfileService sandboxProfiles;
@@ -23,7 +23,7 @@ public class TestRunService {
   TestRunService(
       WorktreeLocator worktrees,
       TestCommandPolicy policy,
-      TestCommandRunner runner,
+      TestExecutor runner,
       TestRunStateService state,
       ProjectWorktreeService projectWorktrees,
       TestSandboxProfileService sandboxProfiles) {

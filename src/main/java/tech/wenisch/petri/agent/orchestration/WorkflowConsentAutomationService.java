@@ -43,7 +43,7 @@ class WorkflowConsentAutomationService {
         .orElseThrow(() -> new IllegalStateException("Workflow creator no longer exists"));
     if (event.kind() == AgentActionRequestedEvent.AgentActionKind.CHANGE_PROPOSAL) {
       changes.approveAndApply(event.actionId(), creator.getEmail());
-    } else {
+    } else if (event.kind() == AgentActionRequestedEvent.AgentActionKind.TEST_RUN) {
       var test = tests.get(event.actionId(), workflow.executionWorktreeId());
       if (test.status() == TestRunStatus.PROPOSED) tests.approve(test.id(), creator.getEmail());
       tests.execute(test.id());

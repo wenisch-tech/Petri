@@ -5,7 +5,7 @@ import {
   FilePlus2, FileSpreadsheet, FileTerminal, FileText, FileType2, Folder, FolderOpen, FolderPlus, FolderGit2,
   GitBranch, GitBranchPlus, GitCommitHorizontal, GitCompare, GitCompareArrows, GitPullRequestArrow,
   History, KeyRound, List, LoaderCircle, LockKeyhole, LogOut, MessageSquare,
-  MoreHorizontal, PanelRight, Pencil, Play, Plus, RefreshCw, Save, Send, Settings, Settings2,
+  MoreHorizontal, Package, PanelRight, Pencil, Play, Plus, RefreshCw, Save, Send, Settings, Settings2,
   Search, ShieldCheck, Sun, Trash2, TriangleAlert, Workflow, Wrench, X, createElement as createLucideElement
 } from 'lucide';
 
@@ -16,7 +16,7 @@ const registry = {
   FileSpreadsheet, FileTerminal, FileText, FileType2, Folder, FolderOpen, FolderPlus, FolderGit2,
   GitBranch, GitBranchPlus, GitCommitHorizontal, GitCompare, GitCompareArrows, GitPullRequestArrow,
   History, KeyRound, List, LoaderCircle, LockKeyhole, LogOut, MessageSquare,
-  MoreHorizontal, PanelRight, Pencil, Play, Plus, RefreshCw, Save, Send, Settings, Settings2,
+  MoreHorizontal, Package, PanelRight, Pencil, Play, Plus, RefreshCw, Save, Send, Settings, Settings2,
   Search, ShieldCheck, Sun, Trash2, TriangleAlert, Workflow, Wrench, X
 };
 

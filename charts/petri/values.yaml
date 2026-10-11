@@ -75,6 +75,9 @@ affinity: {}
 # Leave a value empty to use the application default.
 env:
   PETRI_ADMIN_EMAIL: ""
+  # Run approved tests in this container and let agents install Alpine packages (approval-gated).
+  # Use "podman" for the isolated Podman sandbox instead.
+  PETRI_TESTS_EXECUTOR: "local"
   # Database: embedded H2 below the persistence mount by default, or point at PostgreSQL.
   SPRING_DATASOURCE_URL: ""
   SPRING_DATASOURCE_USERNAME: ""

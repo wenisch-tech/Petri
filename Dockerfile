@@ -1,12 +1,12 @@
 # syntax=docker/dockerfile:1.27@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
 
-# Chainguard JRE. Petri drives Git as a subprocess, so the -dev variant is used solely to install
-# the git binary; the runtime user is unprivileged and no build tools are added.
-FROM cgr.dev/chainguard/jre:latest-dev
-USER root
-RUN apk add --no-cache git \
- && mkdir -p /app/data \
- && chown -R 65532:65532 /app
+# Alpine JDK: Petri runs approved tests in this container (PETRI_TESTS_EXECUTOR=local) and lets
+# agents install further Alpine packages into an unprivileged toolchain prefix on /app/data.
+FROM eclipse-temurin:25-jdk-alpine
+
+COPY scripts/alpine-runtime.sh /tmp/alpine-runtime.sh
+RUN sh /tmp/alpine-runtime.sh && rm -f /tmp/alpine-runtime.sh
+
 WORKDIR /app
 
 ARG BUILD_DATE
@@ -25,12 +25,13 @@ LABEL org.opencontainers.image.title="Petri" \
       org.opencontainers.image.revision="${BUILD_REVISION}" \
       org.opencontainers.image.created="${BUILD_DATE}"
 
-ENV JAVA_TOOL_OPTIONS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=20.0 -XX:+UseG1GC -Djava.security.egd=file:/dev/urandom"
+ENV PETRI_TESTS_EXECUTOR=local \
+    JAVA_TOOL_OPTIONS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=20.0 -XX:+UseG1GC -Djava.security.egd=file:/dev/urandom"
 
-COPY --chown=65532:65532 target/petri-*.jar /app/app.jar
-COPY --chown=65532:65532 skills/ /app/skills/
+COPY --chown=petri:petri target/petri-*.jar /app/app.jar
+COPY --chown=petri:petri skills/ /app/skills/
 
-USER 65532
+USER petri
 VOLUME ["/app/data"]
 EXPOSE 8080
 ENTRYPOINT ["java", "-jar", "/app/app.jar"]

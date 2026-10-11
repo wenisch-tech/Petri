@@ -42,6 +42,9 @@ stopped because it exhausted its attempts can always be restarted. Automatic sto
 
 ### Automatic approval
 
+Package installs requested through `install_packages` by any stage are never covered by plan
+approval; they need user approval or the project's explicit auto-approve setting.
+
 Plan approval authorizes automatic application of the implementer's patches and tests. Approval
 listeners run in their own transaction so the applied status is persisted. Before judging evidence,
 the coordinator settles any covered action that is still open; a file that already holds the exact

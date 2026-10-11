@@ -12,6 +12,7 @@ class ProjectSandboxSetting {
   @Id @Column(name = "project_id") private UUID projectId;
   @Column(name = "profile_id", nullable = false) private UUID profileId;
   @Column(name = "network_enabled") private Boolean networkEnabled;
+  @Column(name = "auto_approve_package_installs", nullable = false) private boolean autoApprovePackageInstalls;
   protected ProjectSandboxSetting() {}
   ProjectSandboxSetting(UUID projectId, UUID profileId, Boolean networkEnabled) {
     this.projectId = projectId;
@@ -22,6 +23,8 @@ class ProjectSandboxSetting {
     this.profileId = profileId;
     this.networkEnabled = networkEnabled;
   }
+  void autoApprovePackageInstalls(boolean value) { this.autoApprovePackageInstalls = value; }
+  boolean autoApprovePackageInstalls() { return autoApprovePackageInstalls; }
   UUID projectId() { return projectId; }
   UUID profileId() { return profileId; }
   Boolean networkEnabled() { return networkEnabled; }

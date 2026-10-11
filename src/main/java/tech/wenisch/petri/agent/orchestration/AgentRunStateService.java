@@ -221,6 +221,26 @@ class AgentRunStateService {
     run.refreshExecutionClaim(claimId, now);
   }
 
+  /** Keeps the execution lease alive while the run waits for a human decision. */
+  @Transactional
+  void heartbeat(UUID runId, UUID claimId) {
+    AgentRun run = locked(runId);
+    if (run.terminal()) return;
+    run.refreshExecutionClaim(claimId, Instant.now(clock));
+  }
+
+  /** Replaces a persisted tool result with its final outcome before the model sees it. */
+  @Transactional
+  void amendToolResult(UUID runId, UUID claimId, String callId, String output) {
+    AgentRun run = locked(runId);
+    requireActiveClaim(run, claimId);
+    allTurns(run.id()).stream()
+        .filter(turn -> turn.kind() == AgentTurnKind.TOOL_RESULT && callId.equals(turn.toolCallId()))
+        .reduce((first, second) -> second)
+        .ifPresent(turn -> turn.replaceContent(output));
+    run.refreshExecutionClaim(claimId, Instant.now(clock));
+  }
+
   @Transactional
   AgentExecutionState cancelIfRequested(UUID runId, UUID claimId, String actor) {
     AgentRun run = locked(runId);

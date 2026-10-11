@@ -59,7 +59,7 @@ Tests must not depend on live model providers, remote repositories or external c
 `.github/workflows/ci.yml` orchestrates reusable workflows:
 
 - `_test.yml` — Java 25 `mvn verify` (includes the frontend build) and a JUnit report.
-- `_docker.yml` — builds the Chainguard-JRE image, checks `/login` and `/actuator/health` latency in
+- `_docker.yml` — builds the Alpine JDK image, checks `/login` and `/actuator/health` latency in
   the running container, runs a **Trivy** vulnerability scan (posted as a PR comment), and on `main`
   pushes, Cosign-signs and attests the image.
 - `_release.yml` (main only) — versions and packages the Helm chart, generates a CycloneDX SBOM,
@@ -68,3 +68,12 @@ Tests must not depend on live model providers, remote repositories or external c
 
 Versions come from conventional commit tags (`mathieudutour/github-tag-action`). Pull requests build
 and scan the image but never push it. The chart source is in `charts/petri`.
+
+## Dev container
+
+`.devcontainer/` provides an Alpine JDK 25 environment that mirrors the release image (same
+`scripts/alpine-runtime.sh`, unprivileged user, `PETRI_TESTS_EXECUTOR=local`). Open the repository in
+VS Code or any Dev Containers client; `postCreateCommand` builds the application. Run it with
+`./mvnw spring-boot:run` and open the forwarded port 8080. Node/npm come from Alpine (musl), so
+`MAVEN_ARGS` skips the frontend plugin's glibc Node download; run `npm ci && npm run build` once
+inside the container (done by `postCreateCommand`) before Maven builds.

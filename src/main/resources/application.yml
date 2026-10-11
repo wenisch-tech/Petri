@@ -29,6 +29,11 @@ petri:
     max-parallel: ${PETRI_IMPORT_MAX_PARALLEL:4}
   tests:
     podman-executable: ${PETRI_PODMAN_EXECUTABLE:podman}
+    # podman (default, isolated) or local (run tests in Petri's own Alpine container)
+    executor: ${PETRI_TESTS_EXECUTOR:podman}
+    toolchain-root: ${PETRI_TOOLCHAIN_ROOT:./data/toolchain}
+    apk-executable: ${PETRI_APK_EXECUTABLE:apk}
+    install-timeout: ${PETRI_INSTALL_TIMEOUT:10m}
   security:
     initial-admin-email: ${PETRI_ADMIN_EMAIL:admin@petri.local}
     initial-admin-password: ${PETRI_ADMIN_PASSWORD:admin}

@@ -23,6 +23,7 @@ class AgentWorkflowLedger {
   private final AuditLogService audit;
   private final ChangeProposalService changes;
   private final TestRunService tests;
+  private final tech.wenisch.petri.agent.run.PackageInstallService packageInstalls;
 
   AgentWorkflowLedger(
       AgentWorkflowRepository workflows,
@@ -35,11 +36,12 @@ class AgentWorkflowLedger {
       OrchestrationProfileService profiles,
       AuditLogService audit,
       ChangeProposalService changes,
-      TestRunService tests) {
+      TestRunService tests,
+      tech.wenisch.petri.agent.run.PackageInstallService packageInstalls) {
     this.workflows = workflows; this.artifacts = artifacts; this.transitions = transitions;
     this.snapshots = snapshots; this.reservations = reservations; this.chats = chats;
     this.runs = runs; this.profiles = profiles; this.audit = audit;
-    this.changes = changes; this.tests = tests;
+    this.changes = changes; this.tests = tests; this.packageInstalls = packageInstalls;
   }
 
   @Transactional
@@ -269,7 +271,8 @@ class AgentWorkflowLedger {
         workflow.holdReason(), workflow.createdBy(), workflow.createdAt(), workflow.updatedAt(),
         workflow.completedAt(), artifactViews, transitionViews, stageRuns,
         stageRuns.stream().flatMap(run -> changes.listForAgentRun(run.id()).stream()).toList(),
-        stageRuns.stream().flatMap(run -> tests.listForAgentRun(run.id()).stream()).toList());
+        stageRuns.stream().flatMap(run -> tests.listForAgentRun(run.id()).stream()).toList(),
+        stageRuns.stream().flatMap(run -> packageInstalls.listForAgentRun(run.id()).stream()).toList());
   }
 
   private AgentWorkflow locked(UUID id) {

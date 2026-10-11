@@ -1030,7 +1030,7 @@ function renderSnapshot(state, data, preservePosition = false) {
   if (!preservePosition || wasBottom) timeline.scrollTop = timeline.scrollHeight;
   else timeline.scrollTop = previousTop;
 }
-function renderRun(state, entry, timeline) { const run = entry.run; const user = el('article', 'workspace-message workspace-message-user'); user.append(el('p', '', run.prompt)); const meta = el('div', 'workspace-message-meta', `Turn ${run.chatMessageIndex + 1} · ${run.status}`); user.append(meta); timeline.append(user); for (const turn of run.turns || []) { if (turn.kind === 'USER_PROMPT') continue; if (turn.kind === 'MODEL_RESPONSE') { const assistant = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.raw = turn.content || ''; applyMarkdown(body, turn.content || ''); assistant.append(body); timeline.append(assistant); } else if (turn.kind === 'ERROR') timeline.append(el('article', 'workspace-message-error', turn.content || 'Agent error')); else { const details = el('details', 'workspace-tool-turn'); details.append(el('summary', '', turn.toolName || turn.kind), el('pre', '', turn.content || '')); timeline.append(details); } } if (run.partialOutput) { const partial = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.runOutput = run.id; body.dataset.raw = run.partialOutput; applyMarkdown(body, run.partialOutput); partial.append(el('small', 'workspace-writing', 'Petri · writing…'), body); timeline.append(partial); } for (const proposal of entry.proposals || []) timeline.append(proposalCard(state, proposal)); for (const test of entry.tests || []) timeline.append(testCard(state, test)); }
+function renderRun(state, entry, timeline) { const run = entry.run; const user = el('article', 'workspace-message workspace-message-user'); user.append(el('p', '', run.prompt)); const meta = el('div', 'workspace-message-meta', `Turn ${run.chatMessageIndex + 1} · ${run.status}`); user.append(meta); timeline.append(user); for (const turn of run.turns || []) { if (turn.kind === 'USER_PROMPT') continue; if (turn.kind === 'MODEL_RESPONSE') { const assistant = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.raw = turn.content || ''; applyMarkdown(body, turn.content || ''); assistant.append(body); timeline.append(assistant); } else if (turn.kind === 'ERROR') timeline.append(el('article', 'workspace-message-error', turn.content || 'Agent error')); else { const details = el('details', 'workspace-tool-turn'); details.append(el('summary', '', turn.toolName || turn.kind), el('pre', '', turn.content || '')); timeline.append(details); } } if (run.partialOutput) { const partial = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.runOutput = run.id; body.dataset.raw = run.partialOutput; applyMarkdown(body, run.partialOutput); partial.append(el('small', 'workspace-writing', 'Petri · writing…'), body); timeline.append(partial); } for (const proposal of entry.proposals || []) timeline.append(proposalCard(state, proposal)); for (const test of entry.tests || []) timeline.append(testCard(state, test)); for (const install of entry.packageInstalls || []) timeline.append(packageCard(state, install)); }
 
 const workflowStages = [
   ['ORCHESTRATOR_INTAKE', 'Intake'], ['PLANNING', 'Plan'],
@@ -1150,6 +1150,7 @@ const workflowToolPresentation = {
   create_patch: ['FileDiff', 'Preparing file change'],
   create_file: ['FilePlus2', 'Preparing new file'],
   run_tests: ['Play', 'Preparing test run'],
+  install_packages: ['Package', 'Requesting package install'],
   list_skills: ['List', 'Listing skills'],
   load_skill: ['BookOpen', 'Loading skill']
 };
@@ -1184,6 +1185,7 @@ function workflowFeed(workflow) {
     } });
   }
   for (const proposal of workflow.proposals || []) events.push({ kind: 'node', time: proposal.createdAt, order: 0.5, build: state => workflowProposal(state, proposal) });
+  for (const install of workflow.packageInstalls || []) events.push({ kind: 'node', time: install.requestedAt, order: 0.5, build: state => packageCard(state, install) });
   for (const test of workflow.tests || []) events.push({ kind: 'node', time: test.requestedAt, order: 0.5, build: () => workflowTest(test) });
   events.sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')) || a.order - b.order);
   return events;
@@ -1411,9 +1413,33 @@ async function workflowAction(state, button, workflowId, action, body, valid = t
   finally { if (button.isConnected) button.disabled = false; }
 }
 function proposalCard(state, proposal) { const card = el('article', 'workspace-review-card'); card.append(el('strong', '', proposal.filePath), el('span', 'workspace-review-state', proposal.status)); const diff = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'View diff'); diff.type = 'button'; diff.addEventListener('click', () => openDiff(state, proposal.filePath, proposal.id)); card.append(diff); if (proposal.status === 'PROPOSED' || proposal.status === 'APPROVED') { const apply = el('button', 'btn-primary !min-h-8 !px-2 text-xs', 'Approve & apply'); apply.type = 'button'; apply.addEventListener('click', () => reviewAction(state, apply, async () => { await request(`/workspace/api/proposals/${proposal.id}/approve-and-apply`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); refreshChanges(state); })); const reject = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'Reject'); reject.type = 'button'; reject.addEventListener('click', () => reviewAction(state, reject, async () => { await request(`/workspace/api/chats/${state.chatId}/proposals/${proposal.id}/reject`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); card.append(apply, reject); } return card; }
+function packageCard(state, install) {
+  const card = el('article', 'workspace-review-card');
+  card.append(renderIcon('Package'), el('strong', '', `Install packages: ${(install.packages || []).join(', ')}`),
+    el('span', 'workspace-review-state', install.status));
+  if (install.reason) card.append(el('small', 'workspace-package-reason', install.reason));
+  if (install.status === 'PROPOSED' || install.status === 'APPROVED') {
+    const approve = el('button', 'btn-primary !min-h-8 !px-2 text-xs', 'Approve & install'); approve.type = 'button';
+    approve.addEventListener('click', () => reviewAction(state, approve, async () => {
+      await request(`/workspace/api/chats/${state.chatId}/packages/${install.id}/approve`, { method: 'POST', headers: csrfHeaders() });
+      await snapshot(state, true);
+    }));
+    const reject = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'Reject'); reject.type = 'button';
+    reject.addEventListener('click', () => reviewAction(state, reject, async () => {
+      await request(`/workspace/api/chats/${state.chatId}/packages/${install.id}/reject`, { method: 'POST', headers: csrfHeaders() });
+      await snapshot(state, true);
+    }));
+    card.append(approve, reject);
+  } else if (install.output && install.status !== 'INSTALLED') {
+    const details = el('details', 'workspace-package-output');
+    details.append(el('summary', '', 'Output'), el('pre', '', install.output));
+    card.append(details);
+  }
+  return card;
+}
 function testCard(state, test) { const card = el('article', 'workspace-review-card'); card.append(el('strong', '', test.command), el('span', 'workspace-review-state', test.status)); if (test.status === 'PROPOSED' || test.status === 'APPROVED') { const run = el('button', 'btn-primary !min-h-8 !px-2 text-xs', 'Run'); run.type = 'button'; run.addEventListener('click', () => reviewAction(state, run, async () => { await request(`/workspace/api/chats/${state.chatId}/tests/${test.id}/run`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); const reject = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'Reject'); reject.type = 'button'; reject.addEventListener('click', () => reviewAction(state, reject, async () => { await request(`/workspace/api/chats/${state.chatId}/tests/${test.id}/reject`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); card.append(run, reject); } return card; }
 async function reviewAction(state, button, operation) { button.disabled = true; try { await operation(); } catch (error) { state.chat.querySelector('[data-chat-status]').textContent = error.message; } finally { if (button.isConnected) button.disabled = false; } }
-function renderReviews(state) { const tray = state.chat.querySelector('[data-review-tray]'), items = tray.querySelector('[data-review-items]'); const pending = state.snapshot.runs.flatMap(value => [...value.proposals, ...value.tests]).filter(value => value.status === 'PROPOSED' || value.status === 'APPROVED'); tray.hidden = pending.length === 0; tray.querySelector('[data-review-count]').textContent = `${pending.length} review${pending.length === 1 ? '' : 's'} waiting`; items.replaceChildren(); for (const proposal of pending.filter(value => value.filePath)) items.append(proposalCard(state, proposal)); for (const test of pending.filter(value => value.command)) items.append(testCard(state, test)); }
+function renderReviews(state) { const tray = state.chat.querySelector('[data-review-tray]'), items = tray.querySelector('[data-review-items]'); const pending = state.snapshot.runs.flatMap(value => [...value.proposals, ...value.tests, ...(value.packageInstalls || [])]).filter(value => value.status === 'PROPOSED' || value.status === 'APPROVED'); tray.hidden = pending.length === 0; tray.querySelector('[data-review-count]').textContent = `${pending.length} review${pending.length === 1 ? '' : 's'} waiting`; items.replaceChildren(); for (const proposal of pending.filter(value => value.filePath)) items.append(proposalCard(state, proposal)); for (const test of pending.filter(value => value.command)) items.append(testCard(state, test)); for (const install of pending.filter(value => value.packages)) items.append(packageCard(state, install)); }
 
 async function openOrchestrationProfiles(state) {
   const dialog = state.root.querySelector('[data-orchestration-dialog]');

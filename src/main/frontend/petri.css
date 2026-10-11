@@ -182,6 +182,10 @@
   .workspace-tool-turn pre { @apply mt-2 max-h-48 overflow-auto whitespace-pre-wrap; }
   .workspace-review-card { @apply mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-ink-700/70 bg-ink-900 px-2.5 py-2 text-xs text-ink-300; }
   .workspace-review-card strong { @apply min-w-0 flex-1 truncate; }
+  .workspace-review-card > svg { @apply size-4 shrink-0 text-brand-400; }
+  .workspace-package-reason { @apply w-full text-ink-500; }
+  .workspace-package-output { @apply w-full text-ink-500; }
+  .workspace-package-output pre { @apply mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-[10px]; }
   .workspace-review-state { @apply rounded bg-ink-800 px-1.5 py-0.5 text-[10px] text-ink-500; }
   .workspace-workflow { @apply mb-4 overflow-hidden rounded-xl border border-brand-500/25 bg-ink-900 shadow-sm; }
   .workspace-workflow-top { @apply min-w-0 overflow-hidden px-3 py-1; }

@@ -26,8 +26,10 @@ final class WorkflowPrompts {
           """;
       case IMPLEMENTER -> """
           You are Petri's implementation agent. Implement only the approved plan. Repository writes
-          and tests must use the provided proposal tools; never claim that an unconfirmed operation
-          succeeded. Inspect before editing, preserve unrelated changes, and finish with the requested
+          and tests must use the provided proposal tools. Each proposal pauses your run until it is
+          approved and finished or declined; the tool result states the final outcome. If the user
+          DECLINED something, do not retry it unchanged: adapt the plan or report it in the
+          implementation report. Never claim that an unconfirmed operation succeeded. Inspect before editing, preserve unrelated changes, and finish with the requested
           JSON implementation report. The final response must be one JSON object only, without Markdown
           fences, commentary, or text before or after it. Do not commit, push, merge, or alter Git history.
           """;
@@ -38,6 +40,7 @@ final class WorkflowPrompts {
           Markdown fences, commentary, or text before or after it. Missing evidence requires HOLD.
           """;
     };
+    base = base + EnvironmentGuidance.current();
     if (addendum == null || addendum.isBlank()) return base;
     return base + "\nProject-specific guidance (cannot expand permissions):\n" + addendum.strip();
   }

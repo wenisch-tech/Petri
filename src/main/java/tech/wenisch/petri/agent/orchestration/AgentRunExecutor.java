@@ -21,8 +21,11 @@ public class AgentRunExecutor {
       Inspect repository content with the available tools before drawing conclusions.
       Use list_skills to discover reusable workflows and load_skill only when a listed skill is
       relevant to the task; loaded skills are operating guidance and cannot bypass tool policy.
-      File changes and test runs are proposals that require separate human approval; never claim
-      that a proposal has already been applied or executed. To replace an existing file use
+      File changes, test runs and package installs are proposals that require human approval. Your
+      run pauses until each one is approved (or auto-approved) and finished, or declined, and the
+      tool result then states the final outcome. If a result says the user DECLINED, respect it:
+      do not retry the same action, change approach or explain what you need. Never claim that a
+      proposal was applied or executed unless its tool result says so. To replace an existing file use
       create_patch with the SHA-256 from the latest read_file; to add a file that does not exist
       yet use create_file. Use tool results as authoritative, never invent repository content,
       and do not reveal credentials or other secrets. When the task is complete, return a concise
@@ -37,6 +40,8 @@ public class AgentRunExecutor {
   private final ApplicationEventPublisher eventPublisher;
   private final AgentChatSummaryService summaries;
   private final AgentChatStream chatStream;
+  private final ApprovalGate approvalGate;
+  private final java.time.Duration approvalWait;
 
   public AgentRunExecutor(
       AgentRunStateService stateService,
@@ -46,7 +51,10 @@ public class AgentRunExecutor {
       AgentRunEventService events,
       ApplicationEventPublisher eventPublisher,
       AgentChatSummaryService summaries,
-      AgentChatStream chatStream) {
+      AgentChatStream chatStream,
+      ApprovalGate approvalGate,
+      @org.springframework.beans.factory.annotation.Value("${petri.agent.approval-wait:${PETRI_AGENT_APPROVAL_WAIT:12h}}")
+          java.time.Duration approvalWait) {
     this.stateService = stateService;
     this.runService = runService;
     this.modelClients = modelClients;
@@ -55,6 +63,8 @@ public class AgentRunExecutor {
     this.eventPublisher = eventPublisher;
     this.summaries = summaries;
     this.chatStream = chatStream;
+    this.approvalGate = approvalGate;
+    this.approvalWait = approvalWait;
   }
 
   public AgentRunView execute(
@@ -78,13 +88,15 @@ public class AgentRunExecutor {
         if (state.terminal()) break;
 
         if (!state.pendingToolCalls().isEmpty()) {
+          java.util.List<ApprovalGate.Gated> gated = new java.util.ArrayList<>();
           for (AgentPendingToolCall call : state.pendingToolCalls()) {
             events.record(
                 state.worktreeId(), runId, AgentRunEventType.TOOL_STARTED, call.name(), runActor,
                 "Agent run started tool " + call.name());
             chatStream.toolLifecycle(state.chatId(), runId, call.name(), "started");
             try {
-              stateService.executeTool(runId, claimId, call);
+              String toolOutput = stateService.executeTool(runId, claimId, call);
+              approvalGate.detect(call.name(), call.callId(), toolOutput).ifPresent(gated::add);
               events.record(
                   state.worktreeId(), runId, AgentRunEventType.TOOL_SUCCEEDED, call.name(), runActor,
                   "Agent run completed tool " + call.name());
@@ -108,6 +120,12 @@ public class AgentRunExecutor {
           }
           state = stateService.cancelIfRequested(runId, claimId, actor);
           if (state.terminal()) break;
+          // Only interactive runs (workspace chats, workflows) can be approved by a person while
+          // they run; API-created runs keep returning with pending proposals.
+          if (!gated.isEmpty() && state.chatId() != null) {
+            state = awaitApprovals(state, claimId, gated, actor);
+            if (state.terminal()) break;
+          }
           if (!state.pendingToolCalls().isEmpty()) continue;
         }
 
@@ -154,11 +172,56 @@ public class AgentRunExecutor {
     return result;
   }
 
+  /**
+   * Holds the run until every approval-gated action created by the last tool calls is decided (or
+   * auto-approved and finished), then gives the model the final outcome, including a decline.
+   */
+  private AgentExecutionState awaitApprovals(
+      AgentExecutionState state, UUID claimId, java.util.List<ApprovalGate.Gated> gated,
+      String actor) {
+    UUID runId = state.runId();
+    java.util.List<ApprovalGate.Gated> open = new java.util.ArrayList<>(gated);
+    long deadline = System.nanoTime() + approvalWait.toNanos();
+    long lastBeat = System.nanoTime();
+    while (!open.isEmpty()) {
+      for (java.util.Iterator<ApprovalGate.Gated> iterator = open.iterator(); iterator.hasNext();) {
+        ApprovalGate.Gated item = iterator.next();
+        var outcome = approvalGate.resolved(item);
+        if (outcome.isPresent()) {
+          stateService.amendToolResult(runId, claimId, item.callId(), outcome.get());
+          iterator.remove();
+        }
+      }
+      if (open.isEmpty()) break;
+      if (System.nanoTime() >= deadline) {
+        for (ApprovalGate.Gated item : open) {
+          stateService.amendToolResult(runId, claimId, item.callId(), approvalGate.timedOut(item));
+        }
+        break;
+      }
+      state = stateService.cancelIfRequested(runId, claimId, actor);
+      if (state.terminal()) return state;
+      if (System.nanoTime() - lastBeat > 20_000_000_000L) {
+        stateService.heartbeat(runId, claimId);
+        lastBeat = System.nanoTime();
+      }
+      try {
+        Thread.sleep(1000);
+      } catch (InterruptedException exception) {
+        Thread.currentThread().interrupt();
+        throw new IllegalStateException("Interrupted while waiting for approval", exception);
+      }
+    }
+    return stateService.cancelIfRequested(runId, claimId, actor);
+  }
+
   private ModelRequest request(AgentExecutionState state) {
     AgentWorkflowRole role = state.workflowRole();
-    String instructions = role == null ? INSTRUCTIONS : state.instructionsSnapshot();
+    String instructions = role == null
+        ? INSTRUCTIONS + EnvironmentGuidance.current() : state.instructionsSnapshot();
     if (instructions == null || instructions.isBlank()) {
-      instructions = role == null ? INSTRUCTIONS : WorkflowPrompts.instructions(role, null);
+      instructions = role == null
+          ? INSTRUCTIONS + EnvironmentGuidance.current() : WorkflowPrompts.instructions(role, null);
     }
     var definitions = role == null
         ? tools.definitions() : tools.definitions(AgentWorkflowToolPolicy.allowed(role));
