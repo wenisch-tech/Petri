@@ -88,7 +88,6 @@ env:
   # SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_ID: "petri"
   # SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_SCOPE: "openid,profile,email"
   # SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_KEYCLOAK_ISSUER_URI: "https://sso.example.test/realms/platform"
-
 # Secrets for sensitive data.
 # If a key is set in both `env` and `secrets`, the Secret-backed value wins.
 secrets: {}
