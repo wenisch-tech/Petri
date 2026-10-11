@@ -134,6 +134,10 @@ class TestRun {
     sandboxNetworkEnabled = profile.networkEnabled();
   }
 
+  void progress(String text) {
+    if (status == TestRunStatus.RUNNING) output = text;
+  }
+
   void error(String safeMessage, Instant now) {
     requireStatus(TestRunStatus.RUNNING);
     status = TestRunStatus.ERROR;

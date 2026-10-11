@@ -30,7 +30,9 @@ import tech.wenisch.petri.agent.orchestration.AgentWorkflowService;
 import tech.wenisch.petri.agent.orchestration.AgentWorkflowView;
 import tech.wenisch.petri.agent.run.PackageInstallService;
 import tech.wenisch.petri.agent.run.PackageInstallView;
+import tech.wenisch.petri.agent.run.ProjectApprovalSettings;
 import tech.wenisch.petri.agent.run.TerminalCommandView;
+import tech.wenisch.petri.agent.run.TestSandboxProfileService;
 import tech.wenisch.petri.agent.run.TerminalService;
 import tech.wenisch.petri.agent.run.TestRunService;
 import tech.wenisch.petri.agent.run.TestRunView;
@@ -59,6 +61,7 @@ public class WorkspaceCollaborationController {
   private final TestRunService tests;
   private final PackageInstallService packageInstalls;
   private final TerminalService terminal;
+  private final TestSandboxProfileService sandboxSettings;
   private final AppUserRepository users;
   private final AgentChatAutomationService automation;
   private final ProjectAccessService access;
@@ -76,6 +79,7 @@ public class WorkspaceCollaborationController {
       TestRunService tests,
       PackageInstallService packageInstalls,
       TerminalService terminal,
+      TestSandboxProfileService sandboxSettings,
       AppUserRepository users,
       AgentChatAutomationService automation,
       ProjectAccessService access) {
@@ -90,6 +94,7 @@ public class WorkspaceCollaborationController {
     this.changes = changes;
     this.packageInstalls = packageInstalls;
     this.terminal = terminal;
+    this.sandboxSettings = sandboxSettings;
     this.tests = tests;
     this.users = users;
     this.automation = automation;
@@ -265,6 +270,22 @@ public class WorkspaceCollaborationController {
     return terminal.runForUser(worktreeId, actor.getEmail(), request.command());
   }
 
+  @GetMapping("/projects/{projectId}/approval-settings")
+  public ProjectApprovalSettings approvalSettings(
+      @PathVariable UUID projectId, Principal principal) {
+    access.requireProject(projectId, principal.getName());
+    return sandboxSettings.approvalSettings(projectId);
+  }
+
+  @PutMapping("/projects/{projectId}/approval-settings")
+  public ProjectApprovalSettings saveApprovalSettings(
+      @PathVariable UUID projectId, @RequestBody ApprovalSettingsRequest request,
+      Principal principal) {
+    access.requireProject(projectId, principal.getName());
+    return sandboxSettings.saveApprovalSettings(projectId, request.autoApprovePackageInstalls(),
+        request.autoApproveTerminalCommands(), principal.getName());
+  }
+
   @GetMapping("/terminal/status")
   public TerminalStatus terminalStatus() {
     return new TerminalStatus(terminal.available());
@@ -356,6 +377,8 @@ public class WorkspaceCollaborationController {
   }
 
   public record TerminalRequest(String command) {}
+  public record ApprovalSettingsRequest(
+      boolean autoApprovePackageInstalls, boolean autoApproveTerminalCommands) {}
   public record TerminalStatus(boolean available) {}
   public record ModelPreferenceRequest(ModelProvider provider, String model) {}
   public record WorkspaceMessageRequest(

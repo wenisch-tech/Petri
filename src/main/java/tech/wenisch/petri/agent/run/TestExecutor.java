@@ -9,4 +9,11 @@ interface TestExecutor {
   TestCommandResult run(
       UUID projectId, Path worktree, TestCommand command, TestSandboxProfileView profile)
       throws IOException;
+
+  /** Runs with live output reporting where the executor supports it. */
+  default TestCommandResult run(
+      UUID projectId, Path worktree, TestCommand command, TestSandboxProfileView profile,
+      java.util.function.Consumer<String> progress) throws IOException {
+    return run(projectId, worktree, command, profile);
+  }
 }

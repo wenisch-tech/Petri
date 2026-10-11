@@ -65,6 +65,35 @@ public class TestSandboxProfileService {
     return profile;
   }
 
+  /** Project-wide approval switches shown in the workspace (default off). */
+  @Transactional(readOnly = true)
+  public ProjectApprovalSettings approvalSettings(UUID projectId) {
+    return settings.findById(projectId)
+        .map(value -> new ProjectApprovalSettings(
+            value.autoApprovePackageInstalls(), value.autoApproveTerminalCommands()))
+        .orElse(new ProjectApprovalSettings(false, false));
+  }
+
+  /** Saves the approval switches, creating the project's setting row on the default profile. */
+  @Transactional
+  public ProjectApprovalSettings saveApprovalSettings(
+      UUID projectId, boolean autoApprovePackageInstalls, boolean autoApproveTerminalCommands,
+      String actorEmail) {
+    ProjectSandboxSetting setting = settings.findById(projectId).orElseGet(() -> {
+      UUID profileId = profiles.findFirstByDefaultProfileTrueAndEnabledTrue()
+          .orElseThrow(() -> new IllegalStateException("No default test sandbox profile is available"))
+          .getId();
+      return new ProjectSandboxSetting(projectId, profileId, null);
+    });
+    setting.autoApprovePackageInstalls(autoApprovePackageInstalls);
+    setting.autoApproveTerminalCommands(autoApproveTerminalCommands);
+    settings.save(setting);
+    audit.record(actorEmail, "PROJECT_APPROVAL_SETTINGS_SAVED", "PROJECT", projectId,
+        "Package installs auto-approve=" + autoApprovePackageInstalls
+            + ", terminal commands auto-approve=" + autoApproveTerminalCommands);
+    return new ProjectApprovalSettings(autoApprovePackageInstalls, autoApproveTerminalCommands);
+  }
+
   @Transactional
   public void configureProject(
       UUID projectId, UUID profileId, Boolean networkEnabled, boolean autoApprovePackageInstalls,

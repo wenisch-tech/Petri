@@ -105,6 +105,11 @@ class PackageInstallStateService {
   }
 
   @Transactional
+  void progress(UUID id, String text) {
+    requests.findForUpdateById(id).ifPresent(value -> value.progress(text));
+  }
+
+  @Transactional
   PackageInstallView complete(UUID id, TestCommandResult result) {
     PackageInstallRequest request = locked(id);
     request.complete(result.exitCode(), result.output(), result.truncated(), result.timedOut(),

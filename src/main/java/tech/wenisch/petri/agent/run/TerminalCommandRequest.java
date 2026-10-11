@@ -76,6 +76,11 @@ class TerminalCommandRequest {
         : exit == 0 ? TerminalCommandStatus.COMPLETED : TerminalCommandStatus.FAILED;
   }
 
+  /** Live output while the command is running. */
+  void progress(String text) {
+    if (status == TerminalCommandStatus.RUNNING) output = text;
+  }
+
   void error(String safeMessage, Instant now) {
     require(TerminalCommandStatus.RUNNING);
     status = TerminalCommandStatus.ERROR;

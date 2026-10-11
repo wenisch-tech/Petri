@@ -97,6 +97,11 @@ class TerminalStateService {
   }
 
   @Transactional
+  void progress(UUID id, String text) {
+    commands.findForUpdateById(id).ifPresent(value -> value.progress(text));
+  }
+
+  @Transactional
   TerminalCommandView complete(UUID id, TestCommandResult result) {
     TerminalCommandRequest request = locked(id);
     request.complete(result.exitCode(), result.output(), result.truncated(), result.timedOut(),

@@ -214,6 +214,7 @@ class AgentRun {
       throw new IllegalStateException("Agent run is not active");
     }
     modelTurnCount++;
+    partialOutput = null;
   }
 
   void complete(String output, Instant now) {
@@ -233,6 +234,7 @@ class AgentRun {
     requireActive();
     status = AgentRunStatus.FAILED;
     errorMessage = safeMessage;
+    partialOutput = null;
     completedAt = now;
     clearExecutionClaim();
   }
@@ -241,6 +243,7 @@ class AgentRun {
     requireStatus(AgentRunStatus.RUNNING);
     status = AgentRunStatus.BUDGET_EXHAUSTED;
     errorMessage = "Maximum model turns reached";
+    partialOutput = null;
     completedAt = now;
     clearExecutionClaim();
   }
@@ -248,6 +251,7 @@ class AgentRun {
   void requestCancellation(Instant now) {
     if (status == AgentRunStatus.PENDING) {
       status = AgentRunStatus.CANCELLED;
+      partialOutput = null;
       completedAt = now;
       clearExecutionClaim();
     } else if (status == AgentRunStatus.RUNNING) {
@@ -260,6 +264,7 @@ class AgentRun {
       throw new IllegalStateException("Agent run has no cancellation request");
     }
     status = AgentRunStatus.CANCELLED;
+    partialOutput = null;
     completedAt = now;
     clearExecutionClaim();
   }

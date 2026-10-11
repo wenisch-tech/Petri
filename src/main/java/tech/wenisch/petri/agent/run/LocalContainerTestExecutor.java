@@ -33,6 +33,13 @@ class LocalContainerTestExecutor implements TestExecutor {
   public TestCommandResult run(
       UUID projectId, Path worktree, TestCommand command, TestSandboxProfileView profile)
       throws IOException {
+    return run(projectId, worktree, command, profile, null);
+  }
+
+  @Override
+  public TestCommandResult run(
+      UUID projectId, Path worktree, TestCommand command, TestSandboxProfileView profile,
+      java.util.function.Consumer<String> progress) throws IOException {
     if (!profile.buildSystems().contains(command.buildSystem())) {
       throw new IllegalArgumentException("Build system is not allowed by the sandbox profile");
     }
@@ -48,7 +55,7 @@ class LocalContainerTestExecutor implements TestExecutor {
           : command.arguments();
       return BoundedProcess.run(argv, safeWorktree,
           toolchain.environment(home, extra), profile.timeout(), profile.outputLimitBytes(),
-          confinement.available() ? "local-container-landlock" : "local-container");
+          confinement.available() ? "local-container-landlock" : "local-container", progress);
     } finally {
       deleteQuietly(home);
     }

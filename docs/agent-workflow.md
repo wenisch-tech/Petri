@@ -62,3 +62,18 @@ honored, and `PETRI_AGENT_APPROVAL_WAIT` (default `12h`) bounds the wait; on tim
 told the request is still pending.
 
 A run interrupted by a server restart while waiting resumes with the "pending" tool result.
+
+## Approval settings and live output
+
+The **shield** button below the chat opens the approval settings:
+
+- *Project* (all chats and workflows): auto-approve **package installs** and auto-approve **agent
+  terminal commands**. Both are off by default and saved per project.
+- *This chat* (direct mode only): auto-apply file changes and auto-run approved tests.
+
+Workflow plan approval already covers file changes and tests; installs and commands always ask
+unless enabled in the project settings.
+
+While a terminal command, package install or test is running its output streams into its card
+(refreshed about every 1.5 s, tail only) and the newest step's output stays expanded at full size
+until the next step follows.

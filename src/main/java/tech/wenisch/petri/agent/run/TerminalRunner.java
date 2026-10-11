@@ -61,19 +61,23 @@ class TerminalRunner {
         + "PETRI_TERMINAL_CONFINE_COMMAND (the Alpine image does), or use the Podman executor.";
   }
 
-  TestCommandResult run(UUID projectId, Path worktree, String command) throws IOException {
+  TestCommandResult run(
+      UUID projectId, Path worktree, String command, java.util.function.Consumer<String> progress)
+      throws IOException {
     Path safeWorktree = paths.requireExistingPath(worktree);
-    if ("local".equalsIgnoreCase(executor)) return runLocal(safeWorktree, command);
-    return runPodman(projectId, safeWorktree, command);
+    if ("local".equalsIgnoreCase(executor)) return runLocal(safeWorktree, command, progress);
+    return runPodman(projectId, safeWorktree, command, progress);
   }
 
-  private TestCommandResult runLocal(Path worktree, String command) throws IOException {
+  private TestCommandResult runLocal(
+      Path worktree, String command, java.util.function.Consumer<String> progress)
+      throws IOException {
     if (!confinement.available()) throw new IllegalStateException(unavailableReason());
     Path home = Files.createTempDirectory(paths.temporaryDirectory(), "petri-term-");
     try {
       Map<String, String> env = toolchain.environment(home, Map.of());
       List<String> argv = confinement.wrap(List.of(worktree, home), List.of("/bin/sh", "-c", command));
-      return BoundedProcess.run(argv, worktree, env, timeout, outputLimit, "terminal-landlock");
+      return BoundedProcess.run(argv, worktree, env, timeout, outputLimit, "terminal-landlock", progress);
     } finally {
       deleteQuietly(home);
     }
@@ -87,7 +91,8 @@ class TerminalRunner {
     }
   }
 
-  private TestCommandResult runPodman(UUID projectId, Path worktree, String command)
+  private TestCommandResult runPodman(
+      UUID projectId, Path worktree, String command, java.util.function.Consumer<String> progress)
       throws IOException {
     TestSandboxProfileView profile = profiles.resolve(projectId, TestBuildSystem.MAVEN);
     Path cache = paths.directory("test-caches", projectId.toString());
@@ -105,7 +110,7 @@ class TerminalRunner {
         Map.of("PATH", System.getenv().getOrDefault("PATH", "/usr/bin:/bin"),
             "HOME", System.getenv().getOrDefault("HOME", "/tmp"),
             "XDG_RUNTIME_DIR", System.getenv().getOrDefault("XDG_RUNTIME_DIR", "/tmp")),
-        timeout, outputLimit, "podman");
+        timeout, outputLimit, "podman", progress);
     if (result.timedOut()) {
       try {
         new ProcessBuilder(podman, "rm", "--force", name).start().waitFor();

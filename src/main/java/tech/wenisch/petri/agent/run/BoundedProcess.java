@@ -21,13 +21,21 @@ final class BoundedProcess {
   static TestCommandResult run(
       List<String> command, Path directory, Map<String, String> environment,
       Duration timeout, int outputLimit, String digest) throws IOException {
+    return run(command, directory, environment, timeout, outputLimit, digest, null);
+  }
+
+  /** As above, additionally reporting the retained output roughly once a second while it runs. */
+  static TestCommandResult run(
+      List<String> command, Path directory, Map<String, String> environment,
+      Duration timeout, int outputLimit, String digest,
+      java.util.function.Consumer<String> progress) throws IOException {
     ProcessBuilder builder = new ProcessBuilder(command).directory(directory.toFile())
         .redirectErrorStream(true);
     builder.environment().clear();
     builder.environment().putAll(environment);
     Process process = builder.start();
     try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-      Future<Captured> output = executor.submit(() -> capture(process.getInputStream(), outputLimit));
+      Future<Captured> output = executor.submit(() -> capture(process.getInputStream(), outputLimit, progress));
       boolean finished;
       try {
         finished = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
@@ -48,15 +56,27 @@ final class BoundedProcess {
     process.destroyForcibly();
   }
 
-  private static Captured capture(InputStream input, int limit) throws IOException {
+  private static Captured capture(
+      InputStream input, int limit, java.util.function.Consumer<String> progress) throws IOException {
     ByteArrayOutputStream retained = new ByteArrayOutputStream(Math.min(limit, 8192));
     byte[] buffer = new byte[8192];
     long total = 0;
+    long lastReport = System.nanoTime();
     int read;
     while ((read = input.read(buffer)) >= 0) {
       int writable = Math.min(read, Math.max(0, limit - retained.size()));
       if (writable > 0) retained.write(buffer, 0, writable);
       total += read;
+      if (progress != null && System.nanoTime() - lastReport > 800_000_000L) {
+        lastReport = System.nanoTime();
+        try {
+          String text = retained.toString(StandardCharsets.UTF_8);
+          // Live updates carry only the tail so polling stays cheap; the final result is complete.
+          progress.accept(text.length() > 30_000 ? "…" + text.substring(text.length() - 30_000) : text);
+        } catch (RuntimeException ignored) {
+          // live progress is best effort
+        }
+      }
     }
     return new Captured(retained.toString(StandardCharsets.UTF_8), total > limit);
   }

@@ -89,7 +89,7 @@ public class PackageInstallService {
   public PackageInstallView execute(UUID id) {
     PackageInstallView started = state.start(id);
     try {
-      TestCommandResult result = runApk(started.packages());
+      TestCommandResult result = runApk(started.packages(), text -> state.progress(id, text));
       return state.complete(id, result);
     } catch (IOException | RuntimeException exception) {
       log.warn("Approved package install {} could not run", id, exception);
@@ -107,7 +107,7 @@ public class PackageInstallService {
         return;
       }
       log.info("Restoring {} previously approved packages into the toolchain", recorded.size());
-      TestCommandResult result = runApk(new ArrayList<>(recorded));
+      TestCommandResult result = runApk(new ArrayList<>(recorded), null);
       if (result.exitCode() != 0 || result.timedOut()) {
         log.warn("Toolchain restore failed: {}", result.output());
       }
@@ -116,7 +116,8 @@ public class PackageInstallService {
     }
   }
 
-  private TestCommandResult runApk(List<String> requested) throws IOException {
+  private TestCommandResult runApk(
+      List<String> requested, java.util.function.Consumer<String> progress) throws IOException {
     toolchain.ensureRoot();
     List<String> packages = new ArrayList<>(requested);
     if (resetLegacyToolchain()) {
@@ -132,7 +133,7 @@ public class PackageInstallService {
     installLock.lock();
     try {
       TestCommandResult result = BoundedProcess.run(command, toolchain.root(),
-          toolchain.environment(home, Map.of()), timeout, MAX_OUTPUT_BYTES, "apk");
+          toolchain.environment(home, Map.of()), timeout, MAX_OUTPUT_BYTES, "apk", progress);
       if (result.exitCode() == 0 && !result.timedOut()) {
         java.nio.file.Files.writeString(toolchain.root().resolve(SCRIPTLESS_MARKER), "1\n");
       }

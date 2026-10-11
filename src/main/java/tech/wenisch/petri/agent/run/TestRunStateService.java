@@ -125,6 +125,11 @@ class TestRunStateService {
   }
 
   @Transactional
+  public void progress(UUID testRunId, String text) {
+    testRuns.findForUpdateById(testRunId).ifPresent(value -> value.progress(text));
+  }
+
+  @Transactional
   public TestRunView complete(UUID testRunId, TestCommandResult result, String actorEmail) {
     TestRun testRun = locked(testRunId);
     testRun.complete(result, Instant.now(clock));

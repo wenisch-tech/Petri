@@ -971,7 +971,7 @@ function initializeChat(state) {
   state.chatMode = selector.selectedOptions[0]?.dataset.mode || 'ORCHESTRATED';
   mode.value = state.chatMode;
   mode.disabled = Boolean(state.chatId);
-  chat.querySelector('[data-automation-menu]').hidden = state.chatMode !== 'DIRECT';
+  chat.querySelector('[data-chat-automation-group]').hidden = state.chatMode !== 'DIRECT';
   const nearBottom = () => scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 100;
   const bottom = () => { scroller.scrollTop = scroller.scrollHeight; chat.querySelector('[data-new-response]').hidden = true; };
   chat.querySelector('[data-new-response]').addEventListener('click', bottom);
@@ -1045,15 +1045,14 @@ function initializeChat(state) {
   sendButton.addEventListener('click', sendMessage);
   mode.addEventListener('change', () => {
     if (!state.chatId) state.chatMode = mode.value;
-    chat.querySelector('[data-automation-menu]').hidden = state.chatMode !== 'DIRECT';
-    if (state.chatMode !== 'DIRECT') chat.querySelector('[data-automation-panel]').hidden = true;
+    chat.querySelector('[data-chat-automation-group]').hidden = state.chatMode !== 'DIRECT';
   });
   selector.addEventListener('change', () => {
     state.chatId = selector.value || null;
     state.chatMode = selector.selectedOptions[0]?.dataset.mode || 'ORCHESTRATED';
     mode.value = state.chatMode;
     mode.disabled = Boolean(state.chatId);
-    chat.querySelector('[data-automation-menu]').hidden = state.chatMode !== 'DIRECT';
+    chat.querySelector('[data-chat-automation-group]').hidden = state.chatMode !== 'DIRECT';
     updateChatUrl(state.chatId);
     snapshot(state, true);
     connectStream(state);
@@ -1072,7 +1071,7 @@ function initializeChat(state) {
   });
   chat.querySelector('[data-orchestration-settings]').addEventListener('click', () => openOrchestrationProfiles(state));
   wireOrchestrationDialog(state);
-  chat.querySelector('[data-automation-menu]').addEventListener('click', () => { const panel = chat.querySelector('[data-automation-panel]'); panel.hidden = !panel.hidden; });
+  initializeApprovalSettings(state, chat);
   for (const inputAuto of chat.querySelectorAll('[data-auto-changes],[data-auto-tests]')) inputAuto.addEventListener('change', async event => {
     if (!state.chatId || state.chatMode !== 'DIRECT') return;
     if (event.target.matches('[data-auto-tests]') && event.target.checked && !confirm('Auto-run tests executes approved commands in this worktree. Continue?')) { event.target.checked = false; return; }
@@ -1140,6 +1139,40 @@ function updateChatUrl(chatId) {
   if (chatId) url.searchParams.set('chat', chatId); else url.searchParams.delete('chat');
   history.replaceState(null, '', url);
 }
+function initializeApprovalSettings(state, chat) {
+  const panel = chat.querySelector('[data-automation-panel]');
+  const button = chat.querySelector('[data-automation-menu]');
+  const packages = panel.querySelector('[data-approve-packages]');
+  const terminal = panel.querySelector('[data-approve-terminal]');
+  const api = `/workspace/api/projects/${state.projectId}/approval-settings`;
+  const load = async () => {
+    try {
+      const value = await request(api);
+      packages.checked = Boolean(value.autoApprovePackageInstalls);
+      terminal.checked = Boolean(value.autoApproveTerminalCommands);
+    } catch (error) { chat.querySelector('[data-chat-status]').textContent = error.message; }
+  };
+  const save = async () => {
+    const confirmed = !terminal.checked || state.terminalConfirmed
+      || confirm('Auto-approve lets agents run shell commands in this worktree without asking. Commands are confined to the worktree. Continue?');
+    if (!confirmed) { terminal.checked = false; return; }
+    state.terminalConfirmed = true;
+    try {
+      await request(api, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body: JSON.stringify({ autoApprovePackageInstalls: packages.checked, autoApproveTerminalCommands: terminal.checked })
+      });
+      chat.querySelector('[data-chat-status]').textContent = 'Approval settings saved';
+    } catch (error) { chat.querySelector('[data-chat-status]').textContent = error.message; await load(); }
+  };
+  packages.addEventListener('change', save);
+  terminal.addEventListener('change', save);
+  button.addEventListener('click', () => {
+    panel.hidden = !panel.hidden;
+    button.classList.toggle('is-active', !panel.hidden);
+    if (!panel.hidden) load();
+  });
+}
 async function saveAutomation(state) { const chat = state.chat; try { const result = await request(`/workspace/api/chats/${state.chatId}/automation`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ autoApproveChanges: chat.querySelector('[data-auto-changes]').checked, autoApproveTests: chat.querySelector('[data-auto-tests]').checked }) }); renderSnapshot(state, result); } catch (error) { chat.querySelector('[data-chat-status]').textContent = error.message; } }
 async function snapshot(state, preservePosition = false) { if (!state.chatId) { renderSnapshot(state, null); return; } try { renderSnapshot(state, await request(`/workspace/api/chats/${state.chatId}/snapshot`), preservePosition); } catch (error) { state.chat.querySelector('[data-chat-status]').textContent = error.message; } }
 function renderSnapshot(state, data, preservePosition = false) {
@@ -1162,8 +1195,7 @@ function renderSnapshot(state, data, preservePosition = false) {
   const direct = state.chatMode === 'DIRECT';
   chat.querySelector('[data-auto-changes]').checked = data.chat.autoApproveChanges;
   chat.querySelector('[data-auto-tests]').checked = data.chat.autoApproveTests;
-  chat.querySelector('[data-automation-menu]').hidden = !direct;
-  if (!direct) chat.querySelector('[data-automation-panel]').hidden = true;
+  chat.querySelector('[data-chat-automation-group]').hidden = !direct;
   const workingWorkflow = (data.workflows || []).some(value =>
     ['RUNNING', 'PENDING', 'CANCELLING'].includes(value.status));
   const waitingWorkflow = (data.workflows || []).some(value => value.status === 'WAITING_FOR_USER');
@@ -1185,8 +1217,19 @@ function renderSnapshot(state, data, preservePosition = false) {
   }
   renderReviews(state);
   updateGuideToggle(state);
+  expandLatestOutput(timeline);
+  scheduleRunningPoll(state, data);
   if (!preservePosition || wasBottom) timeline.scrollTop = timeline.scrollHeight;
   else timeline.scrollTop = previousTop;
+}
+function scheduleRunningPoll(state, data) {
+  const running = value => value?.status === 'RUNNING';
+  const items = [
+    ...(data.runs || []).flatMap(value => [...(value.tests || []), ...(value.packageInstalls || []), ...(value.terminalCommands || [])]),
+    ...(data.workflows || []).flatMap(value => [...(value.tests || []), ...(value.packageInstalls || []), ...(value.terminalCommands || [])])
+  ];
+  clearTimeout(state.runningPoll);
+  if (items.some(running)) state.runningPoll = setTimeout(() => snapshot(state, true), 1500);
 }
 function renderRun(state, entry, timeline) { const run = entry.run; const user = el('article', 'workspace-message workspace-message-user'); user.append(el('p', '', run.prompt)); const meta = el('div', 'workspace-message-meta', `Turn ${run.chatMessageIndex + 1} · ${run.status}`); user.append(meta); timeline.append(user); for (const turn of run.turns || []) { if (turn.kind === 'USER_PROMPT') continue; if (turn.kind === 'MODEL_RESPONSE') { const assistant = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.raw = turn.content || ''; applyMarkdown(body, turn.content || ''); assistant.append(body); timeline.append(assistant); } else if (turn.kind === 'ERROR') timeline.append(el('article', 'workspace-message-error', turn.content || 'Agent error')); else { const details = el('details', 'workspace-tool-turn'); details.append(el('summary', '', turn.toolName || turn.kind), el('pre', '', turn.content || '')); timeline.append(details); } } if (run.partialOutput) { const partial = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.runOutput = run.id; body.dataset.raw = run.partialOutput; applyMarkdown(body, run.partialOutput); partial.append(el('small', 'workspace-writing', 'Petri · writing…'), body); timeline.append(partial); } for (const proposal of entry.proposals || []) timeline.append(proposalCard(state, proposal)); for (const test of entry.tests || []) timeline.append(testCard(state, test)); for (const install of entry.packageInstalls || []) timeline.append(packageCard(state, install)); for (const command of entry.terminalCommands || []) timeline.append(terminalCard(state, command)); }
 
@@ -1551,6 +1594,11 @@ function workflowProposal(state, proposal) {
 function workflowTest(test) {
   const card = el('div', 'workspace-workflow-action');
   card.append(renderIcon('Play'), el('span', '', test.command), el('small', '', test.status));
+  if (test.output || test.status === 'RUNNING') {
+    card.classList.add('is-block');
+    card.append(outputDetails(test.output, test.status === 'RUNNING' ? 'Running…'
+      : (test.exitCode != null ? `Output (exit ${test.exitCode})` : 'Output'), test.status === 'RUNNING'));
+  }
   return card;
 }
 
@@ -1590,12 +1638,33 @@ function terminalCard(state, command) {
       await snapshot(state, true);
     }));
     card.append(approve, reject);
-  } else if (command.output) {
-    const details = el('details', 'workspace-package-output');
-    details.append(el('summary', '', command.exitCode != null ? `Output (exit ${command.exitCode})` : 'Output'), el('pre', '', command.output));
-    card.append(details);
+  } else if (command.output || command.status === 'RUNNING') {
+    card.append(outputDetails(command.output, command.status === 'RUNNING' ? 'Running…'
+      : command.exitCode != null ? `Output (exit ${command.exitCode})` : 'Output', command.status === 'RUNNING'));
   }
   return card;
+}
+// Collapsible output block; the live/most recent one is shown at full size (see expandLatestOutput).
+function outputDetails(output, label, live) {
+  const details = el('details', 'workspace-package-output');
+  details.classList.toggle('is-live', Boolean(live));
+  details.open = Boolean(live);
+  details.append(el('summary', '', label), el('pre', '', output || ''));
+  return details;
+}
+// The newest step shows its output expanded until the next step (message, tool call, card) follows.
+function expandLatestOutput(timeline) {
+  const outputs = [...timeline.querySelectorAll('details.workspace-package-output')];
+  const last = outputs.at(-1);
+  if (!last) return;
+  let node = last.closest('.workspace-review-card, .workspace-workflow-action') || last;
+  while (node.parentElement && node.parentElement !== timeline) node = node.parentElement;
+  const following = [];
+  for (let next = node.nextElementSibling; next; next = next.nextElementSibling) following.push(next);
+  if (following.every(value => value.classList.contains('workspace-workflow'))) {
+    last.open = true;
+    last.classList.add('is-live');
+  }
 }
 function packageCard(state, install) {
   const card = el('article', 'workspace-review-card');
@@ -1614,14 +1683,13 @@ function packageCard(state, install) {
       await snapshot(state, true);
     }));
     card.append(approve, reject);
-  } else if (install.output && install.status !== 'INSTALLED') {
-    const details = el('details', 'workspace-package-output');
-    details.append(el('summary', '', 'Output'), el('pre', '', install.output));
-    card.append(details);
+  } else if (install.output || install.status === 'RUNNING') {
+    card.append(outputDetails(install.output, install.status === 'RUNNING' ? 'Installing…' : 'Output',
+      install.status === 'RUNNING'));
   }
   return card;
 }
-function testCard(state, test) { const card = el('article', 'workspace-review-card'); card.append(el('strong', '', test.command), el('span', 'workspace-review-state', test.status)); if (test.status === 'PROPOSED' || test.status === 'APPROVED') { const run = el('button', 'btn-primary !min-h-8 !px-2 text-xs', 'Run'); run.type = 'button'; run.addEventListener('click', () => reviewAction(state, run, async () => { await request(`/workspace/api/chats/${state.chatId}/tests/${test.id}/run`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); const reject = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'Reject'); reject.type = 'button'; reject.addEventListener('click', () => reviewAction(state, reject, async () => { await request(`/workspace/api/chats/${state.chatId}/tests/${test.id}/reject`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); card.append(run, reject); } return card; }
+function testCard(state, test) { const card = el('article', 'workspace-review-card'); card.append(el('strong', '', test.command), el('span', 'workspace-review-state', test.status)); if (test.status === 'PROPOSED' || test.status === 'APPROVED') { const run = el('button', 'btn-primary !min-h-8 !px-2 text-xs', 'Run'); run.type = 'button'; run.addEventListener('click', () => reviewAction(state, run, async () => { await request(`/workspace/api/chats/${state.chatId}/tests/${test.id}/run`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); const reject = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'Reject'); reject.type = 'button'; reject.addEventListener('click', () => reviewAction(state, reject, async () => { await request(`/workspace/api/chats/${state.chatId}/tests/${test.id}/reject`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); card.append(run, reject); } else if (test.output || test.status === 'RUNNING') { card.append(outputDetails(test.output, test.status === 'RUNNING' ? 'Running…' : (test.exitCode != null ? `Output (exit ${test.exitCode})` : 'Output'), test.status === 'RUNNING')); } return card; }
 async function reviewAction(state, button, operation) { button.disabled = true; try { await operation(); } catch (error) { state.chat.querySelector('[data-chat-status]').textContent = error.message; } finally { if (button.isConnected) button.disabled = false; } }
 function renderReviews(state) { const tray = state.chat.querySelector('[data-review-tray]'), items = tray.querySelector('[data-review-items]'); const pending = state.snapshot.runs.flatMap(value => [...value.proposals, ...value.tests, ...(value.packageInstalls || []), ...(value.terminalCommands || [])]).filter(value => value.status === 'PROPOSED' || value.status === 'APPROVED'); tray.hidden = pending.length === 0; tray.querySelector('[data-review-count]').textContent = `${pending.length} review${pending.length === 1 ? '' : 's'} waiting`; items.replaceChildren(); for (const proposal of pending.filter(value => value.filePath)) items.append(proposalCard(state, proposal)); for (const test of pending.filter(value => value.command && !value.source)) items.append(testCard(state, test)); for (const command of pending.filter(value => value.command && value.source)) items.append(terminalCard(state, command)); for (const install of pending.filter(value => value.packages)) items.append(packageCard(state, install)); }
 
@@ -1707,4 +1775,4 @@ function wireOrchestrationDialog(state) {
   });
 }
 
-function connectStream(state) { state.stream?.close(); if (!state.chatId) return; const stream = new EventSource(`/chat/${state.chatId}/stream`); state.stream = stream; const refresh = () => { clearTimeout(state.streamRefresh); state.streamRefresh = setTimeout(() => snapshot(state, true), 150); }; ['snapshot','run-status','tool-lifecycle','summary-status','workflow-status','workflow-stage','workflow-artifact','workflow-question','workflow-transition'].forEach(name => stream.addEventListener(name, refresh)); stream.addEventListener('assistant-delta', event => { const follow = state.scroller.scrollHeight - state.scroller.scrollTop - state.scroller.clientHeight < 100; try { const value = JSON.parse(event.data); let output = state.scroller.querySelector(`[data-run-output="${value.runId}"]`); if (!output) { const card = el('article', 'workspace-message workspace-message-assistant'); card.append(el('small', 'workspace-writing', 'Petri · writing…')); output = el('p'); output.dataset.runOutput = value.runId; card.append(output); state.scroller.append(card); } const raw = (output.dataset.raw ?? output.textContent ?? '') + value.delta; scheduleMarkdown(output, raw); if (follow) state.scroller.scrollTop = state.scroller.scrollHeight; else state.chat.querySelector('[data-new-response]').hidden = false; } catch {} }); stream.onerror = () => { stream.close(); clearTimeout(state.poll); state.poll = setTimeout(() => { if (!document.hidden) snapshot(state, true); connectStream(state); }, 1800); }; }
+function connectStream(state) { state.stream?.close(); if (!state.chatId) return; const stream = new EventSource(`/chat/${state.chatId}/stream`); state.stream = stream; const refresh = () => { clearTimeout(state.streamRefresh); state.streamRefresh = setTimeout(() => snapshot(state, true), 150); }; ['snapshot','run-status','tool-lifecycle','summary-status','workflow-status','workflow-stage','workflow-artifact','workflow-question','workflow-transition'].forEach(name => stream.addEventListener(name, refresh)); stream.addEventListener('assistant-delta', event => { const follow = state.scroller.scrollHeight - state.scroller.scrollTop - state.scroller.clientHeight < 100; try { const value = JSON.parse(event.data); let output = state.scroller.querySelector(`[data-run-output="${value.runId}"]`); if (!output) { const card = el('article', 'workspace-message workspace-message-assistant'); card.append(el('small', 'workspace-writing', 'Petri · writing…')); output = el('p'); output.dataset.runOutput = value.runId; card.append(output); state.scroller.append(card); } const raw = (output.dataset.raw ?? output.textContent ?? '') + value.delta; clearTimeout(state.deltaSettle); state.deltaSettle = setTimeout(() => snapshot(state, true), 2500); scheduleMarkdown(output, raw); if (follow) state.scroller.scrollTop = state.scroller.scrollHeight; else state.chat.querySelector('[data-new-response]').hidden = false; } catch {} }); stream.onerror = () => { stream.close(); clearTimeout(state.poll); state.poll = setTimeout(() => { if (!document.hidden) snapshot(state, true); connectStream(state); }, 1800); }; }

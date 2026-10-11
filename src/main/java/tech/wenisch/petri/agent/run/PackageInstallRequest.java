@@ -73,6 +73,10 @@ class PackageInstallRequest {
     status = !timedOut && exit == 0 ? PackageInstallStatus.INSTALLED : PackageInstallStatus.FAILED;
   }
 
+  void progress(String text) {
+    if (status == PackageInstallStatus.RUNNING) output = text;
+  }
+
   void error(String safeMessage, Instant now) {
     require(PackageInstallStatus.RUNNING);
     status = PackageInstallStatus.FAILED;

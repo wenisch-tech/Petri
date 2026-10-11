@@ -68,7 +68,8 @@ public class TerminalService {
     try {
       java.nio.file.Path worktree = worktrees.requireActiveWorktree(started.worktreeId());
       UUID projectId = projectWorktrees.get(started.worktreeId()).projectId();
-      return state.complete(id, runner.run(projectId, worktree, started.command()));
+      return state.complete(id,
+          runner.run(projectId, worktree, started.command(), text -> state.progress(id, text)));
     } catch (IOException | RuntimeException exception) {
       log.warn("Terminal command {} could not run", id, exception);
       return state.error(id, "Command could not be started: "

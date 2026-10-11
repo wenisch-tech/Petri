@@ -86,7 +86,8 @@ public class TestRunService {
       UUID projectId = projectWorktrees.get(claim.worktreeId()).projectId();
       TestSandboxProfileView profile = sandboxProfiles.resolve(projectId, claim.buildSystem());
       state.snapshot(testRunId, profile);
-      result = runner.run(projectId, worktree, command, profile);
+      result = runner.run(projectId, worktree, command, profile,
+          text -> state.progress(testRunId, text));
     } catch (IOException | RuntimeException exception) {
       log.warn("Approved test run {} could not be executed", testRunId, exception);
       return state.error(testRunId, claim.approverEmail(), safeFailure(exception));
