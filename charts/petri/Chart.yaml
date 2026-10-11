@@ -1,0 +1,41 @@
+apiVersion: v2
+name: petri
+description: Self-hosted agentic coding harness, multi-agent orchestrator and development environment
+type: application
+version: 0.1.0
+appVersion: "0.1.0"
+keywords:
+  - ai
+  - agents
+  - coding
+  - orchestration
+  - development-environment
+home: https://github.com/wenisch-tech/Petri
+sources:
+  - https://github.com/wenisch-tech/Petri
+maintainers:
+  - name: JFWenisch
+    url: https://github.com/JFWenisch
+  - name: Wenisch Technologies
+    url: https://wenisch.tech
+annotations:
+  # Makes the GHCR OCI package display wenisch-tech/Petri as its source repository.
+  org.opencontainers.image.source: https://github.com/wenisch-tech/Petri
+  artifacthub.io/category: ai-machine-learning
+  artifacthub.io/license: AGPL-3.0
+  artifacthub.io/prerelease: "false"
+  artifacthub.io/signKey: |
+    fingerprint: keyless (Sigstore/Cosign via GitHub Actions OIDC)
+    url: https://github.com/wenisch-tech/Petri/actions
+  artifacthub.io/images: |
+    - name: petri
+      image: ghcr.io/wenisch-tech/petri:latest
+  artifacthub.io/links: |
+    - name: Documentation
+      url: https://github.com/wenisch-tech/Petri/tree/main/docs
+    - name: GitHub Repository
+      url: https://github.com/wenisch-tech/Petri
+    - name: Changelog
+      url: https://github.com/wenisch-tech/Petri/blob/main/CHANGELOG.md
+    - name: Container Registry
+      url: https://github.com/wenisch-tech/Petri/pkgs/container/petri

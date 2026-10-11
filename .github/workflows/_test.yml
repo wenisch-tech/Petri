@@ -1,0 +1,54 @@
+name: Test
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      is_pull_request:
+        required: false
+        type: boolean
+        default: false
+
+jobs:
+  test-build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      checks: write
+      pull-requests: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Set Maven version
+        run: mvn -B versions:set -DnewVersion=${{ inputs.version }} -DgenerateBackupPoms=false
+
+      - name: Run tests and verification
+        run: mvn -B verify
+
+      - name: Publish JUnit report
+        if: always()
+        uses: dorny/test-reporter@v3
+        with:
+          name: Maven Tests
+          path: target/surefire-reports/*.xml
+          reporter: java-junit
+
+      - name: Upload test reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: test-reports
+          path: target/surefire-reports/*.xml

@@ -1,0 +1,130 @@
+replicaCount: 1
+image:
+  registry: ghcr.io
+  repository: wenisch-tech/petri
+  tag: 0.1.0
+  pullPolicy: IfNotPresent
+imagePullSecrets: []
+# Leave empty to derive the strategy from `persistence.enabled`:
+# Recreate with persistence (the embedded H2 file store allows a single writer only),
+# RollingUpdate otherwise. Set explicitly to override, e.g. when using PostgreSQL.
+updateStrategy: {}
+# Give the JVM time to drain requests and close the datasource before SIGKILL.
+terminationGracePeriodSeconds: 60
+nameOverride: ""
+fullnameOverride: ""
+podAnnotations: {}
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  fsGroup: 65532
+autoscaling:
+  enabled: false
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+service:
+  type: ClusterIP
+  port: 8080
+  targetPort: 8080
+  annotations: {}
+metrics:
+  path: /actuator/prometheus
+  serviceAnnotations:
+    enabled: true
+  podAnnotations:
+    enabled: false
+  serviceMonitor:
+    enabled: false
+    namespace: ""
+    interval: 30s
+    scrapeTimeout: 10s
+    labels: {}
+    annotations: {}
+    honorLabels: false
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: petri.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+resources:
+  requests:
+    cpu: 500m
+    memory: 1Gi
+  limits:
+    cpu: 2000m
+    memory: 4Gi
+persistence:
+  enabled: true
+  storageClassName: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  mountPath: /app/data
+nodeSelector: {}
+tolerations: []
+affinity: {}
+# Environment variables for Petri and Spring Boot.
+# Leave a value empty to use the application default.
+env:
+  PETRI_ADMIN_EMAIL: ""
+  # Database: embedded H2 below the persistence mount by default, or point at PostgreSQL.
+  SPRING_DATASOURCE_URL: ""
+  SPRING_DATASOURCE_USERNAME: ""
+  # Honor HTTPS and host headers sent by a TLS-terminating reverse proxy or ingress.
+  SERVER_FORWARD_HEADERS_STRATEGY: "framework"
+  # Optional model/endpoint and limits, see docs/configuration.md:
+  # PETRI_OPENAI_BASE_URL: ""
+  # PETRI_MODEL_REQUEST_TIMEOUT: "2m"
+  # PETRI_SKILLS_ROOT: "/app/skills"
+  # OIDC uses standard Spring Security client registration properties, for example:
+  # SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_ID: "petri"
+  # SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_SCOPE: "openid,profile,email"
+  # SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_KEYCLOAK_ISSUER_URI: "https://sso.example.test/realms/platform"
+
+# Secrets for sensitive data.
+# If a key is set in both `env` and `secrets`, the Secret-backed value wins.
+secrets: {}
+# PETRI_ADMIN_PASSWORD: "change-me"
+# PETRI_SECRETS_MASTER_KEY: "<base64 of 32 random bytes>"   # back this up; losing it loses stored secrets
+# SPRING_DATASOURCE_PASSWORD: "your-password"
+# SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET: "your-secret"
+
+# Name of an externally managed Secret (e.g. populated by Vault Secrets Operator)
+# to load as env vars via envFrom. Leave empty to disable.
+externalSecretName: ""
+livenessProbe:
+  enabled: true
+  httpGet:
+    path: /actuator/health/liveness
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 10
+  failureThreshold: 3
+readinessProbe:
+  enabled: true
+  httpGet:
+    path: /actuator/health/readiness
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 5
+startupProbe:
+  enabled: true
+  httpGet:
+    path: /actuator/health
+    port: http
+  # Allow slower boots (migrations, cold starts) before liveness kicks in.
+
+  periodSeconds: 5
+  timeoutSeconds: 5
+  failureThreshold: 30

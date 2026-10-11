@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "petri.fullname" . }}
+  labels:
+    {{- include "petri.labels" . | nindent 4 }}
+data:
+  SPRING_APPLICATION_NAME: "petri"
+  # Mirrors, worktrees, the embedded H2 database and the generated master key live below the
+  # persistence mount path.
+  PETRI_WORKSPACE_ROOT: "{{ .Values.persistence.mountPath }}/workspaces"
+  {{- if not .Values.env.PETRI_SECRETS_MASTER_KEY_FILE }}
+  PETRI_SECRETS_MASTER_KEY_FILE: "{{ .Values.persistence.mountPath }}/petri-master.key"
+  {{- end }}
+  {{- if not .Values.env.SPRING_DATASOURCE_URL }}
+  # Embedded H2 is single-writer only; use PostgreSQL for more than one replica.
+  SPRING_DATASOURCE_URL: "jdbc:h2:file:{{ .Values.persistence.mountPath }}/petri;MODE=PostgreSQL;DATABASE_TO_LOWER=TRUE;DEFAULT_NULL_ORDERING=HIGH"
+  {{- end }}
+  MANAGEMENT_ENDPOINTS_WEB_EXPOSURE_INCLUDE: "health,info,prometheus"

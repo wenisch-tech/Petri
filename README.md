@@ -109,7 +109,24 @@ Then:
 
 See [Getting started](docs/getting-started.md) for the full first-task walkthrough.
 
-## Configuration essentials
+## Run with Docker or Kubernetes
+
+Images are published to GHCR on every merge to `main`, built on the Chainguard JRE, signed with
+Cosign and shipped with SLSA provenance and a CycloneDX SBOM:
+
+```bash
+docker run --rm -p 8080:8080 -v petri-data:/app/data ghcr.io/wenisch-tech/petri:latest
+```
+
+The Helm chart lives in [`charts/petri`](charts/petri) and is published to the
+[Wenisch Tech Helm repository](https://github.com/wenisch-tech/helm-charts):
+
+```bash
+helm repo add wenisch-tech https://charts.wenisch.tech
+helm install petri wenisch-tech/petri -n petri --create-namespace
+```
+
+
 
 | Variable | Purpose |
 | --- | --- |
@@ -139,6 +156,7 @@ The full reference, including limits, timeouts and OIDC setup, is in
 | API reference | [HTTP API](docs/http-api.md) |
 | Trust boundaries | [Security model](docs/security.md) |
 | Build and project layout | [Development](docs/development.md) |
+| Kubernetes | [Helm chart](charts/petri/README.md) · [charts.wenisch.tech](https://github.com/wenisch-tech/helm-charts) |
 
 ## License
 

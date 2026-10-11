@@ -1,0 +1,228 @@
+name: Release
+
+on:
+  workflow_call:
+    inputs:
+      version:
+        required: true
+        type: string
+      tag:
+        required: true
+        type: string
+      changelog:
+        required: true
+        type: string
+      image:
+        required: true
+        type: string
+      digest:
+        required: false
+        type: string
+        default: ''
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up Java 25
+        uses: actions/setup-java@v6
+        with:
+          distribution: temurin
+          java-version: '25'
+          cache: maven
+
+      - name: Update CHANGELOG.md
+        shell: bash
+        run: |
+          set -euo pipefail
+          tag="${{ inputs.tag }}"
+          image="${{ inputs.image }}:${{ inputs.version }}"
+          date="$(date -u +%Y-%m-%d)"
+          changelog="${{ inputs.changelog }}"
+
+          {
+            echo "## ${tag} - ${date}"
+            echo
+            echo "$changelog"
+            echo
+            echo "Docker image: ${image}"
+            echo
+          } > .release_entry.md
+
+          if [ -f CHANGELOG.md ]; then
+            {
+              head -n 1 CHANGELOG.md
+              echo
+              cat .release_entry.md
+              tail -n +2 CHANGELOG.md
+            } > CHANGELOG.new.md
+            mv CHANGELOG.new.md CHANGELOG.md
+          else
+            {
+              echo "# Changelog"
+              echo
+              cat .release_entry.md
+            } > CHANGELOG.md
+          fi
+
+      - name: Set Maven version
+        run: mvn -B versions:set -DnewVersion=${{ inputs.version }} -DgenerateBackupPoms=false
+
+      - name: Update Helm chart version
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ inputs.version }}"
+          yq eval ".appVersion = \"$version\"" -i charts/petri/Chart.yaml
+          yq eval ".version = \"$version\"" -i charts/petri/Chart.yaml
+          yq eval ".image.tag = \"$version\"" -i charts/petri/values.yaml
+
+      - name: Generate Helm values schema
+        shell: bash
+        run: |
+          set -euo pipefail
+          helm plugin install https://github.com/karuppiah7890/helm-schema-gen.git
+          helm schema-gen charts/petri/values.yaml > charts/petri/values.schema.json
+
+      - name: Commit release files
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add pom.xml CHANGELOG.md charts/petri/Chart.yaml charts/petri/values.yaml charts/petri/values.schema.json
+          git commit -m "chore(release): ${{ inputs.tag }} [skip ci]" || exit 0
+          git push
+
+      - name: Package Helm chart
+        run: helm package charts/petri/ --destination ./release
+
+      - name: Generate application SBOM (CycloneDX)
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p ./release
+          mvn -B org.cyclonedx:cyclonedx-maven-plugin:2.9.1:makeAggregateBom \
+            -DoutputFormat=all \
+            -DoutputName="petri-${{ inputs.version }}-sbom" \
+            -DoutputDirectory=./release
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v4.1.2
+
+      - name: Sign Helm chart
+        shell: bash
+        run: |
+          set -euo pipefail
+          tgz=$(ls ./release/*.tgz | head -1)
+          cosign sign-blob --yes "$tgz" --bundle "${tgz}.cosign.bundle"
+
+      - name: Upload Helm chart artifact
+        uses: actions/upload-artifact@v7
+        with:
+          name: helm-chart
+          path: |
+            ./release/*.tgz
+            ./release/*.cosign.bundle
+            ./release/*-sbom.json
+            ./release/*-sbom.xml
+
+      - name: Publish Helm chart to charts repository
+        env:
+          GH_TOKEN: ${{ secrets.HELM_CHARTS_TOKEN || secrets.GITHUBTOKEN || secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          git clone https://$GH_TOKEN@github.com/wenisch-tech/helm-charts.git charts-repo
+          mkdir -p charts-repo/petri
+          cp ./release/*.tgz charts-repo/petri/
+          cp ./release/*.cosign.bundle charts-repo/petri/ 2>/dev/null || true
+          cd charts-repo
+          git config --global user.name 'github-actions[bot]'
+          git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+          git add .
+          git commit -m "Add Petri helm chart in version ${{ inputs.version }}" || echo "No chart changes to commit"
+          git push origin HEAD:main
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.HELM_CHARTS_TOKEN || secrets.GITHUBTOKEN || secrets.GITHUB_TOKEN }}
+
+      - name: Publish Helm chart to OCI registry
+        run: helm push ./release/petri-${{ inputs.version }}.tgz oci://ghcr.io/wenisch-tech/helm-charts
+
+      - name: Download Docker attestation bundle
+        uses: actions/download-artifact@v8
+        with:
+          name: docker-attestation-bundle
+          path: ./release
+
+      - name: Read attestation URL
+        id: read_attestation_url
+        shell: bash
+        run: |
+          set -euo pipefail
+          url=$(cat ./release/docker-image-attestation.url.txt)
+          echo "url=$url" >> "$GITHUB_OUTPUT"
+
+      - name: Create GitHub release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ inputs.tag }}
+          name: ${{ inputs.tag }}
+          files: |
+            ./release/docker-image-attestation.bundle.json
+            ./release/*.tgz
+            ./release/*.cosign.bundle
+            ./release/*-sbom.json
+            ./release/*-sbom.xml
+          body: |
+            ${{ inputs.changelog }}
+
+            ## Docker image
+            ```
+            ${{ inputs.image }}:${{ inputs.version }}
+            ${{ inputs.image }}@${{ inputs.digest }}
+            ```
+
+            ## SBOM
+            A CycloneDX SBOM for Petri is attached to this release as:
+            - `petri-${{ inputs.version }}-sbom.json`
+            - `petri-${{ inputs.version }}-sbom.xml`
+
+            ## Signature & Attestation
+            This image was signed using [Sigstore Cosign](https://docs.sigstore.dev/cosign/overview/) with keyless signing via GitHub Actions OIDC.
+            A [SLSA provenance attestation](https://slsa.dev/provenance) is attached and visible under the package's **Attestations** tab.
+
+            **Verify image signature:**
+            ```bash
+            cosign verify ${{ inputs.image }}@${{ inputs.digest }} \
+              --certificate-identity-regexp="https://github.com/wenisch-tech/Petri" \
+              --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
+            ```
+
+            **Verify build provenance:**
+            ```bash
+            gh attestation verify oci://${{ inputs.image }}@${{ inputs.digest }} \
+              --repo wenisch-tech/Petri
+            ```
+
+            **Verify Helm chart signature:**
+            ```bash
+            cosign verify-blob petri-${{ inputs.version }}.tgz \
+              --bundle petri-${{ inputs.version }}.tgz.cosign.bundle \
+              --certificate-identity-regexp="https://github.com/wenisch-tech/Petri" \
+              --certificate-oidc-issuer="https://token.actions.githubusercontent.com"
+            ```

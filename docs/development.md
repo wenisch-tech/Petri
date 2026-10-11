@@ -53,3 +53,18 @@ Add a new numbered Flyway migration instead of modifying a migration that may al
 - Run the complete package build before handoff.
 
 Tests must not depend on live model providers, remote repositories or external credentials.
+
+## Continuous integration
+
+`.github/workflows/ci.yml` orchestrates reusable workflows:
+
+- `_test.yml` — Java 25 `mvn verify` (includes the frontend build) and a JUnit report.
+- `_docker.yml` — builds the Chainguard-JRE image, checks `/login` and `/actuator/health` latency in
+  the running container, runs a **Trivy** vulnerability scan (posted as a PR comment), and on `main`
+  pushes, Cosign-signs and attests the image.
+- `_release.yml` (main only) — versions and packages the Helm chart, generates a CycloneDX SBOM,
+  signs the chart, publishes it to `wenisch-tech/helm-charts` and GHCR OCI, and creates the GitHub
+  release.
+
+Versions come from conventional commit tags (`mathieudutour/github-tag-action`). Pull requests build
+and scan the image but never push it. The chart source is in `charts/petri`.

@@ -1,0 +1,28 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "petri.fullname" . }}
+  {{- $serviceAnnotations := dict }}
+  {{- if .Values.metrics.serviceAnnotations.enabled }}
+  {{- $_ := set $serviceAnnotations "prometheus.io/scrape" "true" }}
+  {{- $_ := set $serviceAnnotations "prometheus.io/path" .Values.metrics.path }}
+  {{- $_ := set $serviceAnnotations "prometheus.io/port" (printf "%v" .Values.service.port) }}
+  {{- end }}
+  {{- range $key, $value := .Values.service.annotations }}
+  {{- $_ := set $serviceAnnotations $key (printf "%v" $value) }}
+  {{- end }}
+  labels:
+    {{- include "petri.labels" . | nindent 4 }}
+  {{- if $serviceAnnotations }}
+  annotations:
+    {{- toYaml $serviceAnnotations | nindent 4 }}
+  {{- end }}
+spec:
+  type: {{ .Values.service.type }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.targetPort }}
+      protocol: TCP
+      name: http
+  selector:
+    {{- include "petri.selectorLabels" . | nindent 4 }}
