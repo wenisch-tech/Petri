@@ -116,6 +116,21 @@ class WorkspaceFileToolsTest {
   }
 
   @Test
+  void metadataAllowsConflictSafeBinaryMoveAndDelete() throws Exception {
+    Files.write(worktree.resolve("binary.bin"), new byte[] {0, 1, 2, (byte) 255});
+
+    WorkspaceEntryMutation metadata = files.metadata(worktree, "binary.bin");
+    assertThat(metadata.type()).isEqualTo("FILE");
+    assertThat(metadata.sha256()).hasSize(64);
+
+    WorkspaceEntryMutation moved = files.move(
+        worktree, "binary.bin", "src/binary.bin", metadata.sha256());
+    assertThat(moved.path()).isEqualTo("src/binary.bin");
+    files.delete(worktree, moved.path(), moved.sha256(), false);
+    assertThat(worktree.resolve("src/binary.bin")).doesNotExist();
+  }
+
+  @Test
   void createsNewFileThroughCreateFileTool() throws Exception {
     ToolExecutionContext context = new ToolExecutionContext(worktreeId);
 

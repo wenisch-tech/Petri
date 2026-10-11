@@ -44,6 +44,13 @@ public class WorkspaceFileController {
     return invoke(() -> editor.read(worktreeId, path));
   }
 
+  @GetMapping("/entries/metadata")
+  public ResponseEntity<?> metadata(
+      @PathVariable UUID worktreeId, @RequestParam String path, Principal principal) {
+    access.requireWorktree(worktreeId, principal.getName());
+    return invoke(() -> editor.metadata(worktreeId, path));
+  }
+
   @PutMapping("/files")
   public ResponseEntity<?> save(
       @PathVariable UUID worktreeId, @RequestBody SaveWorkspaceFileRequest request, Principal principal) {
@@ -72,7 +79,8 @@ public class WorkspaceFileController {
   public ResponseEntity<?> delete(
       @PathVariable UUID worktreeId, @RequestBody DeleteWorkspaceEntryRequest request, Principal principal) {
     access.requireWorktree(worktreeId, principal.getName());
-    if (request.recursive() && !request.path().equals(request.confirmationPath())) {
+    if (request.recursive()
+        && (request.path() == null || !java.util.Objects.equals(request.path(), request.confirmationPath()))) {
       return problem(HttpStatus.BAD_REQUEST, "Recursive deletion requires the exact path confirmation");
     }
     return invoke(() -> {

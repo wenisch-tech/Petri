@@ -28,13 +28,25 @@ class ProjectInitializationStateService {
   }
 
   @Transactional
-  void complete(UUID id) {
-    jobs.findLocked(id).ifPresent(job -> job.completed(Instant.now()));
+  boolean renew(UUID id, String leaseOwner) {
+    Instant now = Instant.now();
+    return jobs.findLocked(id)
+        .map(job -> job.renew(leaseOwner, now, now.plus(15, ChronoUnit.MINUTES)))
+        .orElse(false);
   }
 
   @Transactional
-  void fail(UUID id, String message) {
-    jobs.findLocked(id).ifPresent(job -> job.failed(message, Instant.now()));
+  boolean complete(UUID id, String leaseOwner) {
+    return jobs.findLocked(id)
+        .map(job -> job.completed(leaseOwner, Instant.now()))
+        .orElse(false);
+  }
+
+  @Transactional
+  boolean fail(UUID id, String leaseOwner, String message) {
+    return jobs.findLocked(id)
+        .map(job -> job.failed(leaseOwner, message, Instant.now()))
+        .orElse(false);
   }
 
   @Transactional

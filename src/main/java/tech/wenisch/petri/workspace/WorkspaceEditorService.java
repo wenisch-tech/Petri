@@ -31,6 +31,10 @@ public class WorkspaceEditorService {
     return files.read(worktree(worktreeId), path);
   }
 
+  public WorkspaceEntryMutation metadata(UUID worktreeId, String path) {
+    return files.metadata(worktree(worktreeId), path);
+  }
+
   public ReadFileResult save(
       UUID worktreeId, String path, String content, String expectedSha256, String actor) {
     ReadFileResult saved = files.applyReplacement(worktree(worktreeId), path, expectedSha256, content);

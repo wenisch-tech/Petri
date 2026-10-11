@@ -1,78 +1,88 @@
 # Next implementation steps
 
-Status: authentication, encrypted credentials, controlled Git mirrors/worktrees and automatic filesystem master-key management are committed. The complete controlled tool slice, multi-provider model execution loop, lazy-loaded skills, asynchronous run API, Spring Boot chat console and rich model settings are implemented locally and verified; no commit or push was created by the agent for these latest slices.
+Updated after the implementation audit on 2026-10-11.
 
-## 1. Finish and review the current security slices
+## Current state
 
-1. Review the OIDC migration (`V4`), user identity mapping, role preservation and login-page provider links.
-2. Review the secret cipher and configure a production-only `PETRI_SECRETS_MASTER_KEY` (a Base64-encoded 32-byte key) before adding any credential record.
-3. Run `./mvnw -o package`, inspect `git diff --check`, then create a focused commit after human review.
+Petri now includes durable chats and queues, streaming model output, Monaco editing and diffs,
+branch/worktree Git workflows, personal and global GitHub/GitLab/Forgejo instances, PAT/OAuth
+connections, repository import jobs, owner-scoped projects/API keys, and rootless Podman test
+sandboxes.
 
-## 2. Add project Git credentials as an audited domain model — completed
+The audit fixed the following concrete defects:
 
-1. [x] Add a project-scoped credential record with authentication kind, optional public username, encrypted secret, actors and timestamps.
-2. [x] Encrypt before persistence, expose only non-secret status, and audit creation, replacement and removal.
-3. [x] Add an administrator-only project settings page that never reveals or prefills the secret.
-4. [x] Test authorization, encryption at rest, audit entries and fail-closed behavior without a master key.
+- Git operation locks now retain a stable lock object instead of allowing a removal race.
+- repository initialization leases have heartbeats and per-execution ownership; stale workers can
+  no longer finish or fail a reclaimed job.
+- interrupted workers no longer mark jobs they never claimed as failed.
+- sandbox image, CPU and memory settings are validated before they reach Podman.
+- Git staging rejects a normalized empty/root path.
+- legacy chat resume/cancel redirects no longer re-read an invalid or inaccessible run after an
+  error.
+- the workspace explorer now supports rename and delete, including recursive confirmation and
+  optimistic hashes for text, binary and oversized files.
+- chat snapshot refreshes preserve the reader's scroll position, and approval failures are shown
+  in the chat instead of becoming unhandled promise rejections.
 
-## 3. Implement controlled Git mirrors and disposable worktrees — completed
+Current quality gate: frontend bundles build and all 70 Java tests pass. `git diff --check` passes.
 
-1. [x] Define a workspace root property and validate every derived path is below it.
-2. [x] Add a shell-free Git-process abstraction with a fixed executable, timeout, bounded output and secret/URL redaction.
-3. [x] Clone/fetch a bare mirror per project without command-line secrets, using a short-lived owner-only askpass helper.
-4. [x] Create detached worktrees from mirrors, persist their lifecycle and constrain cleanup to the UUID-derived run path.
-5. [x] Test traversal and symlink rejection, timeout/output handling, askpass cleanup, local clone/fetch and forced disposable-worktree cleanup.
+## 1. Add browser-level workspace regression tests
 
-## 4. Build the first controlled agent tool slice — completed locally
+This is the highest-priority gap because the workspace has substantial client-side state and most
+past regressions occurred in browser interaction code.
 
-1. [x] Define registered JSON-schema descriptors for `list_files`, `read_file`, `search_files`, `create_patch` and `show_diff`.
-2. [x] Add active-worktree confinement, traversal/symlink/`.git` rejection, bounded traversal/file/output sizes and SHA-256 read hashes.
-3. [x] Persist change proposals with `PROPOSED`, `APPROVED`, `APPLIED`, `REJECTED` and `CONFLICT` states; only approved proposals can atomically replace a file.
-4. [x] Add a separately approved `run_tests` operation with a strict Maven/Gradle command policy, timeout and bounded output.
-5. [x] Expose agent-run events through REST plus Server-Sent Events and persist an audit trail.
+1. Add Playwright (or an equivalent browser runner) to the build.
+2. Cover explorer lazy loading, create/rename/delete, Monaco tabs and drafts, Git changes/diffs,
+   send/stream/reconnect behavior, bottom following and review actions.
+3. Verify light/dark themes, narrow layouts and sidebar resizing.
+4. Run the suite against both H2 and PostgreSQL-backed application profiles in CI.
 
-## 5. Add model-driven run orchestration
+## 2. Expand authorization and API contract coverage
 
-1. [x] Persist an agent run and its ordered model/tool turns independently from disposable worktree lifecycle records.
-2. [x] Add a provider-neutral model client boundary and an OpenAI Responses API implementation with encrypted credentials.
-3. [x] Drive the tool loop with explicit budgets, cancellation, execution leases and resumable persisted state.
-4. [x] Surface pending approvals, model output, tool results and terminal status in an administrator run view.
+1. Add MockMvc tests for every workspace file, Git, chat, SSE and connected-account endpoint.
+2. Assert that foreign and missing resource IDs consistently return 404 without revealing whether
+   the resource exists.
+3. Add tests for binary/oversized file metadata, stale SHA conflicts and recursive delete
+   confirmation.
+4. Add rate limits for API keys, chat submission, provider catalog calls and expensive Git/file
+   operations.
 
-## 6. Add lazy-loaded skills — completed locally
+## 3. Make coordination safe for multiple Petri instances
 
-1. [x] Discover bounded `SKILL.md` files from an operator-controlled, non-symlink root.
-2. [x] Expose only skill names/descriptions through `list_skills` and load full instructions on demand through `load_skill`.
-3. [x] Keep skills subordinate to native tool and approval policy and ship an initial Spring Boot change workflow.
-4. [x] Test traversal, symlink, metadata and size boundaries.
+The queue and import leases are database-backed, but Git operation locks remain process-local.
 
-## 7. Complete the client-facing session API
+1. Replace or augment in-memory Git locks with database advisory locks or a lease table.
+2. Add two-application concurrency tests for fetch, branch mutation, worktree Git actions and
+   initialization recovery.
+3. Add lease/queue metrics and structured logs for claims, renewals, stale recovery and contention.
+4. Add indexes for owner/chat/status queries after measuring them on a production-sized PostgreSQL
+   dataset.
 
-1. [x] Expose controlled worktree creation and removal for authenticated API clients.
-2. [x] Attach run IDs to streamed lifecycle events and provide a run-specific SSE endpoint with replay.
-3. [x] Add asynchronous create-and-start/resume ergonomics suitable for web and VS Code clients without weakening approval boundaries.
-4. Add API rate limits and integration tests for concurrent runs, reconnects and cancellation.
+## 4. Harden provider integrations and dependency maintenance
 
-## 8. Build the Spring Boot operator console before the editor client
+1. Add end-to-end OAuth tests for state expiry, PKCE, callback replay, token rotation and concurrent
+   refresh for GitHub, GitLab and Forgejo.
+2. Test provider pagination and rate-limit responses over multiple pages, especially the
+   server-filtered GitHub/Forgejo search path.
+3. Enforce database-level uniqueness for global provider URLs as well as personal owner/URL pairs.
+4. Review the two moderate npm advisories reported by `npm ci`; obtaining the detailed advisory
+   report sends dependency metadata to the npm registry and therefore requires explicit approval.
+5. Add automated dependency and migration compatibility checks to CI.
 
-1. [x] Add a chat-style console for choosing projects/worktrees, creating tasks and following persisted model/tool turns.
-2. [x] Launch and resume runs in the background while the browser refreshes status without holding the request open.
-3. [x] Render patch and test proposals in the conversation with the existing separate approve/apply and approve/execute boundaries.
-4. [x] Add an administrator model-settings page for encrypted credentials, model ID, output budget, reasoning effort and text verbosity.
-5. [x] Snapshot generation settings per run and permit explicit per-task overrides in the chat and run API.
-6. [x] Add OpenAI, LiteLLM, Ollama and generic OpenAI-compatible endpoints with provider-specific base URLs, optional local credentials and provider selection in chat.
-7. [x] Reconstruct persisted conversation/tool history for stateless Chat Completions servers while retaining stateful Responses continuations for OpenAI and LiteLLM.
-8. [x] Add durable chats, ordered per-chat queues, token streaming, persisted partial output and context-window summaries.
-9. Add Markdown rendering and optional reusable named model profiles.
+## 5. Complete sandbox verification
 
-## 9. Build the first VS Code extension
+1. Resolve the image digest before execution and run the container by immutable digest, so the
+   recorded snapshot is guaranteed to match the executed image.
+2. Add a real rootless-Podman smoke test for Maven and Gradle, network-on/network-off profiles,
+   timeout, cancellation and cleanup.
+3. Define upper bounds for administrator-configurable CPU, memory, PID, timeout and output limits.
+4. Expose sandbox runtime/profile readiness in health and operator diagnostics.
 
-1. Add a TypeScript extension package with secure endpoint/API-key configuration and workspace selection.
-2. Implement a chat view that creates runs, consumes SSE progress and renders terminal state.
-3. Show patch/test approval requests and open diffs through VS Code APIs before administrator-authorized application.
-4. Send active workspace, file and optional selection context without uploading unrelated files.
+## 6. Product follow-ups
 
-## 10. Verification discipline for every slice
-
-1. Add focused unit/integration tests first, then run `./mvnw -o test` and `./mvnw -o package`.
-2. Run `git diff --check` before handoff.
-3. Persist each verified milestone in Hindsight and keep this file current if sequencing changes.
+1. Add chat archive/delete and workspace search across chats.
+2. Add reusable named model profiles and per-user generation defaults.
+3. Add staging/revert support at hunk level only after the browser regression suite protects the
+   existing read-only diff workflow.
+4. Build the VS Code client on the existing run/SSE APIs once rate limits and API integration tests
+   are in place.

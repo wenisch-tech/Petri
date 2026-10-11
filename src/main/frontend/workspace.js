@@ -601,9 +601,110 @@ async function saveActive(state) {
 
 function initializeExplorer(state) { const panel = state.root.querySelector('[data-file-tree]'); state.tree = panel; panel.querySelectorAll('[data-server-entry]').forEach(button => { button.addEventListener('click', () => { const path = button.dataset.serverEntry; if (button.dataset.entryType !== 'DIRECTORY') { openFile(state, path); return; } let children = button.nextElementSibling; if (children?.classList.contains('workspace-tree-children')) { children.remove(); return; } children = el('div', 'workspace-tree-children'); button.after(children); loadTree(state, path, children); }); }); state.root.querySelectorAll('[data-explorer-mode]').forEach(button => button.addEventListener('click', () => { state.mode = button.dataset.explorerMode; state.root.querySelectorAll('[data-explorer-mode]').forEach(item => item.classList.toggle('is-active', item === button)); state.mode === 'files' ? loadTree(state) : renderChanges(state); })); state.root.querySelector('[data-refresh-explorer]')?.addEventListener('click', () => { loadTree(state); refreshChanges(state); }); state.root.querySelectorAll('[data-create-entry]').forEach(button => button.addEventListener('click', () => entryDialog(state, button.dataset.createEntry))); loadTree(state); }
 async function loadTree(state, path = '', target = state.tree) { if (state.mode !== 'files') return; if (target === state.tree) target.replaceChildren(el('div', 'workspace-loading', 'Loading files…')); try { const tree = await request(`${state.api}/tree?path=${encodeURIComponent(path)}`); target.replaceChildren(); if (!tree.entries.length) target.append(el('div', 'workspace-empty', path ? 'Empty directory' : 'No files in this worktree.')); for (const item of tree.entries) target.append(treeRow(state, item)); } catch (error) { target.replaceChildren(); const retry = el('button', 'workspace-error', `Could not load files: ${error.message}. Retry`); retry.addEventListener('click', () => loadTree(state, path, target)); target.append(retry); } }
-function treeRow(state, entry) { const row = el('div', 'workspace-tree-row'); const button = el('button', 'workspace-tree-entry'); button.type = 'button'; button.dataset.treePath = entry.path; const isDirectory = entry.type === 'DIRECTORY'; const name = entry.path.split('/').filter(Boolean).at(-1) || entry.path; const twisty = el('span', 'workspace-tree-twisty'); const primaryIcon = el('span', 'workspace-tree-primary-icon'); if (isDirectory) { twisty.append(renderIcon('ChevronRight')); primaryIcon.append(renderIcon('Folder', { class: 'workspace-folder-icon' })); } else { primaryIcon.append(fileIcon(entry.path)); } button.append(twisty, primaryIcon, el('span', 'workspace-tree-name', name)); const decoration = state.changes.get(entry.path); if (decoration) button.append(changeBadge(decoration)); button.addEventListener('click', () => { if (!isDirectory) return openFile(state, entry.path); const children = row.querySelector(':scope > .workspace-tree-children'); if (children) { children.remove(); button.classList.remove('is-expanded'); twisty.replaceChildren(renderIcon('ChevronRight')); primaryIcon.replaceChildren(renderIcon('Folder', { class: 'workspace-folder-icon' })); return; } button.classList.add('is-expanded'); twisty.replaceChildren(renderIcon('ChevronDown')); primaryIcon.replaceChildren(renderIcon('FolderOpen', { class: 'workspace-folder-icon is-open' })); const next = el('div', 'workspace-tree-children'); row.append(next); loadTree(state, entry.path, next); }); row.append(button); return row; }
+function treeRow(state, entry) {
+  const row = el('div', 'workspace-tree-row');
+  const button = el('button', 'workspace-tree-entry');
+  button.type = 'button';
+  button.dataset.treePath = entry.path;
+  const isDirectory = entry.type === 'DIRECTORY';
+  const name = entry.path.split('/').filter(Boolean).at(-1) || entry.path;
+  const twisty = el('span', 'workspace-tree-twisty');
+  const primaryIcon = el('span', 'workspace-tree-primary-icon');
+  if (isDirectory) {
+    twisty.append(renderIcon('ChevronRight'));
+    primaryIcon.append(renderIcon('Folder', { class: 'workspace-folder-icon' }));
+  } else primaryIcon.append(fileIcon(entry.path));
+  button.append(twisty, primaryIcon, el('span', 'workspace-tree-name', name));
+  const decoration = state.changes.get(entry.path);
+  if (decoration) button.append(changeBadge(decoration));
+  button.addEventListener('click', () => {
+    if (!isDirectory) return openFile(state, entry.path);
+    const children = row.querySelector(':scope > .workspace-tree-children');
+    if (children) {
+      children.remove();
+      button.classList.remove('is-expanded');
+      twisty.replaceChildren(renderIcon('ChevronRight'));
+      primaryIcon.replaceChildren(renderIcon('Folder', { class: 'workspace-folder-icon' }));
+      return;
+    }
+    button.classList.add('is-expanded');
+    twisty.replaceChildren(renderIcon('ChevronDown'));
+    primaryIcon.replaceChildren(renderIcon('FolderOpen', { class: 'workspace-folder-icon is-open' }));
+    const next = el('div', 'workspace-tree-children');
+    row.append(next);
+    loadTree(state, entry.path, next);
+  });
+  const actions = el('span', 'workspace-tree-actions');
+  actions.append(
+    treeAction('Pencil', `Rename ${name}`, () => entryActionDialog(state, 'rename', entry)),
+    treeAction('Trash2', `Delete ${name}`, () => entryActionDialog(state, 'delete', entry))
+  );
+  row.append(button, actions);
+  return row;
+}
+function treeAction(icon, label, action) {
+  const button = el('button', 'workspace-tree-action');
+  button.type = 'button';
+  button.title = label;
+  button.setAttribute('aria-label', label);
+  button.append(renderIcon(icon));
+  button.addEventListener('click', event => { event.stopPropagation(); action(); });
+  return button;
+}
 function changeBadge(change) { const badge = el('span', `workspace-change-badge is-${change.status.toLowerCase()}`); badge.textContent = `${change.status[0]} ${change.additions == null ? '' : `+${change.additions}`} ${change.deletions == null ? '' : `−${change.deletions}`}`.trim(); return badge; }
-function entryDialog(state, type) { const dialog = state.root.querySelector('[data-workspace-dialog]'); const form = dialog.querySelector('[data-dialog-form]'); dialog.querySelector('[data-dialog-title]').textContent = type === 'FILE' ? 'Create file' : 'Create folder'; dialog.querySelector('[data-dialog-description]').textContent = 'Use a relative path inside this worktree.'; const input = dialog.querySelector('[data-dialog-path]'); input.value = ''; dialog.showModal(); form.onsubmit = async event => { if (event.submitter?.value !== 'confirm') return; event.preventDefault(); try { await request(`${state.api}/entries`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ path: input.value, type, content: '' }) }); dialog.close(); loadTree(state); refreshChanges(state); if (type === 'FILE') openFile(state, input.value); } catch (error) { dialog.querySelector('[data-dialog-description]').textContent = error.message; } }; }
+function entryDialog(state, type) { const dialog = state.root.querySelector('[data-workspace-dialog]'); const form = dialog.querySelector('[data-dialog-form]'); dialog.querySelector('[data-dialog-title]').textContent = type === 'FILE' ? 'Create file' : 'Create folder'; dialog.querySelector('[data-dialog-description]').textContent = 'Use a relative path inside this worktree.'; const input = dialog.querySelector('[data-dialog-path]'); dialog.querySelector('[data-dialog-path-label]').hidden = false; input.required = true; input.value = ''; const confirmationLabel = dialog.querySelector('[data-dialog-confirmation-label]'); confirmationLabel.hidden = true; const confirmation = dialog.querySelector('[data-dialog-confirmation]'); confirmation.required = false; confirmation.value = ''; dialog.querySelector('[data-dialog-confirm]').textContent = 'Create'; dialog.showModal(); form.onsubmit = async event => { if (event.submitter?.value !== 'confirm') return; event.preventDefault(); try { await request(`${state.api}/entries`, { method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ path: input.value, type, content: '' }) }); dialog.close(); loadTree(state); refreshChanges(state); if (type === 'FILE') openFile(state, input.value); } catch (error) { dialog.querySelector('[data-dialog-description]').textContent = error.message; } }; }
+
+function entryActionDialog(state, action, entry) {
+  const affectedTabs = state.tabs.filter(tab => !tab.startsWith('diff:')
+    && (tab === entry.path || (entry.type === 'DIRECTORY' && tab.startsWith(`${entry.path}/`))));
+  if (affectedTabs.some(tab => state.drafts[tab]?.dirty)) {
+    state.status.textContent = 'Save or discard drafts below this path before renaming or deleting it.';
+    return;
+  }
+  const dialog = state.root.querySelector('[data-workspace-dialog]');
+  const form = dialog.querySelector('[data-dialog-form]');
+  const description = dialog.querySelector('[data-dialog-description]');
+  const input = dialog.querySelector('[data-dialog-path]');
+  const confirmationLabel = dialog.querySelector('[data-dialog-confirmation-label]');
+  const confirmation = dialog.querySelector('[data-dialog-confirmation]');
+  const deletingDirectory = action === 'delete' && entry.type === 'DIRECTORY';
+  dialog.querySelector('[data-dialog-title]').textContent = action === 'rename' ? 'Rename entry' : 'Delete entry';
+  description.textContent = action === 'rename'
+    ? `Choose a new relative path for ${entry.path}.`
+    : deletingDirectory
+      ? `This recursively deletes ${entry.path}. This cannot be undone.`
+      : `Delete ${entry.path}? This cannot be undone.`;
+  dialog.querySelector('[data-dialog-path-label]').hidden = action === 'delete';
+  input.required = action === 'rename';
+  input.value = action === 'rename' ? entry.path : '';
+  confirmationLabel.hidden = !deletingDirectory;
+  confirmation.required = deletingDirectory;
+  confirmation.value = '';
+  dialog.querySelector('[data-dialog-confirm]').textContent = action === 'rename' ? 'Rename' : 'Delete';
+  dialog.showModal();
+  form.onsubmit = async event => {
+    if (event.submitter?.value !== 'confirm') return;
+    event.preventDefault();
+    try {
+      const metadata = await request(`${state.api}/entries/metadata?path=${encodeURIComponent(entry.path)}`);
+      const targetPath = input.value.trim();
+      const endpoint = action === 'rename' ? 'move' : 'delete';
+      const body = action === 'rename'
+        ? { sourcePath: entry.path, targetPath, expectedSha256: metadata.sha256 }
+        : { path: entry.path, expectedSha256: metadata.sha256, recursive: deletingDirectory, confirmationPath: confirmation.value };
+      await request(`${state.api}/entries/${endpoint}`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify(body)
+      });
+      dialog.close();
+      const reopen = action === 'rename' ? affectedTabs.map(tab => targetPath + tab.slice(entry.path.length)) : [];
+      for (const tab of affectedTabs) closeTab(state, tab);
+      for (const tab of reopen) await openFile(state, tab);
+      loadTree(state);
+      refreshChanges(state);
+      state.status.textContent = action === 'rename' ? `Renamed ${entry.path}` : `Deleted ${entry.path}`;
+    } catch (error) { description.textContent = error.message; }
+  };
+}
 
 function initializeChanges(state) { refreshChanges(state); window.addEventListener('focus', () => refreshChanges(state)); setInterval(() => { if (!document.hidden) refreshChanges(state); }, 8000); }
 async function refreshChanges(state) {
@@ -677,9 +778,10 @@ function initializeChat(state) {
 }
 async function saveAutomation(state) { const chat = state.chat; try { const result = await request(`/workspace/api/chats/${state.chatId}/automation`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ autoApproveChanges: chat.querySelector('[data-auto-changes]').checked, autoApproveTests: chat.querySelector('[data-auto-tests]').checked }) }); renderSnapshot(state, result); } catch (error) { chat.querySelector('[data-chat-status]').textContent = error.message; } }
 async function snapshot(state, preservePosition = false) { if (!state.chatId) { renderSnapshot(state, null); return; } try { renderSnapshot(state, await request(`/workspace/api/chats/${state.chatId}/snapshot`), preservePosition); } catch (error) { state.chat.querySelector('[data-chat-status]').textContent = error.message; } }
-function renderSnapshot(state, data, preservePosition = false) { const chat = state.chat, timeline = state.scroller, wasBottom = timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight < 100; const empty = chat.querySelector('[data-chat-empty]'); state.snapshot = data; timeline.replaceChildren(); if (!data) { if (empty) { timeline.append(empty); empty.hidden = false; } chat.querySelector('[data-review-tray]').hidden = true; return; } chat.querySelector('[data-auto-changes]').checked = data.chat.autoApproveChanges; chat.querySelector('[data-auto-tests]').checked = data.chat.autoApproveTests; chat.querySelector('[data-chat-status]').textContent = data.chat.active ? 'Petri is working…' : data.chat.queuePaused ? 'Queue paused' : 'Ready'; for (const entry of data.runs) renderRun(state, entry, timeline); renderReviews(state); if (!preservePosition || wasBottom) { timeline.scrollTop = timeline.scrollHeight; } }
+function renderSnapshot(state, data, preservePosition = false) { const chat = state.chat, timeline = state.scroller, previousTop = timeline.scrollTop, wasBottom = timeline.scrollHeight - previousTop - timeline.clientHeight < 100; const empty = chat.querySelector('[data-chat-empty]'); state.snapshot = data; timeline.replaceChildren(); if (!data) { if (empty) { timeline.append(empty); empty.hidden = false; } chat.querySelector('[data-review-tray]').hidden = true; return; } chat.querySelector('[data-auto-changes]').checked = data.chat.autoApproveChanges; chat.querySelector('[data-auto-tests]').checked = data.chat.autoApproveTests; chat.querySelector('[data-chat-status]').textContent = data.chat.active ? 'Petri is working…' : data.chat.queuePaused ? 'Queue paused' : 'Ready'; for (const entry of data.runs) renderRun(state, entry, timeline); renderReviews(state); if (!preservePosition || wasBottom) timeline.scrollTop = timeline.scrollHeight; else timeline.scrollTop = previousTop; }
 function renderRun(state, entry, timeline) { const run = entry.run; const user = el('article', 'workspace-message workspace-message-user'); user.append(el('p', '', run.prompt)); const meta = el('div', 'workspace-message-meta', `Turn ${run.chatMessageIndex + 1} · ${run.status}`); user.append(meta); timeline.append(user); for (const turn of run.turns || []) { if (turn.kind === 'USER_PROMPT') continue; if (turn.kind === 'MODEL_RESPONSE') { const assistant = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.raw = turn.content || ''; applyMarkdown(body, turn.content || ''); assistant.append(body); timeline.append(assistant); } else if (turn.kind === 'ERROR') timeline.append(el('article', 'workspace-message-error', turn.content || 'Agent error')); else { const details = el('details', 'workspace-tool-turn'); details.append(el('summary', '', turn.toolName || turn.kind), el('pre', '', turn.content || '')); timeline.append(details); } } if (run.partialOutput) { const partial = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.runOutput = run.id; body.dataset.raw = run.partialOutput; applyMarkdown(body, run.partialOutput); partial.append(el('small', 'workspace-writing', 'Petri · writing…'), body); timeline.append(partial); } for (const proposal of entry.proposals || []) timeline.append(proposalCard(state, proposal)); for (const test of entry.tests || []) timeline.append(testCard(state, test)); }
-function proposalCard(state, proposal) { const card = el('article', 'workspace-review-card'); card.append(el('strong', '', proposal.filePath), el('span', 'workspace-review-state', proposal.status)); const diff = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'View diff'); diff.type = 'button'; diff.addEventListener('click', () => openDiff(state, proposal.filePath, proposal.id)); card.append(diff); if (proposal.status === 'PROPOSED' || proposal.status === 'APPROVED') { const apply = el('button', 'btn-primary !min-h-8 !px-2 text-xs', 'Approve & apply'); apply.type = 'button'; apply.addEventListener('click', async () => { await request(`/workspace/api/proposals/${proposal.id}/approve-and-apply`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); refreshChanges(state); }); const reject = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'Reject'); reject.type = 'button'; reject.addEventListener('click', async () => { await request(`/workspace/api/chats/${state.chatId}/proposals/${proposal.id}/reject`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); }); card.append(apply, reject); } return card; }
-function testCard(state, test) { const card = el('article', 'workspace-review-card'); card.append(el('strong', '', test.command), el('span', 'workspace-review-state', test.status)); if (test.status === 'PROPOSED' || test.status === 'APPROVED') { const run = el('button', 'btn-primary !min-h-8 !px-2 text-xs', 'Run'); run.type = 'button'; run.addEventListener('click', async () => { await request(`/workspace/api/chats/${state.chatId}/tests/${test.id}/run`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); }); const reject = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'Reject'); reject.type = 'button'; reject.addEventListener('click', async () => { await request(`/workspace/api/chats/${state.chatId}/tests/${test.id}/reject`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); }); card.append(run, reject); } return card; }
+function proposalCard(state, proposal) { const card = el('article', 'workspace-review-card'); card.append(el('strong', '', proposal.filePath), el('span', 'workspace-review-state', proposal.status)); const diff = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'View diff'); diff.type = 'button'; diff.addEventListener('click', () => openDiff(state, proposal.filePath, proposal.id)); card.append(diff); if (proposal.status === 'PROPOSED' || proposal.status === 'APPROVED') { const apply = el('button', 'btn-primary !min-h-8 !px-2 text-xs', 'Approve & apply'); apply.type = 'button'; apply.addEventListener('click', () => reviewAction(state, apply, async () => { await request(`/workspace/api/proposals/${proposal.id}/approve-and-apply`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); refreshChanges(state); })); const reject = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'Reject'); reject.type = 'button'; reject.addEventListener('click', () => reviewAction(state, reject, async () => { await request(`/workspace/api/chats/${state.chatId}/proposals/${proposal.id}/reject`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); card.append(apply, reject); } return card; }
+function testCard(state, test) { const card = el('article', 'workspace-review-card'); card.append(el('strong', '', test.command), el('span', 'workspace-review-state', test.status)); if (test.status === 'PROPOSED' || test.status === 'APPROVED') { const run = el('button', 'btn-primary !min-h-8 !px-2 text-xs', 'Run'); run.type = 'button'; run.addEventListener('click', () => reviewAction(state, run, async () => { await request(`/workspace/api/chats/${state.chatId}/tests/${test.id}/run`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); const reject = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'Reject'); reject.type = 'button'; reject.addEventListener('click', () => reviewAction(state, reject, async () => { await request(`/workspace/api/chats/${state.chatId}/tests/${test.id}/reject`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); card.append(run, reject); } return card; }
+async function reviewAction(state, button, operation) { button.disabled = true; try { await operation(); } catch (error) { state.chat.querySelector('[data-chat-status]').textContent = error.message; } finally { if (button.isConnected) button.disabled = false; } }
 function renderReviews(state) { const tray = state.chat.querySelector('[data-review-tray]'), items = tray.querySelector('[data-review-items]'); const pending = state.snapshot.runs.flatMap(value => [...value.proposals, ...value.tests]).filter(value => value.status === 'PROPOSED' || value.status === 'APPROVED'); tray.hidden = pending.length === 0; tray.querySelector('[data-review-count]').textContent = `${pending.length} review${pending.length === 1 ? '' : 's'} waiting`; items.replaceChildren(); for (const proposal of pending.filter(value => value.filePath)) items.append(proposalCard(state, proposal)); for (const test of pending.filter(value => value.command)) items.append(testCard(state, test)); }
 function connectStream(state) { state.stream?.close(); if (!state.chatId) return; const stream = new EventSource(`/chat/${state.chatId}/stream`); state.stream = stream; const refresh = () => { clearTimeout(state.streamRefresh); state.streamRefresh = setTimeout(() => snapshot(state, true), 150); }; ['snapshot','run-status','tool-lifecycle','summary-status'].forEach(name => stream.addEventListener(name, refresh)); stream.addEventListener('assistant-delta', event => { const follow = state.scroller.scrollHeight - state.scroller.scrollTop - state.scroller.clientHeight < 100; try { const value = JSON.parse(event.data); let output = state.scroller.querySelector(`[data-run-output="${value.runId}"]`); if (!output) { const card = el('article', 'workspace-message workspace-message-assistant'); card.append(el('small', 'workspace-writing', 'Petri · writing…')); output = el('p'); output.dataset.runOutput = value.runId; card.append(output); state.scroller.append(card); } const raw = (output.dataset.raw ?? output.textContent ?? '') + value.delta; scheduleMarkdown(output, raw); if (follow) state.scroller.scrollTop = state.scroller.scrollHeight; else state.chat.querySelector('[data-new-response]').hidden = false; } catch {} }); stream.onerror = () => { stream.close(); clearTimeout(state.poll); state.poll = setTimeout(() => { if (!document.hidden) snapshot(state, true); connectStream(state); }, 1800); }; }

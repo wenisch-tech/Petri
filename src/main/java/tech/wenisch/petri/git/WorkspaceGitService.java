@@ -420,10 +420,12 @@ public class WorkspaceGitService {
           break;
         }
       }
-      if (normalized.isAbsolute() || normalized.startsWith("..") || gitMetadata) {
+      String normalizedValue = normalized.toString();
+      if (normalizedValue.isBlank() || ".".equals(normalizedValue)
+          || normalized.isAbsolute() || normalized.startsWith("..") || gitMetadata) {
         throw new IllegalArgumentException("Workspace path is invalid");
       }
-      values.add(normalized.toString().replace(normalized.getFileSystem().getSeparator(), "/"));
+      values.add(normalizedValue.replace(normalized.getFileSystem().getSeparator(), "/"));
     }
     return List.copyOf(values);
   }

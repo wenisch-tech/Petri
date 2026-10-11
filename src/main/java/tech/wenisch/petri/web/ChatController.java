@@ -264,31 +264,35 @@ public class ChatController {
   @PostMapping("/runs/{runId}/resume")
   String resume(
       @PathVariable UUID runId, Principal principal, RedirectAttributes redirect) {
+    UUID chatId = null;
     try {
       AppUser actor = actor(principal);
       AgentRunView run = runs.get(runId);
-      runs.chat(run.chatId(), actor.getId());
+      chatId = run.chatId();
+      runs.chat(chatId, actor.getId());
       launcher.launch(
           run.id(), run.worktreeId(), actor.getId(), "web:" + actor.getEmail());
       redirect.addFlashAttribute("chatMessage", "Run queued for execution.");
     } catch (IllegalArgumentException | IllegalStateException exception) {
       redirect.addFlashAttribute("chatError", exception.getMessage());
     }
-    return "redirect:/chat?chat=" + runs.get(runId).chatId();
+    return chatId == null ? "redirect:/chat" : "redirect:/chat?chat=" + chatId;
   }
 
   @PostMapping("/runs/{runId}/cancel")
   String cancel(
       @PathVariable UUID runId, Principal principal, RedirectAttributes redirect) {
+    UUID chatId = null;
     try {
       AppUser actor = actor(principal);
-      runs.chat(runs.get(runId).chatId(), actor.getId());
+      chatId = runs.get(runId).chatId();
+      runs.chat(chatId, actor.getId());
       runs.requestCancellation(runId, actor.getId(), actor.getEmail());
       redirect.addFlashAttribute("chatMessage", "Cancellation requested.");
     } catch (IllegalArgumentException | IllegalStateException exception) {
       redirect.addFlashAttribute("chatError", exception.getMessage());
     }
-    return "redirect:/chat?chat=" + runs.get(runId).chatId();
+    return chatId == null ? "redirect:/chat" : "redirect:/chat?chat=" + chatId;
   }
 
   @GetMapping("/runs/{runId}/state")

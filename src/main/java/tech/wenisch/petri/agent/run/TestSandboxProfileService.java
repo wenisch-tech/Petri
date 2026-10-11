@@ -2,6 +2,7 @@ package tech.wenisch.petri.agent.run;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.math.BigDecimal;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -47,8 +48,8 @@ public class TestSandboxProfileService {
   public TestSandboxProfile save(UUID id, String name, String image,
       Set<TestBuildSystem> buildSystems, String cpus, String memory, int pids,
       int timeoutSeconds, int outputBytes, boolean network, boolean enabled, String actorEmail) {
-    name = required(name, "Name", 120); image = required(image, "Image", 1000);
-    cpus = required(cpus, "CPU limit", 32); memory = required(memory, "Memory limit", 32);
+    name = required(name, "Name", 120); image = validImage(image);
+    cpus = validCpu(cpus); memory = validMemory(memory);
     if (buildSystems == null || buildSystems.isEmpty()) throw new IllegalArgumentException("At least one build system is required");
     if (pids < 16 || timeoutSeconds < 1 || outputBytes < 1024) throw new IllegalArgumentException("Sandbox limits are invalid");
     Instant now = Instant.now();
@@ -86,6 +87,35 @@ public class TestSandboxProfileService {
   private static String required(String value, String label, int max) {
     if (value == null || value.isBlank()) throw new IllegalArgumentException(label + " is required");
     value = value.trim(); if (value.length() > max) throw new IllegalArgumentException(label + " is too long");
+    return value;
+  }
+
+  private static String validImage(String value) {
+    value = required(value, "Image", 1000);
+    if (value.startsWith("-") || value.chars().anyMatch(Character::isWhitespace)
+        || value.chars().anyMatch(Character::isISOControl)) {
+      throw new IllegalArgumentException("Container image reference is invalid");
+    }
+    return value;
+  }
+
+  private static String validCpu(String value) {
+    value = required(value, "CPU limit", 32);
+    try {
+      if (new BigDecimal(value).compareTo(BigDecimal.ZERO) <= 0) {
+        throw new IllegalArgumentException("CPU limit must be greater than zero");
+      }
+    } catch (NumberFormatException exception) {
+      throw new IllegalArgumentException("CPU limit must be a positive number", exception);
+    }
+    return value;
+  }
+
+  private static String validMemory(String value) {
+    value = required(value, "Memory limit", 32).toLowerCase(java.util.Locale.ROOT);
+    if (!value.matches("[1-9][0-9]*(?:[kmgtp](?:i?b)?)?")) {
+      throw new IllegalArgumentException("Memory limit must be bytes or a value such as 512m or 2g");
+    }
     return value;
   }
 }

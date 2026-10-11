@@ -7,6 +7,7 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import java.util.Objects;
 import java.util.UUID;
 
 @Entity
@@ -66,16 +67,27 @@ public class ProjectInitializationJob {
     this.attempts++;
   }
 
-  public void completed(Instant now) {
+  public boolean renew(String owner, Instant now, Instant until) {
+    if (!ownsLease(owner)) return false;
+    this.leaseUntil = until;
+    this.updatedAt = now;
+    return true;
+  }
+
+  public boolean completed(String owner, Instant now) {
+    if (!ownsLease(owner)) return false;
     this.status = ProjectInitializationStatus.COMPLETED;
     this.completedAt = now;
     clearLease(now);
+    return true;
   }
 
-  public void failed(String message, Instant now) {
+  public boolean failed(String owner, String message, Instant now) {
+    if (!ownsLease(owner)) return false;
     this.status = ProjectInitializationStatus.FAILED;
     this.errorMessage = message == null ? "Initialization failed" : message.substring(0, Math.min(2000, message.length()));
     clearLease(now);
+    return true;
   }
 
   public void retry(Instant now) {
@@ -92,6 +104,10 @@ public class ProjectInitializationJob {
     this.leaseOwner = null;
     this.leaseUntil = null;
     this.updatedAt = now;
+  }
+
+  private boolean ownsLease(String owner) {
+    return status == ProjectInitializationStatus.RUNNING && Objects.equals(leaseOwner, owner);
   }
 
   public UUID getId() { return id; }

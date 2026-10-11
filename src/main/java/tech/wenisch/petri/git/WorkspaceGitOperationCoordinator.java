@@ -75,7 +75,9 @@ public class WorkspaceGitOperationCoordinator {
       return operation.get();
     } finally {
       lock.unlock();
-      if (!lock.hasQueuedThreads()) locks.remove(key, lock);
+      // Keep one stable lock per project/worktree. Removing an unlocked lock races with a
+      // concurrent caller that has already obtained the same instance: the map could then
+      // create a second lock and allow two Git operations for the same repository.
     }
   }
 }

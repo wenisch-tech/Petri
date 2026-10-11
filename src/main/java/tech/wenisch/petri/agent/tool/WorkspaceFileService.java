@@ -87,6 +87,13 @@ public class WorkspaceFileService {
     return new ReadFileResult(relative(worktree, file), content, sha256(bytes), bytes.length);
   }
 
+  public WorkspaceEntryMutation metadata(Path worktree, String requestedPath) {
+    Path path = resolve(worktree, requestedPath);
+    String kind = type(path);
+    return new WorkspaceEntryMutation(
+        relative(worktree, path), kind, "FILE".equals(kind) ? fileSha256(path) : null, fileSize(path));
+  }
+
   public SearchFilesResult search(
       Path worktree, String requestedPath, String query, int requestedMaxResults) {
     if (query == null || query.isEmpty()) throw new IllegalArgumentException("query is required");
@@ -248,7 +255,7 @@ public class WorkspaceFileService {
     if (source.equals(root)) throw new IllegalArgumentException("Workspace root cannot be moved");
     if (Files.isRegularFile(source, LinkOption.NOFOLLOW_LINKS)) {
       requireSha256(expectedSha256);
-      if (!read(worktree, sourcePath).sha256().equals(expectedSha256)) {
+      if (!fileSha256(source).equals(expectedSha256)) {
         throw new FileConflictException("File changed since it was read");
       }
     }
@@ -273,7 +280,7 @@ public class WorkspaceFileService {
     if (target.equals(root)) throw new IllegalArgumentException("Workspace root cannot be deleted");
     if (Files.isRegularFile(target, LinkOption.NOFOLLOW_LINKS)) {
       requireSha256(expectedSha256);
-      if (!read(worktree, requestedPath).sha256().equals(expectedSha256)) {
+      if (!fileSha256(target).equals(expectedSha256)) {
         throw new FileConflictException("File changed since it was read");
       }
     } else if (Files.isDirectory(target, LinkOption.NOFOLLOW_LINKS) && !recursive) {
@@ -416,6 +423,22 @@ public class WorkspaceFileService {
     }
   }
 
+  private static String fileSha256(Path path) {
+    try {
+      MessageDigest digest = MessageDigest.getInstance("SHA-256");
+      try (var input = Files.newInputStream(path)) {
+        byte[] buffer = new byte[8192];
+        int read;
+        while ((read = input.read(buffer)) >= 0) digest.update(buffer, 0, read);
+      }
+      return HexFormat.of().formatHex(digest.digest());
+    } catch (IOException exception) {
+      throw new IllegalStateException("Could not hash workspace file", exception);
+    } catch (NoSuchAlgorithmException exception) {
+      throw new IllegalStateException("SHA-256 is unavailable", exception);
+    }
+  }
+
   private byte[] replacementBytes(String replacementContent) {
     if (replacementContent == null) throw new IllegalArgumentException("replacementContent is required");
     byte[] bytes = replacementContent.getBytes(StandardCharsets.UTF_8);
@@ -496,11 +519,6 @@ public class WorkspaceFileService {
   }
 
   private WorkspaceEntryMutation entry(Path worktree, Path path) {
-    String kind = type(path);
-    if ("FILE".equals(kind)) {
-      ReadFileResult file = read(worktree, relative(worktree, path));
-      return new WorkspaceEntryMutation(file.path(), kind, file.sha256(), file.size());
-    }
-    return new WorkspaceEntryMutation(relative(worktree, path), kind, null, fileSize(path));
+    return metadata(worktree, relative(worktree, path));
   }
 }
