@@ -126,6 +126,8 @@ class WorkflowArtifactParser {
       case QUESTIONS -> "Planner needs clarification before creating the plan.";
       case REVIEW -> "### Review\n\n" + root.path("summary").asText();
       case IMPLEMENTATION_REPORT -> "### Implementation\n\n" + root.path("summary").asText();
+      case FINAL_VERDICT -> "### Summary\n\n"
+          + root.path("summary").asText(root.path("reason").asText("Workflow completed"));
       case STAGE_FAILURE -> "Workflow stage failed.";
       default -> root.path("reason").asText(root.path("objective").asText("Workflow artifact"));
     };

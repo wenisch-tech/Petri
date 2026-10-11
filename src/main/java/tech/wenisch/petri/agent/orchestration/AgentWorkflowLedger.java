@@ -232,6 +232,17 @@ class AgentWorkflowLedger {
         .orElseThrow(() -> new IllegalStateException("Required workflow artifact is missing: " + kind));
   }
 
+  /** Attempts of a phase since the last manual retry, which grants a fresh attempt budget. */
+  @Transactional(readOnly = true)
+  long attemptsSinceRetry(UUID workflowId, AgentWorkflowStage phase) {
+    Instant reset = transitions.findByWorkflowIdOrderByCreatedAtAsc(workflowId).stream()
+        .filter(value -> value.outcome() == WorkflowGateOutcome.USER_RETRIED)
+        .map(AgentWorkflowTransition::createdAt).reduce((first, second) -> second).orElse(null);
+    return runs.workflowRuns(workflowId).stream()
+        .filter(run -> run.workflowPhase() == phase)
+        .filter(run -> reset == null || !run.createdAt().isBefore(reset)).count();
+  }
+
   @Transactional(readOnly = true)
   long attempts(UUID workflowId, AgentWorkflowStage phase) {
     return runs.workflowRuns(workflowId).stream().filter(run -> run.workflowPhase() == phase).count();

@@ -107,6 +107,16 @@ class ChangeProposal {
     appliedAt = now;
   }
 
+  /** Recovers a proposal whose content is already on disk but whose applied status was lost. */
+  void recoveredApplied(Instant now) {
+    if (status != ChangeProposalStatus.CONFLICT && status != ChangeProposalStatus.PROPOSED
+        && status != ChangeProposalStatus.APPROVED) {
+      throw new IllegalStateException("Change proposal cannot be recovered from status " + status);
+    }
+    status = ChangeProposalStatus.APPLIED;
+    appliedAt = now;
+  }
+
   void conflict() {
     requireStatus(ChangeProposalStatus.APPROVED);
     status = ChangeProposalStatus.CONFLICT;

@@ -86,6 +86,12 @@ public class AgentWorkflowController {
     return workflows.approvePlan(workflowId, request.revision(), actor.getId(), actor.getEmail());
   }
 
+  @PostMapping("/workflows/{workflowId}/final/approve")
+  public AgentWorkflowView approveFinal(@PathVariable UUID workflowId, Principal principal) {
+    AppUser actor = actor(principal);
+    return workflows.approveFinal(workflowId, actor.getId(), actor.getEmail());
+  }
+
   @PostMapping("/workflows/{workflowId}/plan/revise")
   public AgentWorkflowView revise(
       @PathVariable UUID workflowId, @RequestBody TextRequest request, Principal principal) {

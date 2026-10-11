@@ -47,7 +47,8 @@
 - Full-height project workspace with VS Code-style lazy file explorer, tabs and Monaco Editor.
 - Local Monaco language workers and native responsive side-by-side/inline Git and proposal diffs.
 - Persistent browser drafts, cursor/view state, optimistic SHA saves and conflict-safe reload behavior.
-- Files/Changes navigator with Git decorations and staged, unstaged, untracked and conflict groups.
+- Files/Changes navigator with Git decorations and staged, unstaged, untracked and conflict groups, with stage/unstage and revert per file, section or all.
+- Workflow panel above the chat (stage rail, attempts, cancel / open-merge-request placeholder) that stays on *Done* until the next workflow; chat shows live tool calls, agent messages and artifacts with timestamps.
 - Embedded durable streaming chat, persistent project model selection and inline/pinned approvals.
 - Git bar with branch before worktree selection and non-reloading Git status/actions.
 
@@ -68,6 +69,9 @@
 - Per-user/project model and generation profiles for all four isolated roles, with immutable task snapshots.
 - Exclusive worktree reservations, dirty-state Git baselines, workflow-only diffs/hashes and ordered follow-up workflow queues.
 - Role-specific server-side tool allowlists, workflow-scoped automatic patch/test consent and idempotent recovery.
+- Final-gate summary written by the orchestrator, and user approval to finish when only executed tests are missing.
+- Manual retry of held workflows with a fresh attempt budget; automatic approval settled idempotently.
+- Composer "Guide active task" toggle: guide the running workflow or queue a new task.
 - Lazy-loaded operator-controlled `SKILL.md` workflows.
 
 ## Native tools

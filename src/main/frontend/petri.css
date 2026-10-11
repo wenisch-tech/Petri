@@ -60,7 +60,7 @@
   .workspace-body { @apply h-dvh overflow-hidden; }
   .workspace-topbar { @apply h-14; }
   .workspace-gitbar { @apply relative grid h-28 min-w-0 grid-cols-2 border-b border-ink-700/70 bg-ink-900 text-xs text-ink-300; }
-  .workspace-git-pane { @apply relative flex min-w-0 flex-col justify-center gap-1 overflow-hidden border-r border-ink-700/70 px-3 py-2; }
+  .workspace-git-pane { @apply relative flex min-w-0 flex-col justify-center gap-1 overflow-hidden px-3 py-2; }
   .workspace-gitbar-primary, .workspace-gitbar-secondary { @apply flex min-w-0 shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden; }
   .workspace-gitbar-group { @apply flex shrink-0 items-center gap-1.5; }
   .workspace-gitbar-group > svg { @apply size-4 text-ink-500; }
@@ -76,9 +76,10 @@
   .workspace-git-menu button { @apply flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs text-ink-300 hover:bg-ink-800 disabled:opacity-40; }
   .workspace-git-menu svg { @apply size-4; }
   .workspace-git-rebase-actions { @apply flex shrink-0 items-center gap-1; }
-  .workspace-git-output { @apply absolute left-3 right-3 top-[4.75rem] z-30 rounded-lg border border-red-400/30 bg-ink-950 p-3 text-red-200 shadow-2xl; }
-  .workspace-git-output summary { @apply cursor-pointer font-semibold; }
-  .workspace-git-output pre { @apply mt-2 max-h-52 overflow-auto whitespace-pre-wrap text-xs; }
+  .workspace-git-output { @apply fixed left-4 right-4 top-36 z-50 mx-auto max-w-3xl rounded-lg border border-red-400/40 bg-ink-950 p-3 text-red-200 shadow-2xl; }
+  .workspace-git-output[hidden] { @apply hidden; }
+  .workspace-git-output-header { @apply flex items-center justify-between gap-2 font-semibold; }
+  .workspace-git-output pre { @apply mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words text-xs; }
   .workspace-shell {
     --explorer-width: 17rem;
     --chat-width: 25rem;
@@ -265,7 +266,8 @@
   .workspace-composer { @apply border-t border-ink-700/70 bg-ink-900 p-3; }
   .workspace-composer textarea { @apply min-h-20 resize-y text-sm; }
   .workspace-composer > div { @apply mt-2 flex items-center justify-between gap-2; }
-  .workspace-dialog { @apply w-[min(28rem,calc(100vw-2rem))] rounded-xl border border-ink-700 bg-ink-900 p-0 text-ink-100 shadow-2xl backdrop:bg-black/60; }
+  .workspace-dialog { @apply m-auto max-h-[calc(100dvh-2rem)] w-[min(28rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-ink-700 bg-ink-900 p-0 text-ink-100 shadow-2xl backdrop:bg-black/60; }
+  .workspace-dialog:not([open]) { @apply hidden; }
   .workspace-dialog form { @apply space-y-4 p-5; }
   .workspace-dialog h2 { @apply text-base font-semibold; }
   .workspace-dialog p { @apply text-sm text-ink-500; }

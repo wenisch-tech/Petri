@@ -5,6 +5,8 @@ import java.util.UUID;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 import tech.wenisch.petri.agent.change.ChangeProposalService;
@@ -37,7 +39,9 @@ public class AgentChatAutomationService {
     this.users = users;
   }
 
+  // REQUIRES_NEW: an after-commit listener otherwise joins the finished transaction and loses its writes.
   @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+  @Transactional(propagation = Propagation.REQUIRES_NEW)
   public void requested(AgentActionRequestedEvent event) {
     AgentRunView run = runs.get(event.agentRunId());
     AgentChatView chat = runs.chat(run.chatId(), run.createdBy());

@@ -60,7 +60,7 @@ public class WorkspaceFileController {
   public ResponseEntity<?> save(
       @PathVariable UUID worktreeId, @RequestBody SaveWorkspaceFileRequest request, Principal principal) {
     access.requireWorktree(worktreeId, principal.getName());
-    reservations.assertUnreserved(worktreeId);
+    reservations.assertUserEditable(worktreeId);
     return invoke(() -> editor.save(
         worktreeId, request.path(), request.content(), request.expectedSha256(), principal.getName()));
   }
@@ -69,7 +69,7 @@ public class WorkspaceFileController {
   public ResponseEntity<?> create(
       @PathVariable UUID worktreeId, @RequestBody CreateWorkspaceEntryRequest request, Principal principal) {
     access.requireWorktree(worktreeId, principal.getName());
-    reservations.assertUnreserved(worktreeId);
+    reservations.assertUserEditable(worktreeId);
     return invoke(HttpStatus.CREATED, () -> editor.create(worktreeId, request.path(),
         "DIRECTORY".equals(request.type()), request.content(), principal.getName()));
   }
@@ -78,7 +78,7 @@ public class WorkspaceFileController {
   public ResponseEntity<?> move(
       @PathVariable UUID worktreeId, @RequestBody MoveWorkspaceEntryRequest request, Principal principal) {
     access.requireWorktree(worktreeId, principal.getName());
-    reservations.assertUnreserved(worktreeId);
+    reservations.assertUserEditable(worktreeId);
     return invoke(() -> editor.move(worktreeId, request.sourcePath(), request.targetPath(),
         request.expectedSha256(), principal.getName()));
   }
@@ -87,7 +87,7 @@ public class WorkspaceFileController {
   public ResponseEntity<?> delete(
       @PathVariable UUID worktreeId, @RequestBody DeleteWorkspaceEntryRequest request, Principal principal) {
     access.requireWorktree(worktreeId, principal.getName());
-    reservations.assertUnreserved(worktreeId);
+    reservations.assertUserEditable(worktreeId);
     if (request.recursive()
         && (request.path() == null || !java.util.Objects.equals(request.path(), request.confirmationPath()))) {
       return problem(HttpStatus.BAD_REQUEST, "Recursive deletion requires the exact path confirmation");

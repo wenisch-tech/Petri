@@ -1,6 +1,6 @@
 # Petri documentation
 
-Petri is a self-hosted Java coding agent. It works on disposable Git worktrees, persists every model and tool turn, and keeps file changes and test execution behind explicit administrator approval.
+Petri is a self-hosted agentic coding harness, multi-agent orchestrator and development environment. It works on disposable Git worktrees, persists every model and tool turn, and keeps file changes and test execution behind explicit approval.
 
 ## Documentation map
 

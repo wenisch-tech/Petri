@@ -23,13 +23,16 @@ public class WorkflowCoordinator {
   private final WorkflowEvidenceService evidence;
   private final WorkflowGitBaselineService baselines;
   private final AgentChatStream stream;
+  private final WorkflowConsentAutomationService consent;
   private final ObjectMapper mapper;
   private final Map<UUID, Object> workflowLocks = new ConcurrentHashMap<>();
 
   WorkflowCoordinator(
       AgentWorkflowLedger ledger, AgentRunService runs, AgentRunLauncher launcher,
       WorkflowArtifactParser parser, WorkflowEvidenceService evidence,
-      WorkflowGitBaselineService baselines, AgentChatStream stream, ObjectMapper mapper) {
+      WorkflowGitBaselineService baselines, AgentChatStream stream, ObjectMapper mapper,
+      WorkflowConsentAutomationService consent) {
+    this.consent = consent;
     this.ledger = ledger; this.runs = runs; this.launcher = launcher; this.parser = parser;
     this.evidence = evidence; this.baselines = baselines; this.stream = stream; this.mapper = mapper;
   }
@@ -110,6 +113,9 @@ public class WorkflowCoordinator {
     }
     AgentWorkflowStage phase = resumePhase(workflow);
     AgentWorkflowRole role = role(phase);
+    // A manual retry always grants a fresh attempt budget so a held workflow can be restarted.
+    ledger.transition(workflowId, AgentWorkflowStage.HUMAN_HOLD, AgentWorkflowStatus.HUMAN_HOLD,
+        WorkflowGateOutcome.USER_RETRIED, actor, "Manual retry requested for " + phase);
     launch(workflowId, phase, role, promptFor(workflow, phase), actor);
   }
 
@@ -240,6 +246,7 @@ public class WorkflowCoordinator {
   }
 
   private void implementationFinished(AgentWorkflow workflow) {
+    consent.settleOpenActions(workflow.id());
     WorkflowEvidenceService.Evidence value = evidence.collect(workflow);
     storeDiff(workflow, value);
     if (value.openActions()) {
@@ -294,13 +301,14 @@ public class WorkflowCoordinator {
   private void finalVerdict(AgentWorkflow workflow, JsonNode verdict) {
     JsonNode review = read(ledger.latest(workflow.id(), WorkflowArtifactKind.REVIEW).contentJson());
     String decision = verdict.path("decision").asText();
-    if ("PASS".equals(decision) && "APPROVED".equals(review.path("decision").asText())) {
-      AgentWorkflow completed = ledger.transition(workflow.id(), AgentWorkflowStage.COMPLETED,
-          AgentWorkflowStatus.COMPLETED, WorkflowGateOutcome.PASS, "orchestrator",
-          verdict.path("reason").asText("Workflow reviewed and completed"));
-      try { baselines.release(completed.executionWorktreeId(), completed.id()); } catch (RuntimeException ignored) { }
-      stream.workflowStatus(completed.chatId(), ledger.view(completed));
-      startNext(completed.executionWorktreeId());
+    boolean reviewApproved = "APPROVED".equals(review.path("decision").asText());
+    if ("PASS".equals(decision) && reviewApproved) {
+      complete(workflow, verdict.path("reason").asText("Workflow reviewed and completed"), "orchestrator",
+          WorkflowGateOutcome.PASS);
+    } else if (reviewApproved && !hasPassedTest(workflow)) {
+      // Everything else passed review; only executed test evidence is missing. Let the user decide.
+      waitForUser(workflow, AgentWorkflowStage.ORCHESTRATOR_FINAL_REVIEW,
+          "The final gate found no executed passing test. " + verdict.path("reason").asText(""));
     } else if ("REVISION_REQUIRED".equals(decision)
         || "CHANGES_REQUIRED".equals(review.path("decision").asText())) {
       launch(workflow.id(), AgentWorkflowStage.IMPLEMENTING, AgentWorkflowRole.IMPLEMENTER,
@@ -310,12 +318,38 @@ public class WorkflowCoordinator {
     }
   }
 
+  private boolean hasPassedTest(AgentWorkflow workflow) {
+    return evidence.collect(workflow).tests().stream()
+        .anyMatch(test -> test.status() == tech.wenisch.petri.agent.run.TestRunStatus.PASSED);
+  }
+
+  /** Lets the user finish a workflow whose final gate only lacked executed test evidence. */
+  public void finalApproved(UUID workflowId, String actor) {
+    synchronized (lock(workflowId)) {
+      AgentWorkflow workflow = ledger.require(workflowId);
+      if (workflow.currentStage() != AgentWorkflowStage.ORCHESTRATOR_FINAL_REVIEW
+          || workflow.status() != AgentWorkflowStatus.WAITING_FOR_USER) {
+        throw new IllegalStateException("Workflow is not waiting for final approval");
+      }
+      complete(workflow, "Approved by the user without executed tests", actor,
+          WorkflowGateOutcome.USER_APPROVED);
+    }
+  }
+
+  private void complete(AgentWorkflow workflow, String reason, String actor, WorkflowGateOutcome outcome) {
+    AgentWorkflow completed = ledger.transition(workflow.id(), AgentWorkflowStage.COMPLETED,
+        AgentWorkflowStatus.COMPLETED, outcome, actor, reason);
+    try { baselines.release(completed.executionWorktreeId(), completed.id()); } catch (RuntimeException ignored) { }
+    stream.workflowStatus(completed.chatId(), ledger.view(completed));
+    startNext(completed.executionWorktreeId());
+  }
+
   private void launch(UUID workflowId, AgentWorkflowStage phase, AgentWorkflowRole role,
       String prompt, String actor) {
     AgentWorkflow workflow = ledger.require(workflowId);
     AgentWorkflowRoleSnapshot snapshot = ledger.snapshot(workflowId, role);
     int attempt = Math.toIntExact(ledger.attempts(workflowId, phase) + 1);
-    if (attempt > snapshot.maxAttempts()) {
+    if (ledger.attemptsSinceRetry(workflowId, phase) >= snapshot.maxAttempts()) {
       hold(workflow, "Maximum attempts reached for " + phase, actor);
       return;
     }
@@ -335,7 +369,7 @@ public class WorkflowCoordinator {
   private void retryOrHold(AgentWorkflow workflow, AgentWorkflowStage phase, AgentWorkflowRole role,
       String reason, String actor, boolean structuredResponseFailure) {
     AgentWorkflowRoleSnapshot snapshot = ledger.snapshot(workflow.id(), role);
-    if (ledger.attempts(workflow.id(), phase) >= snapshot.maxAttempts()) {
+    if (ledger.attemptsSinceRetry(workflow.id(), phase) >= snapshot.maxAttempts()) {
       String finalReason = structuredResponseFailure
           ? "The configured model could not produce the required structured response after "
               + snapshot.maxAttempts() + " attempts. Try another model or retry the workflow."
@@ -445,7 +479,9 @@ public class WorkflowCoordinator {
         + ledger.latest(workflow.id(), WorkflowArtifactKind.PLAN).contentJson()
         + "\nTASK DIFF:\n" + ledger.latest(workflow.id(), WorkflowArtifactKind.TASK_DIFF).contentJson()
         + "\nREVIEW:\n" + ledger.latest(workflow.id(), WorkflowArtifactKind.REVIEW).contentJson()
-        + verdictContract();
+        + verdictContract()
+        + " Also add \"summary\": a concise Markdown summary for the user of what was done: the "
+        + "changes made, the files touched, the test evidence and any caveats such as tests not executed.";
   }
 
   private String promptFor(AgentWorkflow workflow, AgentWorkflowStage phase) {

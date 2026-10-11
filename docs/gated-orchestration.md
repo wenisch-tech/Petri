@@ -23,6 +23,43 @@ application of this workflow's patches and sandboxed tests, but never commits, p
 or unrelated runs. The reviewer and final gate receive the approved plan, canonical task diff, final
 file hashes and test evidence.
 
+### Final gate, summary and missing tests
+
+The final gate also writes a Markdown **summary** of what was done (changes, touched files, test
+evidence, caveats). It is stored with the final verdict and shown in the chat when the workflow
+completes.
+
+If the review is `APPROVED` but no executed test passed and the gate does not pass, the workflow does
+not loop back to the implementer. It waits for the user at the final gate, who can approve without
+executed tests (`POST /workflows/{id}/final/approve`) and finish without another run. Any other gate
+failure still triggers rework or `HUMAN_HOLD`.
+
+### Retry and attempt budgets
+
+The per-role attempt limit counts attempts since the last manual retry. A manual **Retry** on a held
+workflow records a `USER_RETRIED` transition and grants a fresh attempt budget, so a workflow that
+stopped because it exhausted its attempts can always be restarted. Automatic stopping is unchanged.
+
+### Automatic approval
+
+Plan approval authorizes automatic application of the implementer's patches and tests. Approval
+listeners run in their own transaction so the applied status is persisted. Before judging evidence,
+the coordinator settles any covered action that is still open; a file that already holds the exact
+approved content is recognized as applied. A conflict is ignored once a later proposal for the same
+path was applied.
+
+## Workspace presentation
+
+- **Workflow view (top panel):** the stage rail, status, attempt/run counts and the **Cancel task**
+  button. A finished workflow stays pinned in the *Done* state until a newer workflow starts and
+  shows **Open merge request** (placeholder, not implemented yet) instead of Cancel.
+- **Chat:** live actions and the conversation only: tool calls and stage start/finish events with
+  timestamps, agent replies labelled by role, and artifacts (plan, task diff, review, summary) at the
+  position where they were created. Plan approval, clarification questions and final approval appear
+  at the bottom only while they await the user.
+- **Guide active task:** a composer checkbox, enabled by default while a workflow is active. Checked,
+  the message is sent as guidance to the running task; unchecked, it is queued as a new task.
+
 ## Roles and model profiles
 
 The workflow icon in the workspace configures Orchestrator, Planner, Implementer and Reviewer
@@ -41,8 +78,11 @@ only persisted, validated artifacts, not response IDs or hidden reasoning.
 
 ## Worktrees, branches and queueing
 
-An active workflow reserves its worktree. Direct runs, editor saves, file CRUD and mutating Git
-actions are blocked, while browsing and diff inspection remain available. Further chat messages are
+An active workflow reserves its worktree. Direct runs are blocked for as long as the reservation
+exists. Editor saves, file CRUD and mutating Git actions are blocked only while the workflow is
+executing (`RUNNING`, `PENDING` or `CANCELLING`); a workflow that is waiting for the user, on
+`HUMAN_HOLD` or finished leaves the worktree free to edit. Browsing and diff inspection always remain
+available. Further chat messages are
 persisted as ordered queued workflows. A queued task captures its own baseline only when it becomes
 active.
 

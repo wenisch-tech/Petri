@@ -53,7 +53,10 @@ class WorkflowEvidenceService {
         || value.status() == ChangeProposalStatus.APPROVED)
         || testRuns.stream().anyMatch(value -> value.status() == TestRunStatus.PROPOSED
             || value.status() == TestRunStatus.APPROVED || value.status() == TestRunStatus.RUNNING);
-    boolean conflict = proposals.stream().anyMatch(value -> value.status() == ChangeProposalStatus.CONFLICT);
+    // A conflict only counts while no later proposal for the same path was applied.
+    boolean conflict = proposals.stream().anyMatch(value -> value.status() == ChangeProposalStatus.CONFLICT
+        && proposals.stream().noneMatch(later -> later.status() == ChangeProposalStatus.APPLIED
+            && later.filePath().equals(value.filePath()) && later.createdAt().isAfter(value.createdAt())));
     Map<String, String> hashes = finalHashes(workflow.executionWorktreeId(), proposals);
     conflict = conflict || hashes.containsValue("EXTERNAL_CONFLICT");
     boolean testsFailed = testRuns.stream().anyMatch(value -> value.status() == TestRunStatus.FAILED

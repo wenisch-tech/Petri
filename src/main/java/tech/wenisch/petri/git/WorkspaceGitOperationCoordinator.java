@@ -34,7 +34,7 @@ public class WorkspaceGitOperationCoordinator {
   }
 
   public <T> T worktree(UUID worktreeId, Supplier<T> operation) {
-    reservations.assertUnreserved(worktreeId);
+    reservations.assertUserEditable(worktreeId);
     UUID projectId = record(worktreeId).projectId();
     return locked("project:" + projectId,
         () -> locked("worktree:" + worktreeId, operation));

@@ -8,5 +8,6 @@ public enum WorkflowGateOutcome {
   USER_APPROVED,
   USER_REVISED,
   USER_CANCELLED,
-  RETRIED
+  RETRIED,
+  USER_RETRIED
 }

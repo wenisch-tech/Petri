@@ -213,10 +213,13 @@ function showGitError(state, error) {
   const output = state.gitBar?.querySelector('[data-git-output]');
   if (!output) return;
   output.hidden = false;
-  output.open = true;
+  if (!output.dataset.wired) {
+    output.dataset.wired = 'true';
+    output.querySelector('[data-git-output-close]')?.addEventListener('click', () => hideGitError(state));
+  }
   output.querySelector('[data-git-output-text]').textContent = error?.message || String(error);
 }
-function hideGitError(state) { const output = state.gitBar?.querySelector('[data-git-output]'); if (output) { output.open = false; output.hidden = true; } }
+function hideGitError(state) { const output = state.gitBar?.querySelector('[data-git-output]'); if (output) output.hidden = true; }
 
 function wireGitDialogs(state) {
   const branch = state.root.querySelector('[data-git-branch-dialog]');
@@ -1013,8 +1016,10 @@ function renderSnapshot(state, data, preservePosition = false) {
     ...(data.runs || []).map(value => ({ index: value.run.chatMessageIndex, kind: 'run', value })),
     ...(data.workflows || []).map(value => ({ index: value.chatMessageIndex, kind: 'workflow', value }))
   ].sort((a, b) => a.index - b.index);
+  const latestWorkflow = (data.workflows || []).at(-1);
   const pinnedWorkflow = [...(data.workflows || [])].reverse().find(value =>
-    ['RUNNING', 'PENDING', 'WAITING_FOR_USER', 'HUMAN_HOLD', 'CANCELLING'].includes(value.status));
+    ['RUNNING', 'PENDING', 'WAITING_FOR_USER', 'HUMAN_HOLD', 'CANCELLING'].includes(value.status))
+    || (latestWorkflow?.status === 'COMPLETED' ? latestWorkflow : null);
   renderActiveWorkflowPanel(state, pinnedWorkflow, timeline);
   for (const entry of entries) {
     if (entry.kind === 'run') renderRun(state, entry.value, timeline);
@@ -1047,12 +1052,36 @@ function renderWorkflow(state, workflow, timeline) {
     const questions = latestArtifact(artifacts, 'QUESTIONS');
     if (questions) card.append(questionForm(state, workflow, questions));
   }
+  if (workflow.status === 'WAITING_FOR_USER' && workflow.currentStage === 'ORCHESTRATOR_FINAL_REVIEW') {
+    card.append(finalApprovalPanel(state, workflow));
+  }
   const pending = pendingPlanArtifact(workflow);
   if (pending) card.append(planPanel(state, workflow, pending, latestArtifact(artifacts, 'PLAN_VERDICT'), true));
   if (workflow.status === 'HUMAN_HOLD' && workflow.holdReason) card.append(el('div', 'workspace-workflow-hold', workflow.holdReason));
   const controls = workflowControls(state, workflow);
   if (controls.childElementCount) card.append(controls);
   if (card.childElementCount) timeline.append(card);
+}
+
+function summaryPanel(artifact) {
+  const panel = el('section', 'workspace-workflow-panel workspace-workflow-summary');
+  panel.append(el('h3', '', 'Summary'));
+  const body = el('div');
+  applyMarkdown(body, (artifactJson(artifact).summary || artifact.displayMarkdown || '').trim());
+  panel.append(body);
+  return panel;
+}
+
+function finalApprovalPanel(state, workflow) {
+  const panel = el('section', 'workspace-workflow-panel');
+  panel.append(el('h3', '', 'Final approval'));
+  if (workflow.holdReason) panel.append(el('p', '', workflow.holdReason));
+  panel.append(el('p', '', 'The review passed but no test was executed. You can finish the workflow without another run.'));
+  const approve = el('button', 'btn-primary !min-h-8 !px-3 text-xs', 'Approve without executed tests'); approve.type = 'button';
+  approve.addEventListener('click', () => workflowAction(state, approve, workflow.id, 'final/approve'));
+  panel.append(el('div', 'workspace-workflow-actions'));
+  panel.lastChild.append(approve);
+  return panel;
 }
 
 function pendingPlanArtifact(workflow) {
@@ -1067,7 +1096,8 @@ function workflowPin(state, workflow, timeline) {
   const title = el('div');
   title.append(renderIcon('Workflow'));
   const copy = el('span');
-  copy.append(el('small', '', workflow.status === 'WAITING_FOR_USER' ? 'Action required' : 'Active workflow'));
+  copy.append(el('small', '', workflow.status === 'COMPLETED' ? 'Completed workflow'
+    : workflow.status === 'WAITING_FOR_USER' ? 'Action required' : 'Active workflow'));
   copy.append(el('strong', '', workflowLabel(workflow.currentStage)));
   title.append(copy);
   const status = el('span', `workspace-workflow-status is-${workflow.status.toLowerCase()}`,
@@ -1077,7 +1107,15 @@ function workflowPin(state, workflow, timeline) {
   const runCount = (workflow.stageRuns || []).length;
   if (attempt) side.append(el('small', 'workspace-workflow-attempt', `Attempt ${attempt} · ${runCount} run${runCount === 1 ? '' : 's'}`));
   side.append(status);
-  if (!['COMPLETED', 'CANCELLED', 'CANCELLING'].includes(workflow.status)) {
+  if (workflow.status === 'COMPLETED') {
+    const merge = el('button', 'btn-primary !min-h-7 !px-2 text-xs', 'Open merge request'); merge.type = 'button';
+    merge.title = 'Merge requests are not available yet';
+    merge.addEventListener('click', event => {
+      event.stopPropagation();
+      state.chat.querySelector('[data-chat-status]').textContent = 'Opening merge requests is not available yet.';
+    });
+    side.append(merge);
+  } else if (!['CANCELLED', 'CANCELLING'].includes(workflow.status)) {
     const cancel = el('button', 'btn-secondary !min-h-7 !px-2 text-xs', 'Cancel task'); cancel.type = 'button';
     cancel.addEventListener('click', event => { event.stopPropagation(); workflowAction(state, cancel, workflow.id, 'cancel'); });
     side.append(cancel);
@@ -1138,9 +1176,10 @@ function workflowFeed(workflow) {
   }
   const pending = pendingPlanArtifact(workflow);
   for (const artifact of workflow.artifacts || []) {
-    if (artifact === pending || !['PLAN', 'TASK_DIFF', 'REVIEW'].includes(artifact.kind)) continue;
+    if (artifact === pending || !['PLAN', 'TASK_DIFF', 'REVIEW', 'FINAL_VERDICT'].includes(artifact.kind)) continue;
     events.push({ kind: 'node', time: artifact.createdAt, order: 0.5, build: state => {
       if (artifact.kind === 'PLAN') return planPanel(state, workflow, artifact, null, false);
+      if (artifact.kind === 'FINAL_VERDICT') return summaryPanel(artifact);
       return artifact.kind === 'TASK_DIFF' ? diffArtifactPanel(artifact) : reviewPanel(artifact);
     } });
   }

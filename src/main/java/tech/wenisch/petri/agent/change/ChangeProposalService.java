@@ -214,6 +214,13 @@ public class ChangeProposalService {
 
   private ChangeProposalView apply(ChangeProposal proposal, AppUser approver) {
     Path worktree = worktrees.requireActiveWorktree(proposal.worktreeId());
+    if (alreadyApplied(worktree, proposal)) {
+      proposal.applied(Instant.now(clock));
+      auditLog.record(
+          approver.getEmail(), "CHANGE_PROPOSAL_APPLIED", "CHANGE_PROPOSAL", proposal.id(),
+          "Recognized already applied change to " + proposal.filePath());
+      return view(proposal);
+    }
     try {
       if (proposal.changeType() == ChangeType.CREATE) {
         files.applyCreation(
@@ -238,6 +245,27 @@ public class ChangeProposalService {
           "Refused stale change to " + proposal.filePath());
     }
     return view(proposal);
+  }
+
+  /** Marks a conflicted or open proposal applied when the worktree already holds its exact content. */
+  @Transactional
+  public ChangeProposalView recoverIfApplied(UUID proposalId) {
+    ChangeProposal proposal = proposal(proposalId);
+    Path worktree = worktrees.requireActiveWorktree(proposal.worktreeId());
+    if (proposal.status() != ChangeProposalStatus.APPLIED && alreadyApplied(worktree, proposal)) {
+      proposal.recoveredApplied(Instant.now(clock));
+    }
+    return view(proposal);
+  }
+
+  /** True when the file already holds the exact approved content, making the apply idempotent. */
+  private boolean alreadyApplied(Path worktree, ChangeProposal proposal) {
+    try {
+      return proposal.replacementSha256() != null
+          && proposal.replacementSha256().equals(files.read(worktree, proposal.filePath()).sha256());
+    } catch (RuntimeException exception) {
+      return false;
+    }
   }
 
   private ChangeProposal proposal(UUID proposalId) {

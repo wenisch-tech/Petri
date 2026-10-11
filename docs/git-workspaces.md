@@ -42,7 +42,11 @@ Each managed local branch has at most one active branch-bound worktree. Choosing
 
 The Git bar below the workspace topbar provides cached local/remote branches, worktree selection, ahead/behind and dirty state, Fetch, fast-forward-only Pull, Rebase, Push, Commit and branch actions. The Changes panel separates conflicts, staged, unstaged and untracked paths. Its diffs use Monaco and can inspect staged or unstaged content independently.
 
-Pull and rebase require a clean branch-bound worktree. Push also requires a clean worktree. Stage, unstage, commit and push are blocked while agent or test work is pending or executing. Rebase conflicts remain in the worktree for editing and must be staged before Continue; Abort restores the pre-rebase state. Force pushing is available only as an explicit `--force-with-lease` confirmation.
+Each change row, each section and the whole panel offer **Revert** (single change, section, or all changes at once) in addition to stage/unstage. Reverting asks for confirmation and cannot be undone: tracked files are restored from `HEAD`, newly added files are removed and untracked files are deleted.
+
+Git error messages appear in a dismissible popup at the top of the workspace.
+
+Pull and rebase require a clean branch-bound worktree. Push also requires a clean worktree. Stage, unstage, revert, commit and push are blocked while agent or test work is pending or executing, or while a workflow is actively running on the worktree. A workflow on hold, waiting for you, or finished does not block them. Rebase conflicts remain in the worktree for editing and must be staged before Continue; Abort restores the pre-rebase state. Force pushing is available only as an explicit `--force-with-lease` confirmation.
 
 Remote operations use the existing encrypted project credential through the temporary askpass helper. Petri supports the single configured remote `origin` in this workflow.
 

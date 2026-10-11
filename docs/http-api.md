@@ -88,6 +88,23 @@ Worktree-wide events are available from `/api/v1/agent/worktrees/{worktreeId}/ev
 
 API clients may request tools and create proposals but cannot approve privileged actions. Approval, rejection, patch application and test execution are administrator operations below `/operations/**` or equivalent browser run/chat actions.
 
+## Browser workspace workflow API
+
+Paths are relative to `/workspace/api`.
+
+| Method and path | Purpose |
+| --- | --- |
+| `GET/PUT /projects/{projectId}/orchestration-profile` | Read or save per-role model profiles. |
+| `POST /worktrees/{worktreeId}/workflows` | Start (or queue) a gated workflow. |
+| `GET /workflows/{id}` | Workflow state, artifacts, transitions, stage runs, proposals and tests. |
+| `POST /workflows/{id}/clarifications` | Answer planner questions. |
+| `POST /workflows/{id}/plan/approve` | Approve an exact plan revision. |
+| `POST /workflows/{id}/plan/revise` | Request a plan revision with feedback. |
+| `POST /workflows/{id}/final/approve` | Finish a workflow waiting at the final gate without executed tests. |
+| `POST /workflows/{id}/guidance` | Send guidance to the active task. |
+| `POST /workflows/{id}/retry` | Restart a held workflow with a fresh attempt budget. |
+| `POST /workflows/{id}/cancel` | Cancel; applied changes are preserved. |
+
 ## Browser workspace Git API
 
 The workspace uses administrator-only, CSRF-protected JSON endpoints under `/workspace/api`. These are session APIs rather than API-key routes:
@@ -103,7 +120,7 @@ The workspace uses administrator-only, CSRF-protected JSON endpoints under `/wor
 | `GET /worktrees/{id}/git/diff` | `COMBINED`, `STAGED` or `UNSTAGED` file diff. |
 | `POST /worktrees/{id}/git/stage` | Stage an explicit safe path list. |
 | `POST /worktrees/{id}/git/unstage` | Unstage an explicit safe path list. |
-| `POST /worktrees/{id}/git/discard` | Discard staged and unstaged changes (and delete untracked files) for an explicit safe path list. |
+| `POST /worktrees/{id}/git/discard` | Revert an explicit safe path list: restore tracked files from HEAD, remove added files and delete untracked files. |
 | `POST /worktrees/{id}/git/commit` | Commit staged changes or stage all and commit. |
 | `POST /worktrees/{id}/git/pull` | Fetch and fast-forward only. |
 | `POST /worktrees/{id}/git/rebase` | Rebase onto an explicit cached branch or upstream. |

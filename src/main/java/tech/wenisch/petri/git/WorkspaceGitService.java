@@ -188,7 +188,8 @@ public class WorkspaceGitService {
       } else {
         requireRemoteWrite(projectId);
         requireSuccess(remote(projectId, mirror, List.of(
-            "--git-dir=" + mirror, "push", "origin", "--delete", name)),
+            "--git-dir=" + mirror, "-c", "remote.origin.mirror=false",
+            "push", "origin", "--delete", name)),
             "delete remote branch");
         run(mirror, List.of(
             "--git-dir=" + mirror, "update-ref", "-d", "refs/remotes/origin/" + name));
@@ -392,11 +393,19 @@ public class WorkspaceGitService {
       requireNoActiveExecution(worktreeId);
       requireClean(worktreeId);
       Path root = locator.requireActiveWorktree(worktreeId);
-      List<String> arguments = new ArrayList<>(List.of("push"));
+      // Mirrors are cloned with remote.origin.mirror=true, which git refuses to combine with refspecs.
+      List<String> arguments = new ArrayList<>(List.of("-c", "remote.origin.mirror=false", "push"));
       if (forceWithLease) arguments.add("--force-with-lease");
       if (record.upstreamBranch() == null) arguments.addAll(List.of("-u", "origin", record.branchName()));
       else arguments.addAll(List.of("origin", record.branchName()));
-      requireSuccess(remote(record.projectId(), root, arguments), "push branch");
+      GitCommandResult pushed = remote(record.projectId(), root, arguments);
+      if (!pushed.succeeded() && pushed.output().toLowerCase(java.util.Locale.ROOT).contains("authentication failed")) {
+        throw new GitOperationException("Push was rejected: the stored Git credential could not "
+            + "authenticate for writing. Check that its token has write access to this repository "
+            + "(for example the write:repository scope) and has not expired, then replace the "
+            + "credential in the project settings or Git account.");
+      }
+      requireSuccess(pushed, "push branch");
       if (record.upstreamBranch() == null) {
         record.upstreamBranch("origin/" + record.branchName());
         worktreeRecords.save(record);

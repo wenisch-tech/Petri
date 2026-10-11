@@ -90,7 +90,7 @@
         <button type="button" data-git-delete-branch th:disabled="${selectedWorktree == null || selectedWorktree.detached}"><i data-lucide="Trash2"></i>Delete branch…</button>
         <button type="button" data-git-delete-remote th:disabled="${providerSource != null && providerSource.credentialMode.name() == 'CONNECTION' && !providerSource.canWrite}"><i data-lucide="Trash2"></i>Delete remote branch…</button>
       </div>
-      <details class="workspace-git-output" data-git-output hidden><summary>Git details</summary><pre data-git-output-text></pre></details>
+      <div class="workspace-git-output" data-git-output role="alert" hidden><div class="workspace-git-output-header"><strong>Git error</strong><button class="icon-button" type="button" data-git-output-close title="Dismiss" aria-label="Dismiss message"><i data-lucide="X"></i></button></div><pre data-git-output-text></pre></div>
     </div>
     <aside class="workspace-workflow-top" data-active-workflow-panel aria-live="polite">
       <div class="workspace-workflow-top-empty"><i data-lucide="Workflow"></i><span><small>Workflow</small><strong>No active workflow</strong></span></div>

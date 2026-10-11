@@ -116,6 +116,12 @@ public class AgentWorkflowService {
     return ledger.view(workflowId, actorId);
   }
 
+  public AgentWorkflowView approveFinal(UUID workflowId, UUID actorId, String actor) {
+    ledger.requireOwned(workflowId, actorId);
+    coordinator.finalApproved(workflowId, actor);
+    return ledger.view(workflowId, actorId);
+  }
+
   public AgentWorkflowView revisePlan(UUID workflowId, String feedback, UUID actorId, String actor) {
     AgentWorkflow workflow = ledger.requireOwned(workflowId, actorId);
     if (workflow.currentStage() != AgentWorkflowStage.WAITING_FOR_PLAN_APPROVAL) {
