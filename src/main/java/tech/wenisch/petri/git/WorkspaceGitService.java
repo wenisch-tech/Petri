@@ -256,6 +256,34 @@ public class WorkspaceGitService {
     });
   }
 
+  public WorkspaceGitStatusView discard(UUID worktreeId, List<String> requestedPaths, String actorEmail) {
+    return operations.worktree(worktreeId, () -> {
+      requireNoActiveExecution(worktreeId);
+      Path root = locator.requireActiveWorktree(worktreeId);
+      List<String> paths = validPaths(requestedPaths);
+      Map<String, WorkspaceChangeView> changes = new HashMap<>();
+      for (WorkspaceChangeView change : diffs.changes(worktreeId)) changes.put(change.path(), change);
+      for (String path : paths) {
+        WorkspaceChangeView change = changes.get(path);
+        if (change == null) continue;
+        if (change.status() == WorkspaceChangeStatus.UNTRACKED) {
+          requireSuccess(run(root, List.of("clean", "-f", "-q", "--", path)), "discard untracked file");
+        } else if (change.status() == WorkspaceChangeStatus.ADDED
+            || change.status() == WorkspaceChangeStatus.COPIED) {
+          requireSuccess(run(root, List.of("rm", "-f", "-q", "--", path)), "discard added file");
+        } else if (change.status() == WorkspaceChangeStatus.RENAMED && change.previousPath() != null) {
+          requireSuccess(run(root, List.of("rm", "-f", "-q", "--", path)), "discard renamed file");
+          requireSuccess(run(root, List.of("checkout", "HEAD", "--", change.previousPath())),
+              "restore renamed file");
+        } else {
+          requireSuccess(run(root, List.of("checkout", "HEAD", "--", path)), "discard changes");
+        }
+      }
+      audit(actorEmail, "GIT_CHANGES_DISCARDED", worktreeId, "Discarded " + paths.size() + " paths");
+      return status(worktreeId);
+    });
+  }
+
   public WorkspaceGitStatusView commit(
       UUID worktreeId, String requestedMessage, boolean stageAll, String actorEmail) {
     return operations.worktree(worktreeId, () -> {

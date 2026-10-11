@@ -104,6 +104,13 @@ public class WorkspaceGitController {
     return git.unstage(worktreeId, request.paths(), principal.getName());
   }
 
+  @PostMapping("/worktrees/{worktreeId}/git/discard")
+  public WorkspaceGitStatusView discard(
+      @PathVariable UUID worktreeId, @RequestBody PathsRequest request, Principal principal) {
+    access.requireWorktree(worktreeId, principal.getName());
+    return git.discard(worktreeId, request.paths(), principal.getName());
+  }
+
   @PostMapping("/worktrees/{worktreeId}/git/commit")
   public WorkspaceGitStatusView commit(
       @PathVariable UUID worktreeId, @RequestBody CommitRequest request, Principal principal) {

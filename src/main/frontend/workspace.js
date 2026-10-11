@@ -737,6 +737,12 @@ function renderChanges(state) {
   state.tree.replaceChildren();
   const status = state.gitStatus;
   if (!status || !state.changes.size) { state.tree.append(el('div', 'workspace-empty', 'Working tree is clean.')); return; }
+  const revertAll = el('div', 'workspace-change-revert-all');
+  const revertButton = el('button', 'workspace-change-section-action', 'Revert all changes');
+  revertButton.type = 'button';
+  revertButton.addEventListener('click', () => discardChanges(state, [...state.changes.keys()], 'all changes'));
+  revertAll.append(revertButton);
+  state.tree.append(revertAll);
   const conflictPaths = new Set(status.conflicts || []);
   appendChangeSection(state, 'Merge Conflicts', [...conflictPaths].map(path => state.changes.get(path)).filter(Boolean), 'UNSTAGED', true);
   appendChangeSection(state, 'Staged Changes', (status.staged || []).filter(value => !conflictPaths.has(value.path)), 'STAGED', false);
@@ -751,7 +757,10 @@ function appendChangeSection(state, title, values, scope, stage) {
   const all = el('button', 'workspace-change-section-action', stage ? 'Stage all' : 'Unstage all');
   all.type = 'button';
   all.addEventListener('click', event => { event.stopPropagation(); updateIndex(state, stage, values.map(value => value.path)); });
-  header.append(all);
+  const revert = el('button', 'workspace-change-section-action', 'Revert all');
+  revert.type = 'button';
+  revert.addEventListener('click', event => { event.stopPropagation(); discardChanges(state, values.map(value => value.path), `${values.length} change${values.length === 1 ? '' : 's'}`); });
+  header.append(all, revert);
   section.append(header);
   for (const change of values) {
     const row = el('button', 'workspace-change-row');
@@ -760,11 +769,23 @@ function appendChangeSection(state, title, values, scope, stage) {
     const action = el('span', 'workspace-change-row-action', stage ? '+' : '−');
     action.title = stage ? 'Stage' : 'Unstage';
     action.addEventListener('click', event => { event.stopPropagation(); updateIndex(state, stage, [change.path]); });
-    row.append(action);
+    const discard = el('span', 'workspace-change-row-action', '↺');
+    discard.title = 'Revert this change';
+    discard.addEventListener('click', event => { event.stopPropagation(); discardChanges(state, [change.path], change.path); });
+    row.append(action, discard);
     row.addEventListener('click', () => openDiff(state, change.path, null, scope));
     section.append(row);
   }
   state.tree.append(section);
+}
+async function discardChanges(state, paths, label) {
+  if (!paths.length || !ensureNoDrafts(state)) return;
+  if (!confirm(`Revert ${label}? Staged and unstaged edits are lost and untracked files are deleted. This cannot be undone.`)) return;
+  try {
+    applyGitStatus(state, await request(`${state.api}/git/discard`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ paths: [...new Set(paths)] })
+    }));
+  } catch (error) { showGitError(state, error); }
 }
 async function updateIndex(state, stage, paths) {
   if (!ensureNoDrafts(state)) return;
@@ -810,6 +831,18 @@ function initializeChat(state) {
           });
           input.value = '';
           await snapshot(state);
+          requestAnimationFrame(bottom);
+          return;
+        }
+        const active = activeGuidableWorkflow(state);
+        const guide = chat.querySelector('[data-guide-active]');
+        if (active && guide?.checked) {
+          await request(`/workspace/api/workflows/${active.id}/guidance`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+            body: JSON.stringify({ text: prompt })
+          });
+          input.value = '';
+          await snapshot(state, true);
           requestAnimationFrame(bottom);
           return;
         }
@@ -887,6 +920,17 @@ function initializeChat(state) {
   if (state.chatId) { snapshot(state, true); connectStream(state); }
 }
 
+function activeGuidableWorkflow(state) {
+  return [...(state.snapshot?.workflows || [])].reverse().find(value =>
+    ['RUNNING', 'PENDING', 'WAITING_FOR_USER', 'HUMAN_HOLD'].includes(value.status)
+    && value.currentStage !== 'WAITING_FOR_CLARIFICATION') || null;
+}
+
+function updateGuideToggle(state) {
+  const toggle = state.chat.querySelector('[data-guide-toggle]');
+  if (toggle) toggle.hidden = state.chatMode !== 'ORCHESTRATED' || !activeGuidableWorkflow(state);
+}
+
 async function startWorkflow(state, prompt) {
   let branch = { branchMode: 'CURRENT', branchName: null, confirmedDefaultBranch: false };
   if (state.branch && state.branch === state.root.dataset.defaultBranch) {
@@ -946,7 +990,8 @@ function renderSnapshot(state, data, preservePosition = false) {
   if (!data) {
     if (empty) { timeline.append(empty); empty.hidden = false; }
     chat.querySelector('[data-review-tray]').hidden = true;
-    renderActiveWorkflowPanel(null, timeline);
+    renderActiveWorkflowPanel(state, null, timeline);
+    updateGuideToggle(state);
     chat.querySelector('[data-chat-mode]').disabled = false;
     return;
   }
@@ -970,12 +1015,13 @@ function renderSnapshot(state, data, preservePosition = false) {
   ].sort((a, b) => a.index - b.index);
   const pinnedWorkflow = [...(data.workflows || [])].reverse().find(value =>
     ['RUNNING', 'PENDING', 'WAITING_FOR_USER', 'HUMAN_HOLD', 'CANCELLING'].includes(value.status));
-  renderActiveWorkflowPanel(pinnedWorkflow, timeline);
+  renderActiveWorkflowPanel(state, pinnedWorkflow, timeline);
   for (const entry of entries) {
     if (entry.kind === 'run') renderRun(state, entry.value, timeline);
     else renderWorkflow(state, entry.value, timeline);
   }
   renderReviews(state);
+  updateGuideToggle(state);
   if (!preservePosition || wasBottom) timeline.scrollTop = timeline.scrollHeight;
   else timeline.scrollTop = previousTop;
 }
@@ -993,37 +1039,29 @@ function renderWorkflow(state, workflow, timeline) {
   user.append(el('p', '', workflow.prompt));
   user.append(el('div', 'workspace-message-meta', `Task ${workflow.chatMessageIndex + 1} · gated workflow`));
   timeline.append(user);
+  renderWorkflowFeed(state, workflow, timeline);
   const card = el('article', 'workspace-workflow');
   card.dataset.workflowCard = workflow.id;
-  const header = el('header', 'workspace-workflow-header');
-  const title = el('div');
-  title.append(renderIcon('Workflow'), el('strong', '', workflowLabel(workflow.currentStage)));
-  header.append(title, el('span', `workspace-workflow-status is-${workflow.status.toLowerCase()}`, workflow.status.replaceAll('_', ' ')));
-  card.append(header);
-
   const artifacts = workflow.artifacts || [];
-  const questions = latestArtifact(artifacts, 'QUESTIONS');
-  const plan = latestArtifact(artifacts, 'PLAN');
-  const planVerdict = latestArtifact(artifacts, 'PLAN_VERDICT');
-  const taskDiff = latestArtifact(artifacts, 'TASK_DIFF');
-  const review = latestArtifact(artifacts, 'REVIEW');
-  if (workflow.currentStage === 'WAITING_FOR_CLARIFICATION' && questions) card.append(questionForm(state, workflow, questions));
-  if (plan) card.append(planPanel(state, workflow, plan, planVerdict));
-  if (taskDiff) card.append(diffArtifactPanel(taskDiff));
-  if (review) card.append(reviewPanel(review));
-  if (workflow.holdReason) card.append(el('div', 'workspace-workflow-hold', workflow.holdReason));
-
-  const runs = el('details', 'workspace-workflow-runs');
-  runs.append(el('summary', '', `${(workflow.stageRuns || []).length} internal stage run${(workflow.stageRuns || []).length === 1 ? '' : 's'}`));
-  for (const run of workflow.stageRuns || []) runs.append(workflowRun(run));
-  if ((workflow.stageRuns || []).length) card.append(runs);
-  for (const proposal of workflow.proposals || []) card.append(workflowProposal(state, proposal));
-  for (const test of workflow.tests || []) card.append(workflowTest(test));
-  card.append(workflowControls(state, workflow));
-  timeline.append(card);
+  if (workflow.currentStage === 'WAITING_FOR_CLARIFICATION') {
+    const questions = latestArtifact(artifacts, 'QUESTIONS');
+    if (questions) card.append(questionForm(state, workflow, questions));
+  }
+  const pending = pendingPlanArtifact(workflow);
+  if (pending) card.append(planPanel(state, workflow, pending, latestArtifact(artifacts, 'PLAN_VERDICT'), true));
+  if (workflow.status === 'HUMAN_HOLD' && workflow.holdReason) card.append(el('div', 'workspace-workflow-hold', workflow.holdReason));
+  const controls = workflowControls(state, workflow);
+  if (controls.childElementCount) card.append(controls);
+  if (card.childElementCount) timeline.append(card);
 }
 
-function workflowPin(workflow, timeline) {
+function pendingPlanArtifact(workflow) {
+  if (workflow.currentStage !== 'WAITING_FOR_PLAN_APPROVAL') return null;
+  return (workflow.artifacts || []).find(value =>
+    value.kind === 'PLAN' && value.revision === workflow.currentPlanRevision) || null;
+}
+
+function workflowPin(state, workflow, timeline) {
   const pin = el('aside', 'workspace-workflow-pin');
   const heading = el('div', 'workspace-workflow-pin-heading');
   const title = el('div');
@@ -1034,8 +1072,18 @@ function workflowPin(workflow, timeline) {
   title.append(copy);
   const status = el('span', `workspace-workflow-status is-${workflow.status.toLowerCase()}`,
     workflow.status.replaceAll('_', ' '));
-  heading.append(title, status);
-  pin.append(heading, workflowStageRail(workflow), workflowActivity(workflow));
+  const side = el('div', 'workspace-workflow-pin-side');
+  const attempt = (workflow.stageRuns || []).at(-1)?.workflowAttempt;
+  const runCount = (workflow.stageRuns || []).length;
+  if (attempt) side.append(el('small', 'workspace-workflow-attempt', `Attempt ${attempt} · ${runCount} run${runCount === 1 ? '' : 's'}`));
+  side.append(status);
+  if (!['COMPLETED', 'CANCELLED', 'CANCELLING'].includes(workflow.status)) {
+    const cancel = el('button', 'btn-secondary !min-h-7 !px-2 text-xs', 'Cancel task'); cancel.type = 'button';
+    cancel.addEventListener('click', event => { event.stopPropagation(); workflowAction(state, cancel, workflow.id, 'cancel'); });
+    side.append(cancel);
+  }
+  heading.append(title, side);
+  pin.append(heading, workflowStageRail(workflow));
   pin.addEventListener('click', () => {
     const card = timeline.querySelector(`[data-workflow-card="${workflow.id}"]`);
     card?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1044,11 +1092,11 @@ function workflowPin(workflow, timeline) {
   return pin;
 }
 
-function renderActiveWorkflowPanel(workflow, timeline) {
+function renderActiveWorkflowPanel(state, workflow, timeline) {
   const panel = document.querySelector('[data-active-workflow-panel]');
   if (!panel) return;
   panel.replaceChildren();
-  if (workflow) { panel.append(workflowPin(workflow, timeline)); return; }
+  if (workflow) { panel.append(workflowPin(state, workflow, timeline)); return; }
   const empty = el('div', 'workspace-workflow-top-empty');
   const copy = el('span');
   copy.append(el('small', '', 'Workflow'), el('strong', '', 'No active workflow'));
@@ -1068,21 +1116,72 @@ const workflowToolPresentation = {
   load_skill: ['BookOpen', 'Loading skill']
 };
 
-function workflowActivity(workflow) {
-  const activity = el('div', 'workspace-workflow-activity');
-  const actions = workflowToolActivities(workflow.stageRuns || []).slice(-4);
-  if (!actions.length) {
-    const waiting = workflow.status === 'WAITING_FOR_USER' || workflow.status === 'HUMAN_HOLD';
-    const latestRun = (workflow.stageRuns || []).at(-1);
-    const message = waiting ? 'Waiting for your input' : latestRun
-      ? `${roleLabel(latestRun.workflowRole)} is working…` : 'Preparing the next stage…';
-    const empty = el('span', 'workspace-workflow-activity-empty');
-    empty.append(renderIcon(waiting ? 'CircleAlert' : 'LoaderCircle'), el('span', '', message));
-    activity.append(empty);
-    return activity;
+function workflowFeed(workflow) {
+  const events = [];
+  for (const run of workflow.stageRuns || []) {
+    const role = roleLabel(run.workflowRole);
+    const phase = workflowLabel(run.workflowPhase);
+    if (run.startedAt || run.createdAt) events.push({ kind: 'info', icon: 'Play', text: `${role} started`, detail: phase, state: 'running', time: run.startedAt || run.createdAt, order: -1 });
+    if (run.completedAt) {
+      const failed = ['FAILED', 'CANCELLED', 'BUDGET_EXHAUSTED'].includes(run.status);
+      events.push({ kind: 'info', icon: failed ? 'CircleAlert' : 'Check', text: `${role} ${run.status.replaceAll('_', ' ').toLowerCase()}`, detail: failed ? truncate(run.errorMessage || '') : phase, state: failed ? 'failed' : 'completed', time: run.completedAt, order: 1e9 });
+    }
   }
-  for (const action of actions) activity.append(workflowActivityItem(action));
-  return activity;
+  for (const run of workflow.stageRuns || []) {
+    for (const turn of run.turns || []) {
+      if (turn.kind === 'MODEL_RESPONSE' && turn.content) events.push({ kind: 'message', role: roleLabel(run.workflowRole), text: turn.content, time: turn.createdAt, order: turn.index });
+    }
+    if (run.partialOutput) events.push({ kind: 'message', role: roleLabel(run.workflowRole), text: run.partialOutput, live: true, runId: run.id, time: '9999', order: 0 });
+  }
+  for (const action of workflowToolActivities(workflow.stageRuns || [])) {
+    events.push({ kind: 'tool', icon: action.icon, text: action.detail ? `${action.label}: ${action.detail}` : action.label, detail: action.role, state: action.state, time: action.createdAt, order: action.index });
+  }
+  const pending = pendingPlanArtifact(workflow);
+  for (const artifact of workflow.artifacts || []) {
+    if (artifact === pending || !['PLAN', 'TASK_DIFF', 'REVIEW'].includes(artifact.kind)) continue;
+    events.push({ kind: 'node', time: artifact.createdAt, order: 0.5, build: state => {
+      if (artifact.kind === 'PLAN') return planPanel(state, workflow, artifact, null, false);
+      return artifact.kind === 'TASK_DIFF' ? diffArtifactPanel(artifact) : reviewPanel(artifact);
+    } });
+  }
+  for (const proposal of workflow.proposals || []) events.push({ kind: 'node', time: proposal.createdAt, order: 0.5, build: state => workflowProposal(state, proposal) });
+  for (const test of workflow.tests || []) events.push({ kind: 'node', time: test.requestedAt, order: 0.5, build: () => workflowTest(test) });
+  events.sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')) || a.order - b.order);
+  return events;
+}
+
+function renderWorkflowFeed(state, workflow, timeline) {
+  for (const event of workflowFeed(workflow)) {
+    if (event.kind === 'node') { timeline.append(event.build(state)); continue; }
+    if (event.kind === 'message') {
+      const message = el('article', 'workspace-message workspace-message-assistant');
+      const meta = el('small', 'workspace-writing', event.live ? `${event.role} · writing…` : event.role);
+      if (!event.live) meta.append(' · ', timestampEl(event.time));
+      const body = el('p');
+      if (event.live) body.dataset.runOutput = event.runId;
+      body.dataset.raw = event.text;
+      applyMarkdown(body, event.text);
+      message.append(meta, body);
+      timeline.append(message);
+      continue;
+    }
+    const row = el('div', `workspace-workflow-event is-${event.state}`);
+    row.append(renderIcon(event.icon), el('span', '', event.text));
+    if (event.detail) row.append(el('small', '', event.detail));
+    row.append(el('i', `workspace-workflow-activity-state is-${event.state}`));
+    row.append(timestampEl(event.time));
+    timeline.append(row);
+  }
+}
+
+function timestampEl(value) {
+  const time = el('time', 'workspace-workflow-event-time');
+  const date = value ? new Date(value) : null;
+  if (!date || Number.isNaN(date.getTime())) return time;
+  time.dateTime = date.toISOString();
+  time.title = date.toLocaleString();
+  time.textContent = date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+  return time;
 }
 
 function workflowToolActivities(runs) {
@@ -1099,16 +1198,6 @@ function workflowToolActivities(runs) {
     }
   }
   return activities.sort((left, right) => String(left.createdAt || '').localeCompare(String(right.createdAt || '')) || left.index - right.index);
-}
-
-function workflowActivityItem(action) {
-  const item = el('span', 'workspace-workflow-activity-item');
-  item.title = `${action.role} · ${action.label}${action.detail ? ` · ${action.detail}` : ''} · ${action.state}`;
-  item.append(renderIcon(action.icon));
-  item.append(el('span', '', action.detail ? `${action.label}: ${action.detail}` : action.label));
-  item.append(el('small', '', action.role));
-  item.append(el('i', `workspace-workflow-activity-state is-${action.state}`));
-  return item;
 }
 
 function workflowToolDetail(turn) {
@@ -1191,7 +1280,7 @@ function questionForm(state, workflow, artifact) {
   return form;
 }
 
-function planPanel(state, workflow, artifact, verdictArtifact) {
+function planPanel(state, workflow, artifact, verdictArtifact, interactive = false) {
   const plan = artifactJson(artifact);
   const verdict = verdictArtifact ? artifactJson(verdictArtifact) : null;
   const panel = el('section', 'workspace-workflow-panel');
@@ -1200,7 +1289,7 @@ function planPanel(state, workflow, artifact, verdictArtifact) {
   appendArtifactList(panel, 'Steps', plan.steps);
   appendArtifactList(panel, 'Acceptance criteria', plan.acceptanceCriteria);
   appendArtifactList(panel, 'Risks', plan.risks);
-  if (workflow.currentStage === 'WAITING_FOR_PLAN_APPROVAL' && workflow.currentPlanRevision === artifact.revision) {
+  if (interactive) {
     if (verdict && verdict.decision === 'PASS_WITH_WARNINGS') {
       const warning = el('section', 'workspace-plan-warning');
       warning.append(renderIcon('TriangleAlert'), el('strong', '', 'Review before approving'));
@@ -1251,21 +1340,6 @@ function reviewPanel(artifact) {
   return panel;
 }
 
-function workflowRun(run) {
-  const item = el('details', 'workspace-workflow-run');
-  item.append(el('summary', '', `${workflowLabel(run.workflowPhase)} · ${run.workflowRole} · attempt ${run.workflowAttempt} · ${run.status}`));
-  const actions = workflowToolActivities([run]);
-  if (actions.length) {
-    const list = el('div', 'workspace-workflow-run-actions');
-    for (const action of actions) list.append(workflowActivityItem(action));
-    item.append(list);
-  }
-  if (run.finalOutput) item.append(el('pre', '', run.finalOutput));
-  else if (run.errorMessage) item.append(el('pre', '', run.errorMessage));
-  if (run.partialOutput) { const partial = el('pre', '', run.partialOutput); partial.dataset.runOutput = run.id; partial.dataset.raw = run.partialOutput; item.append(partial); }
-  return item;
-}
-
 function workflowProposal(state, proposal) {
   const card = el('div', 'workspace-workflow-action');
   card.append(renderIcon('FileDiff'), el('span', '', proposal.filePath), el('small', '', proposal.status));
@@ -1284,14 +1358,6 @@ function workflowControls(state, workflow) {
   if (workflow.status === 'HUMAN_HOLD') {
     const retry = el('button', 'btn-primary !min-h-8 !px-3 text-xs', 'Retry'); retry.type = 'button'; retry.addEventListener('click', () => workflowAction(state, retry, workflow.id, 'retry'));
     controls.append(retry);
-  }
-  if (!['COMPLETED', 'CANCELLED'].includes(workflow.status)) {
-    const guidance = el('details'); guidance.append(el('summary', '', 'Guide active task'));
-    const input = el('textarea', 'field'); input.rows = 2; input.placeholder = 'New constraints or corrections…';
-    const send = el('button', 'btn-secondary !min-h-8 !px-3 text-xs', 'Send guidance'); send.type = 'button'; send.addEventListener('click', () => workflowAction(state, send, workflow.id, 'guidance', { text: input.value.trim() }, Boolean(input.value.trim())));
-    guidance.append(input, send);
-    const cancel = el('button', 'btn-secondary !min-h-8 !px-3 text-xs', 'Cancel task'); cancel.type = 'button'; cancel.addEventListener('click', () => workflowAction(state, cancel, workflow.id, 'cancel'));
-    controls.append(guidance, cancel);
   }
   return controls;
 }

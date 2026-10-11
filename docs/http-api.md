@@ -103,6 +103,7 @@ The workspace uses administrator-only, CSRF-protected JSON endpoints under `/wor
 | `GET /worktrees/{id}/git/diff` | `COMBINED`, `STAGED` or `UNSTAGED` file diff. |
 | `POST /worktrees/{id}/git/stage` | Stage an explicit safe path list. |
 | `POST /worktrees/{id}/git/unstage` | Unstage an explicit safe path list. |
+| `POST /worktrees/{id}/git/discard` | Discard staged and unstaged changes (and delete untracked files) for an explicit safe path list. |
 | `POST /worktrees/{id}/git/commit` | Commit staged changes or stage all and commit. |
 | `POST /worktrees/{id}/git/pull` | Fetch and fast-forward only. |
 | `POST /worktrees/{id}/git/rebase` | Rebase onto an explicit cached branch or upstream. |

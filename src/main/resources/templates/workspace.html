@@ -152,7 +152,7 @@
       </div>
       <button class="workspace-new-response" data-new-response hidden>New response ↓</button>
       <div class="workspace-automation" data-automation-panel hidden><label><input type="checkbox" data-auto-changes> Auto-apply file changes</label><label><input type="checkbox" data-auto-tests> Auto-run approved tests</label></div>
-      <form class="workspace-composer" data-chat-form><textarea class="field" data-chat-input required maxlength="200000" placeholder="Ask Petri to work in this project…" th:disabled="${!modelConfigured}"></textarea><div><span class="text-xs text-ink-500" data-chat-status>Ready</span><button class="btn-primary !min-h-9 !px-3" type="button" data-chat-send th:disabled="${!modelConfigured}" aria-label="Send message"><i data-lucide="Send"></i><span>Send</span></button></div></form>
+      <form class="workspace-composer" data-chat-form><textarea class="field" data-chat-input required maxlength="200000" placeholder="Ask Petri to work in this project…" th:disabled="${!modelConfigured}"></textarea><label class="workspace-guide-toggle" data-guide-toggle hidden><input type="checkbox" data-guide-active checked><span>Guide active task</span></label><div><span class="text-xs text-ink-500" data-chat-status>Ready</span><button class="btn-primary !min-h-9 !px-3" type="button" data-chat-send th:disabled="${!modelConfigured}" aria-label="Send message"><i data-lucide="Send"></i><span>Send</span></button></div></form>
       <div class="workspace-chat-tools" aria-label="Chat configuration">
         <label><span>Mode</span><select class="workspace-mode-selector" data-chat-mode aria-label="Agent mode" title="Agent mode">
           <option value="ORCHESTRATED">Workflow</option><option value="DIRECT">Direct</option>

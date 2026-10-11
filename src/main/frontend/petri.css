@@ -147,6 +147,7 @@
   .workspace-change-section-header { @apply flex items-center gap-2 px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide text-ink-500; }
   .workspace-change-section-header span { @apply min-w-0 flex-1; }
   .workspace-change-section-action { @apply rounded px-1.5 py-1 text-[10px] normal-case text-ink-500 hover:bg-ink-800 hover:text-ink-100; }
+  .workspace-change-revert-all { @apply flex justify-end px-2 py-1; }
   .workspace-change-row-action { @apply rounded px-1.5 py-1 text-[10px] text-ink-500 hover:bg-ink-700 hover:text-ink-100; }
   .workspace-editor-empty { @apply grid h-full place-content-center justify-items-center gap-3 p-8 text-center text-ink-500; }
   .workspace-editor-empty h1 { @apply text-base font-semibold text-ink-300; }
@@ -182,20 +183,23 @@
   .workspace-review-card strong { @apply min-w-0 flex-1 truncate; }
   .workspace-review-state { @apply rounded bg-ink-800 px-1.5 py-0.5 text-[10px] text-ink-500; }
   .workspace-workflow { @apply mb-4 overflow-hidden rounded-xl border border-brand-500/25 bg-ink-900 shadow-sm; }
-  .workspace-workflow-top { @apply min-w-0 overflow-hidden bg-ink-950/45 p-2; }
+  .workspace-workflow-top { @apply min-w-0 overflow-hidden px-3 py-1; }
   .workspace-workflow-top-empty { @apply flex h-full items-center justify-center gap-2 text-ink-500; }
   .workspace-workflow-top-empty > svg { @apply size-5; }
   .workspace-workflow-top-empty > span { @apply grid; }
   .workspace-workflow-top-empty small { @apply text-[9px] font-bold uppercase tracking-wider; }
   .workspace-workflow-top-empty strong { @apply text-xs font-medium text-ink-300; }
-  .workspace-workflow-pin { @apply flex h-full cursor-pointer flex-col overflow-hidden rounded-lg border border-brand-400/40 bg-ink-900/80 shadow-lg; }
+  .workspace-workflow-pin { @apply flex h-full cursor-pointer flex-col overflow-hidden; }
   .workspace-workflow-pin-heading { @apply flex items-center justify-between gap-3 px-3 py-1.5; }
   .workspace-workflow-pin-heading > div { @apply flex min-w-0 items-center gap-2 text-ink-100; }
   .workspace-workflow-pin-heading svg { @apply size-5 shrink-0 text-brand-400; }
   .workspace-workflow-pin-heading span:not(.workspace-workflow-status) { @apply grid min-w-0; }
   .workspace-workflow-pin-heading small { @apply text-[9px] font-bold uppercase tracking-wider text-brand-400; }
   .workspace-workflow-pin-heading strong { @apply truncate text-sm; }
-  .workspace-workflow-pin .workspace-stage-rail { @apply bg-ink-950/50 px-2 py-1; }
+  .workspace-workflow-pin .workspace-stage-rail { @apply border-b-0 px-0 py-1; }
+  .workspace-workflow-pin-heading { @apply px-0; }
+  .workspace-workflow-pin-side { @apply flex shrink-0 items-center gap-2; }
+  .workspace-workflow-attempt { @apply text-[10px] font-medium text-ink-500; }
   .workspace-workflow-activity { @apply flex min-h-0 flex-1 items-center gap-1.5 overflow-x-auto border-t border-ink-700/60 px-2 py-1; }
   .workspace-workflow-activity-empty { @apply flex items-center gap-1.5 px-1 text-[10px] text-ink-500; }
   .workspace-workflow-activity-empty svg { @apply size-3.5; }
@@ -207,6 +211,13 @@
   .workspace-workflow-activity-state:not(.is-completed):not(.is-failed):not(.is-interrupted) { @apply animate-pulse; }
   .workspace-workflow-activity-state.is-completed { @apply bg-good-500; }
   .workspace-workflow-activity-state.is-failed, .workspace-workflow-activity-state.is-interrupted { @apply bg-red-300; }
+  .workspace-guide-toggle { @apply flex items-center gap-2 text-xs text-ink-300; }
+  .workspace-guide-toggle[hidden] { @apply hidden; }
+  .workspace-workflow-event { @apply mb-1.5 mr-5 flex min-w-0 items-center gap-2 rounded-md border border-ink-700/60 px-2.5 py-1.5 text-[11px] text-ink-300; }
+  .workspace-workflow-event > svg { @apply size-3.5 shrink-0 text-brand-400; }
+  .workspace-workflow-event > span { @apply min-w-0 flex-1 truncate; }
+  .workspace-workflow-event > small { @apply shrink-0 text-[10px] font-bold uppercase tracking-wide text-ink-500; }
+  .workspace-workflow-event-time, .workspace-workflow-activity-item > time { @apply shrink-0 text-[10px] tabular-nums text-ink-500; }
   .workspace-workflow-header { @apply flex items-center justify-between gap-3 border-b border-ink-700/70 px-3 py-2.5; }
   .workspace-workflow-header > div { @apply flex min-w-0 items-center gap-2 text-sm text-ink-100; }
   .workspace-workflow-status { @apply rounded-full bg-ink-800 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-ink-500; }
