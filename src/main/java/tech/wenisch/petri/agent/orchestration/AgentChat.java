@@ -30,6 +30,16 @@ class AgentChat {
   @Column(name = "auto_approve_tests", nullable = false)
   private boolean autoApproveTests;
 
+  @jakarta.persistence.Enumerated(jakarta.persistence.EnumType.STRING)
+  @Column(name = "execution_mode", nullable = false, length = 24)
+  private AgentChatExecutionMode executionMode;
+
+  @Column(name = "parent_chat_id")
+  private UUID parentChatId;
+
+  @Column(name = "forked_from_workflow_id")
+  private UUID forkedFromWorkflowId;
+
   @Column(name = "next_message_index", nullable = false)
   private int nextMessageIndex;
 
@@ -45,9 +55,18 @@ class AgentChat {
   protected AgentChat() {}
 
   AgentChat(UUID id, UUID worktreeId, String title, UUID createdBy, Instant now) {
+    this(id, worktreeId, title, createdBy, AgentChatExecutionMode.DIRECT, null, null, now);
+  }
+
+  AgentChat(UUID id, UUID worktreeId, String title, UUID createdBy,
+      AgentChatExecutionMode executionMode, UUID parentChatId, UUID forkedFromWorkflowId,
+      Instant now) {
     this.id = id;
     this.worktreeId = worktreeId;
     this.title = title;
+    this.executionMode = executionMode;
+    this.parentChatId = parentChatId;
+    this.forkedFromWorkflowId = forkedFromWorkflowId;
     this.createdBy = createdBy;
     this.createdAt = now;
     this.updatedAt = now;
@@ -81,6 +100,11 @@ class AgentChat {
     updatedAt = now;
   }
 
+  void linkFork(UUID workflowId, Instant now) {
+    forkedFromWorkflowId = workflowId;
+    updatedAt = now;
+  }
+
   UUID id() { return id; }
   UUID worktreeId() { return worktreeId; }
   String title() { return title; }
@@ -88,6 +112,9 @@ class AgentChat {
   boolean approvalGateOverridden() { return approvalGateOverridden; }
   boolean autoApproveChanges() { return autoApproveChanges; }
   boolean autoApproveTests() { return autoApproveTests; }
+  AgentChatExecutionMode executionMode() { return executionMode; }
+  UUID parentChatId() { return parentChatId; }
+  UUID forkedFromWorkflowId() { return forkedFromWorkflowId; }
   UUID createdBy() { return createdBy; }
   Instant createdAt() { return createdAt; }
   Instant updatedAt() { return updatedAt; }

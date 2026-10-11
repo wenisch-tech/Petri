@@ -93,7 +93,7 @@
   </section>
 
   <main class="workspace-shell" data-workspace
-        th:attr="data-project-id=${project.id},data-worktree-id=${selectedWorktree != null ? selectedWorktree.id : null},data-branch=${selectedWorktree != null ? selectedWorktree.branchName : null},data-detached=${selectedWorktree != null ? selectedWorktree.detached : true},data-chat-id=${selectedChat != null ? selectedChat.id : null},data-selected-file=${selectedFile}">
+        th:attr="data-project-id=${project.id},data-worktree-id=${selectedWorktree != null ? selectedWorktree.id : null},data-branch=${selectedWorktree != null ? selectedWorktree.branchName : null},data-default-branch=${project.defaultBranch},data-detached=${selectedWorktree != null ? selectedWorktree.detached : true},data-chat-id=${selectedChat != null ? selectedChat.id : null},data-selected-file=${selectedFile}">
     <aside class="workspace-explorer" data-workspace-explorer>
       <div class="workspace-panel-header">
         <div class="workspace-switcher">
@@ -130,16 +130,20 @@
 
     <aside class="workspace-chat" data-workspace-chat>
       <div class="workspace-chat-header">
-        <div class="flex min-w-0 items-center gap-2"><i data-lucide="MessageSquare"></i><select class="workspace-chat-selector" data-chat-selector><option value="">New chat</option><option th:each="item : ${chats}" th:value="${item.id}" th:selected="${selectedChat != null && item.id == selectedChat.id}" th:text="${item.title}">Chat</option></select></div>
+        <div class="flex min-w-0 items-center gap-2"><i data-lucide="MessageSquare"></i><select class="workspace-chat-selector" data-chat-selector><option value="" data-mode="ORCHESTRATED">New chat</option><option th:each="item : ${chats}" th:value="${item.id}" th:selected="${selectedChat != null && item.id == selectedChat.id}" th:text="${item.title}" th:attr="data-mode=${item.executionMode}">Chat</option></select></div>
         <button class="icon-button" type="button" data-new-chat title="New chat" aria-label="New chat"><i data-lucide="Plus"></i></button>
       </div>
       <div class="workspace-chat-tools">
+        <select class="workspace-mode-selector" data-chat-mode aria-label="Agent mode" title="Agent mode">
+          <option value="ORCHESTRATED">Workflow</option><option value="DIRECT">Direct</option>
+        </select>
         <select class="workspace-model-selector" data-model-selector th:disabled="${!modelConfigured}" aria-label="Workspace model">
           <option th:each="item : ${configuredModels}" th:value="${item.provider}" th:selected="${item.provider == selectedModelCredential.provider}"
                   th:attr="data-model=${item.model},data-tokens=${item.maxOutputTokens},data-context=${item.contextWindowTokens},data-reasoning=${item.reasoningEffort},data-verbosity=${item.textVerbosity}"
                   th:text="|${item.provider.displayName()} · ${item.model}|">Model</option>
         </select>
         <span class="workspace-model-unavailable" data-model-unavailable th:hidden="${!savedModelUnavailable}">Saved model unavailable</span>
+        <button class="icon-button" type="button" data-orchestration-settings title="Configure workflow roles" aria-label="Configure workflow roles"><i data-lucide="Workflow"></i></button>
         <button class="icon-button" type="button" data-automation-menu title="Automation" aria-label="Automation"><i data-lucide="Settings2"></i></button>
       </div>
       <div class="workspace-automation" data-automation-panel hidden><label><input type="checkbox" data-auto-changes> Auto-apply file changes</label><label><input type="checkbox" data-auto-tests> Auto-run approved tests</label></div>
@@ -164,6 +168,8 @@
     <dialog class="workspace-dialog" data-git-commit-dialog><form method="dialog"><h2>Commit changes</h2><p>Commit staged changes, or stage every visible worktree change first.</p><label>Commit message<textarea class="field" data-git-commit-message required maxlength="10000" rows="4"></textarea></label><label class="workspace-check"><input type="checkbox" data-git-stage-all> Stage all changes before committing</label><div class="workspace-dialog-error" data-git-dialog-error></div><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm">Commit</button></div></form></dialog>
     <dialog class="workspace-dialog" data-git-rebase-dialog><form method="dialog"><h2>Rebase branch</h2><p>The worktree must be clean. Conflicts remain in the editor for manual resolution.</p><label>Rebase onto<select class="field" data-git-rebase-target><option value="">Configured upstream</option><option th:each="branch : ${branches}" th:value="${branch.kind.name() == 'REMOTE' ? 'origin/' + branch.name : branch.name}" th:text="${branch.kind.name() == 'REMOTE' ? 'origin/' + branch.name : branch.name}">origin/main</option></select></label><div class="workspace-dialog-error" data-git-dialog-error></div><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm">Start rebase</button></div></form></dialog>
     <dialog class="workspace-dialog" data-git-confirm-dialog><form method="dialog"><h2 data-git-confirm-title>Confirm Git action</h2><p data-git-confirm-description></p><label data-git-target-label hidden>Remote branch<select class="field" data-git-confirm-target><option th:each="branch : ${branches}" th:if="${branch.kind.name() == 'REMOTE'}" th:value="${branch.name}" th:text="|origin/${branch.name}|">origin/main</option></select></label><label data-git-confirm-label>Type the branch name to confirm<input class="field" data-git-confirm-input autocomplete="off"></label><label class="workspace-check" data-git-force-label hidden><input type="checkbox" data-git-force> Force-delete an unmerged local branch</label><div class="workspace-dialog-error" data-git-dialog-error></div><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm" data-git-confirm-button>Continue</button></div></form></dialog>
+    <dialog class="workspace-dialog" data-workflow-branch-dialog><form method="dialog"><h2>Start gated workflow</h2><p>This is the default branch. Choose where Petri may perform the approved work.</p><label class="workspace-check"><input type="radio" name="workflow-branch-mode" value="NEW" checked> Create a dedicated feature branch</label><label data-workflow-new-branch>Branch name<input class="field" data-workflow-branch-name autocomplete="off" placeholder="petri/task-name"></label><label class="workspace-check"><input type="radio" name="workflow-branch-mode" value="CURRENT"> Work on the default branch</label><p class="workspace-warning">Working on the default branch reserves this worktree until the workflow ends.</p><div class="workspace-dialog-error" data-workflow-dialog-error></div><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm">Start workflow</button></div></form></dialog>
+    <dialog class="workspace-dialog workspace-profile-dialog" data-orchestration-dialog><form method="dialog"><h2>Workflow role models</h2><p>Each role gets an isolated model session and immutable settings when a task starts.</p><div class="workspace-role-profiles" data-role-profiles></div><p class="workspace-warning" data-role-warning hidden>Reviewer and Implementer use the same model. This reduces review independence.</p><div class="workspace-dialog-error" data-orchestration-error></div><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm">Save profiles</button></div></form></dialog>
   </main>
 </body>
 </html>

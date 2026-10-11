@@ -768,20 +768,485 @@ async function updateIndex(state, stage, paths) {
 }
 
 function initializeChat(state) {
-  const chat = state.root.querySelector('[data-workspace-chat]'), scroller = chat.querySelector('[data-chat-scroll]'), form = chat.querySelector('[data-chat-form]'), input = chat.querySelector('[data-chat-input]'), selector = chat.querySelector('[data-chat-selector]'), model = chat.querySelector('[data-model-selector]'), sendButton = chat.querySelector('[data-chat-send]'); state.chat = chat; state.scroller = scroller; const nearBottom = () => scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 100; const bottom = () => { scroller.scrollTop = scroller.scrollHeight; chat.querySelector('[data-new-response]').hidden = true; }; chat.querySelector('[data-new-response]').addEventListener('click', bottom); scroller.addEventListener('scroll', () => { if (nearBottom()) chat.querySelector('[data-new-response]').hidden = true; });
-  const sendMessage = async () => { const prompt = input.value.trim(); if (!prompt || sendButton.disabled) return; const option = model?.selectedOptions[0]; const body = { prompt, provider: model?.value || null, model: option?.dataset.model, maxModelTurns: 20, maxOutputTokens: option?.dataset.tokens ? Number(option.dataset.tokens) : null, contextWindowTokens: option?.dataset.context ? Number(option.dataset.context) : null, reasoningEffort: option?.dataset.reasoning || null, textVerbosity: option?.dataset.verbosity || null }; sendButton.disabled = true; try { const endpoint = state.chatId ? `/workspace/api/chats/${state.chatId}/messages` : `${state.api}/chats`; const result = await request(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify(body) }); state.chatId = result.chat.id; selector.value = state.chatId; input.value = ''; renderSnapshot(state, result); const url = new URL(location); url.searchParams.set('chat', state.chatId); history.replaceState(null, '', url); requestAnimationFrame(bottom); connectStream(state); } catch (error) { chat.querySelector('[data-chat-status]').textContent = error.message; } finally { sendButton.disabled = false; } };
+  const chat = state.root.querySelector('[data-workspace-chat]');
+  const scroller = chat.querySelector('[data-chat-scroll]');
+  const form = chat.querySelector('[data-chat-form]');
+  const input = chat.querySelector('[data-chat-input]');
+  const selector = chat.querySelector('[data-chat-selector]');
+  const model = chat.querySelector('[data-model-selector]');
+  const mode = chat.querySelector('[data-chat-mode]');
+  const sendButton = chat.querySelector('[data-chat-send]');
+  state.chat = chat;
+  state.scroller = scroller;
+  state.chatMode = selector.selectedOptions[0]?.dataset.mode || 'ORCHESTRATED';
+  mode.value = state.chatMode;
+  mode.disabled = Boolean(state.chatId);
+  chat.querySelector('[data-automation-menu]').hidden = state.chatMode !== 'DIRECT';
+  const nearBottom = () => scroller.scrollHeight - scroller.scrollTop - scroller.clientHeight < 100;
+  const bottom = () => { scroller.scrollTop = scroller.scrollHeight; chat.querySelector('[data-new-response]').hidden = true; };
+  chat.querySelector('[data-new-response]').addEventListener('click', bottom);
+  scroller.addEventListener('scroll', () => { if (nearBottom()) chat.querySelector('[data-new-response]').hidden = true; });
+
+  const sendMessage = async () => {
+    const prompt = input.value.trim();
+    if (!prompt || sendButton.disabled) return;
+    sendButton.disabled = true;
+    try {
+      if (state.chatMode === 'ORCHESTRATED') {
+        const waiting = [...(state.snapshot?.workflows || [])].reverse().find(value =>
+          value.status === 'WAITING_FOR_USER' && value.currentStage === 'WAITING_FOR_CLARIFICATION');
+        if (waiting) {
+          await request(`/workspace/api/workflows/${waiting.id}/clarifications`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+            body: JSON.stringify({ answers: { freeText: prompt } })
+          });
+          input.value = '';
+          await snapshot(state);
+          requestAnimationFrame(bottom);
+          return;
+        }
+        const started = await startWorkflow(state, prompt);
+        if (!started) return;
+        if (started.worktreeId !== state.worktreeId) {
+          location.assign(started.navigationUrl);
+          return;
+        }
+        state.chatId = started.chatId;
+        ensureChatOption(selector, started.chatId, prompt, 'ORCHESTRATED');
+        selector.value = state.chatId;
+        input.value = '';
+        updateChatUrl(state.chatId);
+        await snapshot(state);
+      } else {
+        const option = model?.selectedOptions[0];
+        const body = { prompt, provider: model?.value || null, model: option?.dataset.model,
+          maxModelTurns: 20, maxOutputTokens: option?.dataset.tokens ? Number(option.dataset.tokens) : null,
+          contextWindowTokens: option?.dataset.context ? Number(option.dataset.context) : null,
+          reasoningEffort: option?.dataset.reasoning || null, textVerbosity: option?.dataset.verbosity || null };
+        const endpoint = state.chatId ? `/workspace/api/chats/${state.chatId}/messages` : `${state.api}/chats`;
+        const result = await request(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify(body) });
+        state.chatId = result.chat.id;
+        ensureChatOption(selector, state.chatId, result.chat.title || prompt, 'DIRECT');
+        selector.value = state.chatId;
+        input.value = '';
+        updateChatUrl(state.chatId);
+        renderSnapshot(state, result);
+      }
+      mode.disabled = true;
+      requestAnimationFrame(bottom);
+      connectStream(state);
+    } catch (error) {
+      chat.querySelector('[data-chat-status]').textContent = error.message;
+    } finally { sendButton.disabled = false; }
+  };
   form.addEventListener('submit', event => { event.preventDefault(); sendMessage(); });
   sendButton.addEventListener('click', sendMessage);
-  selector.addEventListener('change', () => { state.chatId = selector.value || null; const url = new URL(location); if (state.chatId) url.searchParams.set('chat', state.chatId); else url.searchParams.delete('chat'); history.replaceState(null, '', url); snapshot(state, true); connectStream(state); }); chat.querySelector('[data-new-chat]').addEventListener('click', () => { selector.value = ''; selector.dispatchEvent(new Event('change')); input.focus(); });
-  model?.addEventListener('change', async () => { const option = model.selectedOptions[0]; try { await request(`/workspace/api/projects/${state.projectId}/model-preference`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ provider: model.value, model: option.dataset.model }) }); chat.querySelector('[data-chat-status]').textContent = 'Model saved for this project'; } catch (error) { chat.querySelector('[data-chat-status]').textContent = error.message; } });
-  chat.querySelector('[data-automation-menu]').addEventListener('click', () => { const panel = chat.querySelector('[data-automation-panel]'); panel.hidden = !panel.hidden; }); for (const inputAuto of chat.querySelectorAll('[data-auto-changes],[data-auto-tests]')) inputAuto.addEventListener('change', async event => { if (!state.chatId) return; if (event.target.matches('[data-auto-tests]') && event.target.checked && !confirm('Auto-run tests executes approved commands in this worktree. Continue?')) { event.target.checked = false; return; } await saveAutomation(state); }); if (state.chatId) { snapshot(state, true); connectStream(state); }
+  mode.addEventListener('change', () => {
+    if (!state.chatId) state.chatMode = mode.value;
+    chat.querySelector('[data-automation-menu]').hidden = state.chatMode !== 'DIRECT';
+    if (state.chatMode !== 'DIRECT') chat.querySelector('[data-automation-panel]').hidden = true;
+  });
+  selector.addEventListener('change', () => {
+    state.chatId = selector.value || null;
+    state.chatMode = selector.selectedOptions[0]?.dataset.mode || 'ORCHESTRATED';
+    mode.value = state.chatMode;
+    mode.disabled = Boolean(state.chatId);
+    chat.querySelector('[data-automation-menu]').hidden = state.chatMode !== 'DIRECT';
+    updateChatUrl(state.chatId);
+    snapshot(state, true);
+    connectStream(state);
+  });
+  chat.querySelector('[data-new-chat]').addEventListener('click', () => {
+    selector.value = '';
+    selector.dispatchEvent(new Event('change'));
+    input.focus();
+  });
+  model?.addEventListener('change', async () => {
+    const option = model.selectedOptions[0];
+    try {
+      await request(`/workspace/api/projects/${state.projectId}/model-preference`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ provider: model.value, model: option.dataset.model }) });
+      chat.querySelector('[data-chat-status]').textContent = 'Model saved for this project';
+    } catch (error) { chat.querySelector('[data-chat-status]').textContent = error.message; }
+  });
+  chat.querySelector('[data-orchestration-settings]').addEventListener('click', () => openOrchestrationProfiles(state));
+  wireOrchestrationDialog(state);
+  chat.querySelector('[data-automation-menu]').addEventListener('click', () => { const panel = chat.querySelector('[data-automation-panel]'); panel.hidden = !panel.hidden; });
+  for (const inputAuto of chat.querySelectorAll('[data-auto-changes],[data-auto-tests]')) inputAuto.addEventListener('change', async event => {
+    if (!state.chatId || state.chatMode !== 'DIRECT') return;
+    if (event.target.matches('[data-auto-tests]') && event.target.checked && !confirm('Auto-run tests executes approved commands in this worktree. Continue?')) { event.target.checked = false; return; }
+    await saveAutomation(state);
+  });
+  if (state.chatId) { snapshot(state, true); connectStream(state); }
+}
+
+async function startWorkflow(state, prompt) {
+  let branch = { branchMode: 'CURRENT', branchName: null, confirmedDefaultBranch: false };
+  if (state.branch && state.branch === state.root.dataset.defaultBranch) {
+    branch = await chooseWorkflowBranch(state, prompt);
+    if (!branch) return null;
+  }
+  return request(`${state.api}/workflows`, {
+    method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+    body: JSON.stringify({ chatId: state.chatId, prompt, ...branch })
+  });
+}
+
+function chooseWorkflowBranch(state, prompt) {
+  const dialog = state.root.querySelector('[data-workflow-branch-dialog]');
+  const branchInput = dialog.querySelector('[data-workflow-branch-name]');
+  const error = dialog.querySelector('[data-workflow-dialog-error]');
+  const slug = prompt.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 42) || 'task';
+  branchInput.value = `petri/${slug}`;
+  error.textContent = '';
+  dialog.returnValue = 'cancel';
+  dialog.showModal();
+  return new Promise(resolve => {
+    const closed = () => {
+      dialog.removeEventListener('close', closed);
+      if (dialog.returnValue !== 'confirm') { resolve(null); return; }
+      const branchMode = dialog.querySelector('[name="workflow-branch-mode"]:checked').value;
+      const branchName = branchMode === 'NEW' ? branchInput.value.trim() : null;
+      if (branchMode === 'NEW' && !branchName) { resolve(null); return; }
+      resolve({ branchMode, branchName, confirmedDefaultBranch: branchMode === 'CURRENT' });
+    };
+    dialog.addEventListener('close', closed);
+  });
+}
+
+function ensureChatOption(selector, id, title, mode) {
+  let option = [...selector.options].find(value => value.value === id);
+  if (!option) {
+    option = new Option(title.replace(/\s+/g, ' ').slice(0, 80), id);
+    selector.append(option);
+  }
+  option.dataset.mode = mode;
+}
+
+function updateChatUrl(chatId) {
+  const url = new URL(location);
+  if (chatId) url.searchParams.set('chat', chatId); else url.searchParams.delete('chat');
+  history.replaceState(null, '', url);
 }
 async function saveAutomation(state) { const chat = state.chat; try { const result = await request(`/workspace/api/chats/${state.chatId}/automation`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ autoApproveChanges: chat.querySelector('[data-auto-changes]').checked, autoApproveTests: chat.querySelector('[data-auto-tests]').checked }) }); renderSnapshot(state, result); } catch (error) { chat.querySelector('[data-chat-status]').textContent = error.message; } }
 async function snapshot(state, preservePosition = false) { if (!state.chatId) { renderSnapshot(state, null); return; } try { renderSnapshot(state, await request(`/workspace/api/chats/${state.chatId}/snapshot`), preservePosition); } catch (error) { state.chat.querySelector('[data-chat-status]').textContent = error.message; } }
-function renderSnapshot(state, data, preservePosition = false) { const chat = state.chat, timeline = state.scroller, previousTop = timeline.scrollTop, wasBottom = timeline.scrollHeight - previousTop - timeline.clientHeight < 100; const empty = chat.querySelector('[data-chat-empty]'); state.snapshot = data; timeline.replaceChildren(); if (!data) { if (empty) { timeline.append(empty); empty.hidden = false; } chat.querySelector('[data-review-tray]').hidden = true; return; } chat.querySelector('[data-auto-changes]').checked = data.chat.autoApproveChanges; chat.querySelector('[data-auto-tests]').checked = data.chat.autoApproveTests; chat.querySelector('[data-chat-status]').textContent = data.chat.active ? 'Petri is working…' : data.chat.queuePaused ? 'Queue paused' : 'Ready'; for (const entry of data.runs) renderRun(state, entry, timeline); renderReviews(state); if (!preservePosition || wasBottom) timeline.scrollTop = timeline.scrollHeight; else timeline.scrollTop = previousTop; }
+function renderSnapshot(state, data, preservePosition = false) {
+  const chat = state.chat, timeline = state.scroller, previousTop = timeline.scrollTop;
+  const wasBottom = timeline.scrollHeight - previousTop - timeline.clientHeight < 100;
+  const empty = chat.querySelector('[data-chat-empty]');
+  state.snapshot = data;
+  timeline.replaceChildren();
+  if (!data) {
+    if (empty) { timeline.append(empty); empty.hidden = false; }
+    chat.querySelector('[data-review-tray]').hidden = true;
+    chat.querySelector('[data-chat-mode]').disabled = false;
+    return;
+  }
+  state.chatMode = data.chat.executionMode || 'DIRECT';
+  chat.querySelector('[data-chat-mode]').value = state.chatMode;
+  chat.querySelector('[data-chat-mode]').disabled = true;
+  const direct = state.chatMode === 'DIRECT';
+  chat.querySelector('[data-auto-changes]').checked = data.chat.autoApproveChanges;
+  chat.querySelector('[data-auto-tests]').checked = data.chat.autoApproveTests;
+  chat.querySelector('[data-automation-menu]').hidden = !direct;
+  if (!direct) chat.querySelector('[data-automation-panel]').hidden = true;
+  const activeWorkflow = (data.workflows || []).some(value => value.status === 'RUNNING' || value.status === 'PENDING');
+  chat.querySelector('[data-chat-status]').textContent = activeWorkflow || data.chat.active
+    ? 'Petri is working…' : data.chat.queuePaused ? 'Queue paused' : 'Ready';
+  const entries = [
+    ...(data.runs || []).map(value => ({ index: value.run.chatMessageIndex, kind: 'run', value })),
+    ...(data.workflows || []).map(value => ({ index: value.chatMessageIndex, kind: 'workflow', value }))
+  ].sort((a, b) => a.index - b.index);
+  for (const entry of entries) {
+    if (entry.kind === 'run') renderRun(state, entry.value, timeline);
+    else renderWorkflow(state, entry.value, timeline);
+  }
+  renderReviews(state);
+  if (!preservePosition || wasBottom) timeline.scrollTop = timeline.scrollHeight;
+  else timeline.scrollTop = previousTop;
+}
 function renderRun(state, entry, timeline) { const run = entry.run; const user = el('article', 'workspace-message workspace-message-user'); user.append(el('p', '', run.prompt)); const meta = el('div', 'workspace-message-meta', `Turn ${run.chatMessageIndex + 1} · ${run.status}`); user.append(meta); timeline.append(user); for (const turn of run.turns || []) { if (turn.kind === 'USER_PROMPT') continue; if (turn.kind === 'MODEL_RESPONSE') { const assistant = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.raw = turn.content || ''; applyMarkdown(body, turn.content || ''); assistant.append(body); timeline.append(assistant); } else if (turn.kind === 'ERROR') timeline.append(el('article', 'workspace-message-error', turn.content || 'Agent error')); else { const details = el('details', 'workspace-tool-turn'); details.append(el('summary', '', turn.toolName || turn.kind), el('pre', '', turn.content || '')); timeline.append(details); } } if (run.partialOutput) { const partial = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.runOutput = run.id; body.dataset.raw = run.partialOutput; applyMarkdown(body, run.partialOutput); partial.append(el('small', 'workspace-writing', 'Petri · writing…'), body); timeline.append(partial); } for (const proposal of entry.proposals || []) timeline.append(proposalCard(state, proposal)); for (const test of entry.tests || []) timeline.append(testCard(state, test)); }
+
+const workflowStages = [
+  ['ORCHESTRATOR_INTAKE', 'Intake'], ['PLANNING', 'Plan'],
+  ['ORCHESTRATOR_PLAN_REVIEW', 'Plan gate'], ['WAITING_FOR_PLAN_APPROVAL', 'Approval'],
+  ['IMPLEMENTING', 'Implement'], ['ORCHESTRATOR_IMPLEMENTATION_REVIEW', 'Evidence gate'],
+  ['REVIEWING', 'Review'], ['ORCHESTRATOR_FINAL_REVIEW', 'Final gate'], ['COMPLETED', 'Done']
+];
+
+function renderWorkflow(state, workflow, timeline) {
+  const user = el('article', 'workspace-message workspace-message-user');
+  user.append(el('p', '', workflow.prompt));
+  user.append(el('div', 'workspace-message-meta', `Task ${workflow.chatMessageIndex + 1} · gated workflow`));
+  timeline.append(user);
+  const card = el('article', 'workspace-workflow');
+  const header = el('header', 'workspace-workflow-header');
+  const title = el('div');
+  title.append(renderIcon('Workflow'), el('strong', '', workflowLabel(workflow.currentStage)));
+  header.append(title, el('span', `workspace-workflow-status is-${workflow.status.toLowerCase()}`, workflow.status.replaceAll('_', ' ')));
+  card.append(header, workflowStageRail(workflow));
+
+  const artifacts = workflow.artifacts || [];
+  const questions = latestArtifact(artifacts, 'QUESTIONS');
+  const plan = latestArtifact(artifacts, 'PLAN');
+  const taskDiff = latestArtifact(artifacts, 'TASK_DIFF');
+  const review = latestArtifact(artifacts, 'REVIEW');
+  if (workflow.currentStage === 'WAITING_FOR_CLARIFICATION' && questions) card.append(questionForm(state, workflow, questions));
+  if (plan) card.append(planPanel(state, workflow, plan));
+  if (taskDiff) card.append(diffArtifactPanel(taskDiff));
+  if (review) card.append(reviewPanel(review));
+  if (workflow.holdReason) card.append(el('div', 'workspace-workflow-hold', workflow.holdReason));
+
+  const runs = el('details', 'workspace-workflow-runs');
+  runs.append(el('summary', '', `${(workflow.stageRuns || []).length} internal stage run${(workflow.stageRuns || []).length === 1 ? '' : 's'}`));
+  for (const run of workflow.stageRuns || []) runs.append(workflowRun(run));
+  if ((workflow.stageRuns || []).length) card.append(runs);
+  for (const proposal of workflow.proposals || []) card.append(workflowProposal(state, proposal));
+  for (const test of workflow.tests || []) card.append(workflowTest(test));
+  card.append(workflowControls(state, workflow));
+  timeline.append(card);
+}
+
+function workflowLabel(stage) {
+  return workflowStages.find(value => value[0] === stage)?.[1]
+    || stage.replaceAll('_', ' ').toLowerCase().replace(/^./, value => value.toUpperCase());
+}
+
+function workflowStageRail(workflow) {
+  const rail = el('div', 'workspace-stage-rail');
+  const current = workflowStages.findIndex(value => value[0] === workflow.currentStage);
+  const completed = workflow.status === 'COMPLETED';
+  workflowStages.forEach(([stage, label], index) => {
+    const item = el('span', 'workspace-stage');
+    item.classList.toggle('is-current', stage === workflow.currentStage);
+    item.classList.toggle('is-complete', completed || (current >= 0 && index < current));
+    item.title = label;
+    item.append(el('i'), el('small', '', label));
+    rail.append(item);
+  });
+  return rail;
+}
+
+function latestArtifact(artifacts, kind) {
+  return artifacts.filter(value => value.kind === kind).sort((a, b) => b.revision - a.revision)[0] || null;
+}
+
+function artifactJson(artifact) {
+  try { return JSON.parse(artifact.contentJson); } catch { return {}; }
+}
+
+function questionForm(state, workflow, artifact) {
+  const data = artifactJson(artifact);
+  const form = el('form', 'workspace-workflow-panel workspace-question-form');
+  form.append(el('h3', '', 'Planner needs your input'));
+  for (const question of data.questions || []) {
+    const field = el('fieldset');
+    field.dataset.questionId = question.id;
+    field.dataset.questionType = question.type;
+    field.append(el('legend', '', question.prompt));
+    if (question.type === 'FREE_TEXT') {
+      const input = el('textarea', 'field'); input.required = true; input.rows = 3; field.append(input);
+    } else {
+      for (const option of question.options || []) {
+        const label = el('label', 'workspace-check');
+        const input = document.createElement('input'); input.type = question.type === 'MULTI_SELECT' ? 'checkbox' : 'radio'; input.name = question.id; input.value = option;
+        label.append(input, document.createTextNode(option)); field.append(label);
+      }
+    }
+    form.append(field);
+  }
+  const submit = el('button', 'btn-primary !min-h-8 !px-3 text-xs', 'Send answers'); submit.type = 'submit'; form.append(submit);
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const answers = {};
+    for (const field of form.querySelectorAll('fieldset')) {
+      if (field.dataset.questionType === 'FREE_TEXT') answers[field.dataset.questionId] = field.querySelector('textarea').value.trim();
+      else if (field.dataset.questionType === 'MULTI_SELECT') answers[field.dataset.questionId] = [...field.querySelectorAll('input:checked')].map(value => value.value);
+      else answers[field.dataset.questionId] = field.querySelector('input:checked')?.value || '';
+    }
+    await workflowAction(state, submit, workflow.id, 'clarifications', { answers });
+  });
+  return form;
+}
+
+function planPanel(state, workflow, artifact) {
+  const plan = artifactJson(artifact);
+  const panel = el('section', 'workspace-workflow-panel');
+  panel.append(el('h3', '', plan.title || `Plan revision ${artifact.revision}`));
+  if (plan.objective) panel.append(el('p', '', plan.objective));
+  appendArtifactList(panel, 'Steps', plan.steps);
+  appendArtifactList(panel, 'Acceptance criteria', plan.acceptanceCriteria);
+  appendArtifactList(panel, 'Risks', plan.risks);
+  if (workflow.currentStage === 'WAITING_FOR_PLAN_APPROVAL' && workflow.currentPlanRevision === artifact.revision) {
+    const actions = el('div', 'workspace-workflow-actions');
+    const approve = el('button', 'btn-primary !min-h-8 !px-3 text-xs', 'Approve plan'); approve.type = 'button';
+    approve.addEventListener('click', () => workflowAction(state, approve, workflow.id, 'plan/approve', { revision: artifact.revision }));
+    const feedback = el('textarea', 'field'); feedback.rows = 2; feedback.placeholder = 'What should the planner revise?';
+    const revise = el('button', 'btn-secondary !min-h-8 !px-3 text-xs', 'Request revision'); revise.type = 'button';
+    revise.addEventListener('click', () => workflowAction(state, revise, workflow.id, 'plan/revise', { text: feedback.value.trim() }, Boolean(feedback.value.trim())));
+    actions.append(approve, feedback, revise); panel.append(actions);
+  }
+  return panel;
+}
+
+function appendArtifactList(parent, title, values) {
+  if (!Array.isArray(values) || !values.length) return;
+  parent.append(el('h4', '', title));
+  const list = el('ol'); for (const value of values) list.append(el('li', '', typeof value === 'string' ? value : JSON.stringify(value))); parent.append(list);
+}
+
+function diffArtifactPanel(artifact) {
+  const data = artifactJson(artifact);
+  const details = el('details', 'workspace-workflow-panel workspace-workflow-evidence');
+  details.append(el('summary', '', `Task diff · ${(data.paths || []).length} file${(data.paths || []).length === 1 ? '' : 's'}`));
+  const body = el('div'); applyMarkdown(body, artifact.displayMarkdown || 'No workflow-owned file changes.'); details.append(body);
+  return details;
+}
+
+function reviewPanel(artifact) {
+  const review = artifactJson(artifact);
+  const panel = el('section', 'workspace-workflow-panel workspace-review-result');
+  panel.append(el('h3', '', `Review · ${review.decision || 'pending'}`), el('p', '', review.summary || ''));
+  for (const finding of review.findings || []) {
+    const item = el('div', 'workspace-finding');
+    item.append(el('strong', '', `${finding.severity || 'Finding'}${finding.path ? ` · ${finding.path}${finding.line ? `:${finding.line}` : ''}` : ''}`), el('p', '', finding.issue || finding.requiredChange || ''));
+    panel.append(item);
+  }
+  return panel;
+}
+
+function workflowRun(run) {
+  const item = el('details', 'workspace-workflow-run');
+  item.append(el('summary', '', `${workflowLabel(run.workflowPhase)} · ${run.workflowRole} · attempt ${run.workflowAttempt} · ${run.status}`));
+  if (run.finalOutput) item.append(el('pre', '', run.finalOutput));
+  else if (run.errorMessage) item.append(el('pre', '', run.errorMessage));
+  if (run.partialOutput) { const partial = el('pre', '', run.partialOutput); partial.dataset.runOutput = run.id; partial.dataset.raw = run.partialOutput; item.append(partial); }
+  return item;
+}
+
+function workflowProposal(state, proposal) {
+  const card = el('div', 'workspace-workflow-action');
+  card.append(renderIcon('FileDiff'), el('span', '', proposal.filePath), el('small', '', proposal.status));
+  const view = el('button', 'btn-secondary !min-h-7 !px-2 text-xs', 'View diff'); view.type = 'button'; view.addEventListener('click', () => openDiff(state, proposal.filePath, proposal.id)); card.append(view);
+  return card;
+}
+
+function workflowTest(test) {
+  const card = el('div', 'workspace-workflow-action');
+  card.append(renderIcon('Play'), el('span', '', test.command), el('small', '', test.status));
+  return card;
+}
+
+function workflowControls(state, workflow) {
+  const controls = el('div', 'workspace-workflow-controls');
+  if (workflow.status === 'HUMAN_HOLD') {
+    const retry = el('button', 'btn-primary !min-h-8 !px-3 text-xs', 'Retry'); retry.type = 'button'; retry.addEventListener('click', () => workflowAction(state, retry, workflow.id, 'retry'));
+    controls.append(retry);
+  }
+  if (!['COMPLETED', 'CANCELLED'].includes(workflow.status)) {
+    const guidance = el('details'); guidance.append(el('summary', '', 'Guide active task'));
+    const input = el('textarea', 'field'); input.rows = 2; input.placeholder = 'New constraints or corrections…';
+    const send = el('button', 'btn-secondary !min-h-8 !px-3 text-xs', 'Send guidance'); send.type = 'button'; send.addEventListener('click', () => workflowAction(state, send, workflow.id, 'guidance', { text: input.value.trim() }, Boolean(input.value.trim())));
+    guidance.append(input, send);
+    const cancel = el('button', 'btn-secondary !min-h-8 !px-3 text-xs', 'Cancel task'); cancel.type = 'button'; cancel.addEventListener('click', () => workflowAction(state, cancel, workflow.id, 'cancel'));
+    controls.append(guidance, cancel);
+  }
+  return controls;
+}
+
+async function workflowAction(state, button, workflowId, action, body, valid = true) {
+  if (!valid) { state.chat.querySelector('[data-chat-status]').textContent = 'Enter the required text first.'; return; }
+  button.disabled = true;
+  try {
+    await request(`/workspace/api/workflows/${workflowId}/${action}`, { method: 'POST', headers: { ...(body ? { 'Content-Type': 'application/json' } : {}), ...csrfHeaders() }, body: body ? JSON.stringify(body) : undefined });
+    await snapshot(state, true);
+  } catch (error) { state.chat.querySelector('[data-chat-status]').textContent = error.message; }
+  finally { if (button.isConnected) button.disabled = false; }
+}
 function proposalCard(state, proposal) { const card = el('article', 'workspace-review-card'); card.append(el('strong', '', proposal.filePath), el('span', 'workspace-review-state', proposal.status)); const diff = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'View diff'); diff.type = 'button'; diff.addEventListener('click', () => openDiff(state, proposal.filePath, proposal.id)); card.append(diff); if (proposal.status === 'PROPOSED' || proposal.status === 'APPROVED') { const apply = el('button', 'btn-primary !min-h-8 !px-2 text-xs', 'Approve & apply'); apply.type = 'button'; apply.addEventListener('click', () => reviewAction(state, apply, async () => { await request(`/workspace/api/proposals/${proposal.id}/approve-and-apply`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); refreshChanges(state); })); const reject = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'Reject'); reject.type = 'button'; reject.addEventListener('click', () => reviewAction(state, reject, async () => { await request(`/workspace/api/chats/${state.chatId}/proposals/${proposal.id}/reject`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); card.append(apply, reject); } return card; }
 function testCard(state, test) { const card = el('article', 'workspace-review-card'); card.append(el('strong', '', test.command), el('span', 'workspace-review-state', test.status)); if (test.status === 'PROPOSED' || test.status === 'APPROVED') { const run = el('button', 'btn-primary !min-h-8 !px-2 text-xs', 'Run'); run.type = 'button'; run.addEventListener('click', () => reviewAction(state, run, async () => { await request(`/workspace/api/chats/${state.chatId}/tests/${test.id}/run`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); const reject = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'Reject'); reject.type = 'button'; reject.addEventListener('click', () => reviewAction(state, reject, async () => { await request(`/workspace/api/chats/${state.chatId}/tests/${test.id}/reject`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); card.append(run, reject); } return card; }
 async function reviewAction(state, button, operation) { button.disabled = true; try { await operation(); } catch (error) { state.chat.querySelector('[data-chat-status]').textContent = error.message; } finally { if (button.isConnected) button.disabled = false; } }
 function renderReviews(state) { const tray = state.chat.querySelector('[data-review-tray]'), items = tray.querySelector('[data-review-items]'); const pending = state.snapshot.runs.flatMap(value => [...value.proposals, ...value.tests]).filter(value => value.status === 'PROPOSED' || value.status === 'APPROVED'); tray.hidden = pending.length === 0; tray.querySelector('[data-review-count]').textContent = `${pending.length} review${pending.length === 1 ? '' : 's'} waiting`; items.replaceChildren(); for (const proposal of pending.filter(value => value.filePath)) items.append(proposalCard(state, proposal)); for (const test of pending.filter(value => value.command)) items.append(testCard(state, test)); }
-function connectStream(state) { state.stream?.close(); if (!state.chatId) return; const stream = new EventSource(`/chat/${state.chatId}/stream`); state.stream = stream; const refresh = () => { clearTimeout(state.streamRefresh); state.streamRefresh = setTimeout(() => snapshot(state, true), 150); }; ['snapshot','run-status','tool-lifecycle','summary-status'].forEach(name => stream.addEventListener(name, refresh)); stream.addEventListener('assistant-delta', event => { const follow = state.scroller.scrollHeight - state.scroller.scrollTop - state.scroller.clientHeight < 100; try { const value = JSON.parse(event.data); let output = state.scroller.querySelector(`[data-run-output="${value.runId}"]`); if (!output) { const card = el('article', 'workspace-message workspace-message-assistant'); card.append(el('small', 'workspace-writing', 'Petri · writing…')); output = el('p'); output.dataset.runOutput = value.runId; card.append(output); state.scroller.append(card); } const raw = (output.dataset.raw ?? output.textContent ?? '') + value.delta; scheduleMarkdown(output, raw); if (follow) state.scroller.scrollTop = state.scroller.scrollHeight; else state.chat.querySelector('[data-new-response]').hidden = false; } catch {} }); stream.onerror = () => { stream.close(); clearTimeout(state.poll); state.poll = setTimeout(() => { if (!document.hidden) snapshot(state, true); connectStream(state); }, 1800); }; }
+
+async function openOrchestrationProfiles(state) {
+  const dialog = state.root.querySelector('[data-orchestration-dialog]');
+  const host = dialog.querySelector('[data-role-profiles]');
+  const error = dialog.querySelector('[data-orchestration-error]');
+  error.textContent = '';
+  host.replaceChildren(el('div', 'workspace-skeleton', 'Loading role profiles…'));
+  dialog.showModal();
+  try {
+    const profiles = await request(`/workspace/api/projects/${state.projectId}/orchestration-profile`);
+    host.replaceChildren();
+    for (const profile of profiles) host.append(roleProfileRow(state, profile));
+    updateRoleWarning(dialog);
+  } catch (failure) { error.textContent = failure.message; host.replaceChildren(); }
+}
+
+function roleProfileRow(state, profile) {
+  const row = el('section', 'workspace-role-profile'); row.dataset.role = profile.role;
+  row.append(el('h3', '', profile.role.charAt(0) + profile.role.slice(1).toLowerCase()));
+  const grid = el('div', 'workspace-role-grid');
+  const provider = labeledSelect('Provider', 'provider', [...state.chat.querySelector('[data-model-selector]').options].map(option => [option.value, option.textContent.split(' · ')[0]]), profile.provider);
+  const model = labeledInput('Model', 'model', profile.model, 'text');
+  const attempts = labeledInput('Attempts', 'maxAttempts', profile.maxAttempts, 'number', 1, 10);
+  const turns = labeledInput('Turn budget', 'maxModelTurns', profile.maxModelTurns, 'number', 1, 100);
+  const output = labeledInput('Output tokens', 'maxOutputTokens', profile.maxOutputTokens, 'number', 16, 1000000);
+  const context = labeledInput('Context tokens', 'contextWindowTokens', profile.contextWindowTokens, 'number', 2048, 10000000);
+  const reasoning = labeledSelect('Reasoning', 'reasoningEffort', [['', 'Provider default'], ...['NONE','MINIMAL','LOW','MEDIUM','HIGH','XHIGH','MAX'].map(value => [value, value])], profile.reasoningEffort || '');
+  const verbosity = labeledSelect('Verbosity', 'textVerbosity', [['', 'Provider default'], ...['LOW','MEDIUM','HIGH'].map(value => [value, value])], profile.textVerbosity || '');
+  grid.append(provider, model, attempts, turns, output, context, reasoning, verbosity);
+  const addendum = document.createElement('label'); addendum.textContent = 'Project-specific role addendum';
+  const textarea = el('textarea', 'field'); textarea.dataset.field = 'promptAddendum'; textarea.rows = 3; textarea.maxLength = 20000; textarea.value = profile.promptAddendum || ''; addendum.append(textarea);
+  row.append(grid, addendum);
+  row.addEventListener('change', () => updateRoleWarning(row.closest('dialog')));
+  return row;
+}
+
+function labeledInput(labelText, field, value, type, min, max) {
+  const label = document.createElement('label'); label.textContent = labelText;
+  const input = el('input', 'field'); input.type = type; input.dataset.field = field; input.value = value ?? '';
+  if (min != null) input.min = min; if (max != null) input.max = max; input.required = true; label.append(input); return label;
+}
+
+function labeledSelect(labelText, field, options, selected) {
+  const label = document.createElement('label'); label.textContent = labelText;
+  const select = el('select', 'field'); select.dataset.field = field;
+  for (const [value, textValue] of options) select.append(new Option(textValue, value, false, value === selected));
+  label.append(select); return label;
+}
+
+function updateRoleWarning(dialog) {
+  const rows = [...dialog.querySelectorAll('[data-role]')];
+  const implementer = rows.find(row => row.dataset.role === 'IMPLEMENTER');
+  const reviewer = rows.find(row => row.dataset.role === 'REVIEWER');
+  const same = implementer && reviewer
+    && implementer.querySelector('[data-field="provider"]').value === reviewer.querySelector('[data-field="provider"]').value
+    && implementer.querySelector('[data-field="model"]').value === reviewer.querySelector('[data-field="model"]').value;
+  dialog.querySelector('[data-role-warning]').hidden = !same;
+}
+
+function wireOrchestrationDialog(state) {
+  const dialog = state.root.querySelector('[data-orchestration-dialog]');
+  dialog.querySelector('form').addEventListener('submit', async event => {
+    if (event.submitter?.value !== 'confirm') return;
+    event.preventDefault();
+    const error = dialog.querySelector('[data-orchestration-error]'); error.textContent = '';
+    const values = [...dialog.querySelectorAll('[data-role]')].map(row => {
+      const get = field => row.querySelector(`[data-field="${field}"]`).value;
+      const number = field => Number(get(field));
+      return { role: row.dataset.role, provider: get('provider'), model: get('model'),
+        maxAttempts: number('maxAttempts'), maxModelTurns: number('maxModelTurns'),
+        maxOutputTokens: number('maxOutputTokens'), contextWindowTokens: number('contextWindowTokens'),
+        reasoningEffort: get('reasoningEffort') || null, textVerbosity: get('textVerbosity') || null,
+        promptAddendum: get('promptAddendum') || null };
+    });
+    event.submitter.disabled = true;
+    try {
+      await request(`/workspace/api/projects/${state.projectId}/orchestration-profile`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify(values) });
+      dialog.close(); state.chat.querySelector('[data-chat-status]').textContent = 'Workflow role profiles saved';
+    } catch (failure) { error.textContent = failure.message; }
+    finally { event.submitter.disabled = false; }
+  });
+}
+
+function connectStream(state) { state.stream?.close(); if (!state.chatId) return; const stream = new EventSource(`/chat/${state.chatId}/stream`); state.stream = stream; const refresh = () => { clearTimeout(state.streamRefresh); state.streamRefresh = setTimeout(() => snapshot(state, true), 150); }; ['snapshot','run-status','tool-lifecycle','summary-status','workflow-status','workflow-stage','workflow-artifact','workflow-question','workflow-transition'].forEach(name => stream.addEventListener(name, refresh)); stream.addEventListener('assistant-delta', event => { const follow = state.scroller.scrollHeight - state.scroller.scrollTop - state.scroller.clientHeight < 100; try { const value = JSON.parse(event.data); let output = state.scroller.querySelector(`[data-run-output="${value.runId}"]`); if (!output) { const card = el('article', 'workspace-message workspace-message-assistant'); card.append(el('small', 'workspace-writing', 'Petri · writing…')); output = el('p'); output.dataset.runOutput = value.runId; card.append(output); state.scroller.append(card); } const raw = (output.dataset.raw ?? output.textContent ?? '') + value.delta; scheduleMarkdown(output, raw); if (follow) state.scroller.scrollTop = state.scroller.scrollHeight; else state.chat.querySelector('[data-new-response]').hidden = false; } catch {} }); stream.onerror = () => { stream.close(); clearTimeout(state.poll); state.poll = setTimeout(() => { if (!document.hidden) snapshot(state, true); connectStream(state); }, 1800); }; }

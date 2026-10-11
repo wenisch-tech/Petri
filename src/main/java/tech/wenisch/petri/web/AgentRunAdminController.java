@@ -8,6 +8,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import tech.wenisch.petri.agent.change.ChangeProposalService;
 import tech.wenisch.petri.agent.change.ChangeProposalView;
@@ -37,8 +38,11 @@ public class AgentRunAdminController {
   }
 
   @GetMapping
-  String runs(Model model, Principal principal) {
-    model.addAttribute("runs", runs.listAll(actorId(principal)));
+  String runs(
+      @RequestParam(defaultValue = "false") boolean includeWorkflowStages,
+      Model model, Principal principal) {
+    model.addAttribute("runs", runs.listAll(actorId(principal), includeWorkflowStages));
+    model.addAttribute("includeWorkflowStages", includeWorkflowStages);
     return "runs";
   }
 

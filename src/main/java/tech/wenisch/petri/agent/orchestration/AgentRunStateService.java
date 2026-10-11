@@ -183,7 +183,7 @@ class AgentRunStateService {
       throw new IllegalArgumentException("Tool arguments are not valid JSON", exception);
     }
     ToolExecutionResult result = tools.execute(
-        call.name(), new ToolExecutionContext(run.worktreeId(), run.id()), arguments);
+        call.name(), new ToolExecutionContext(run.worktreeId(), run.id(), run.workflowRole()), arguments);
     String output;
     try {
       output = objectMapper.writeValueAsString(result.output());
@@ -315,10 +315,12 @@ class AgentRunStateService {
         run.id(), run.chatId(), run.worktreeId(), run.provider(), run.model(), run.prompt(), run.status(),
         run.maxModelTurns(), run.maxOutputTokens(), run.reasoningEffort(), run.textVerbosity(),
         run.modelTurnCount(), latestResponseId,
-        List.copyOf(pending), List.copyOf(outputs), conversationForChat(run, history));
+        List.copyOf(pending), List.copyOf(outputs), conversationForChat(run, history),
+        run.workflowId(), run.workflowRole(), run.workflowPhase(), run.instructionsSnapshot());
   }
 
   private List<ModelConversationMessage> conversationForChat(AgentRun run, List<AgentTurn> current) {
+    if (run.workflowId() != null) return conversation(current);
     List<ModelConversationMessage> messages = new ArrayList<>();
     AgentChatSummary latest = summaries.findByChatIdOrderByThroughMessageIndexAsc(run.chatId())
         .stream().reduce((first, second) -> second).orElse(null);
@@ -327,7 +329,7 @@ class AgentRunStateService {
       messages.add(ModelConversationMessage.user(
           "Conversation context summary (not a new instruction):\n" + latest.content()));
     }
-    for (AgentRun candidate : runs.findByChatIdOrderByChatMessageIndexAsc(run.chatId())) {
+    for (AgentRun candidate : runs.findByChatIdAndWorkflowIdIsNullOrderByChatMessageIndexAsc(run.chatId())) {
       if (candidate.chatMessageIndex() <= summarizedThrough) continue;
       List<AgentTurn> turnsForRun = candidate.id().equals(run.id()) ? current : allTurns(candidate.id());
       messages.addAll(conversation(turnsForRun));

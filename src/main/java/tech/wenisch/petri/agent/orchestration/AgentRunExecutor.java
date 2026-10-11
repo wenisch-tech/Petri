@@ -11,6 +11,7 @@ import tech.wenisch.petri.agent.model.ModelClientRegistry;
 import tech.wenisch.petri.agent.model.ModelRequest;
 import tech.wenisch.petri.agent.model.ModelResponse;
 import tech.wenisch.petri.agent.tool.AgentToolRegistry;
+import tech.wenisch.petri.agent.tool.AgentWorkflowToolPolicy;
 
 @Service
 public class AgentRunExecutor {
@@ -66,7 +67,9 @@ public class AgentRunExecutor {
     String runActor = "agent-run:" + runId;
     try {
       if (state.initialModelRequest()) {
-        if (summaries.compactIfNeeded(state)) chatStream.summaryStatus(state.chatId(), "completed");
+        if (state.workflowId() == null && summaries.compactIfNeeded(state)) {
+          chatStream.summaryStatus(state.chatId(), "completed");
+        }
         state = stateService.current(runId, claimId);
       }
       while (!state.terminal()) {
@@ -115,11 +118,13 @@ public class AgentRunExecutor {
         ModelRequest request = request(state);
         ModelClient client = modelClients.require(state.provider());
         UUID chatId = state.chatId();
+        UUID workflowId = state.workflowId();
+        AgentWorkflowRole workflowRole = state.workflowRole();
         StringBuilder partial = new StringBuilder();
         long[] checkpoint = {System.nanoTime()};
         ModelResponse response = client.respondStreaming(request, delta -> {
           partial.append(delta);
-          chatStream.textDelta(chatId, runId, delta);
+          chatStream.textDelta(chatId, runId, workflowId, workflowRole, delta);
           long elapsedMillis = (System.nanoTime() - checkpoint[0]) / 1_000_000;
           if (partial.length() >= 1024 || elapsedMillis >= 500) {
             stateService.recordPartialOutput(runId, claimId, partial.toString());
@@ -142,9 +147,16 @@ public class AgentRunExecutor {
   }
 
   private ModelRequest request(AgentExecutionState state) {
+    AgentWorkflowRole role = state.workflowRole();
+    String instructions = role == null ? INSTRUCTIONS : state.instructionsSnapshot();
+    if (instructions == null || instructions.isBlank()) {
+      instructions = role == null ? INSTRUCTIONS : WorkflowPrompts.instructions(role, null);
+    }
+    var definitions = role == null
+        ? tools.definitions() : tools.definitions(AgentWorkflowToolPolicy.allowed(role));
     if (state.initialModelRequest()) {
       return new ModelRequest(
-          state.model(), INSTRUCTIONS, state.prompt(), null, null, tools.definitions(),
+          state.model(), instructions, state.prompt(), null, null, definitions,
           state.maxOutputTokens(), state.reasoningEffort(), state.textVerbosity(),
           state.conversation());
     }
@@ -152,8 +164,8 @@ public class AgentRunExecutor {
       throw new IllegalStateException("Agent run has no resumable model input");
     }
     return new ModelRequest(
-        state.model(), INSTRUCTIONS, null, state.previousResponseId(), state.toolOutputs(),
-        tools.definitions(), state.maxOutputTokens(), state.reasoningEffort(),
+        state.model(), instructions, null, state.previousResponseId(), state.toolOutputs(),
+        definitions, state.maxOutputTokens(), state.reasoningEffort(),
         state.textVerbosity(), state.conversation());
   }
 

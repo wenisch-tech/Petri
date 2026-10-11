@@ -12,6 +12,7 @@ Petri is a self-hosted Java coding agent. It works on disposable Git worktrees, 
 - [Git provider accounts](git-provider-accounts.md) — personal GitHub, GitLab and Forgejo connections and bulk import.
 - [Rootless Podman test sandboxes](test-sandboxes.md) — isolated test execution and administrator profiles.
 - [Agent workflow](agent-workflow.md) — model loop, tools, approvals, persistence and recovery.
+- [Gated multi-agent orchestration](gated-orchestration.md) — planner questions, plan gates, role profiles, review and recovery.
 - [HTTP API](http-api.md) — API-key authentication, worktrees, runs, events and tools.
 - [Security model](security.md) — trust boundaries and production deployment guidance.
 - [Development](development.md) — build, tests, database migrations and project structure.

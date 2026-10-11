@@ -54,7 +54,7 @@ class AgentChatSummaryService {
   boolean compactIfNeeded(AgentExecutionState state) {
     AgentRun current = runs.findById(state.runId())
         .orElseThrow(() -> new IllegalArgumentException("Unknown agent run"));
-    List<AgentRun> history = runs.findByChatIdOrderByChatMessageIndexAsc(current.chatId());
+    List<AgentRun> history = runs.findByChatIdAndWorkflowIdIsNullOrderByChatMessageIndexAsc(current.chatId());
     int inputBudget = (int) Math.floor(current.contextWindowTokens() * 0.85)
         - current.maxOutputTokens();
     if (inputBudget < 2048) {

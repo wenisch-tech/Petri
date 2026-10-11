@@ -3,6 +3,7 @@ package tech.wenisch.petri.agent.tool;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 
 @Component
@@ -26,10 +27,20 @@ public class AgentToolRegistry {
         .toList();
   }
 
+  public List<ToolDefinition> definitions(Set<String> allowed) {
+    if (allowed == null) return definitions();
+    return tools.entrySet().stream().filter(entry -> allowed.contains(entry.getKey()))
+        .map(entry -> entry.getValue().definition())
+        .sorted(java.util.Comparator.comparing(ToolDefinition::name)).toList();
+  }
+
   public ToolExecutionResult execute(
       String toolName, ToolExecutionContext context, Map<String, Object> input) {
     AgentTool tool = tools.get(toolName);
     if (tool == null) throw new IllegalArgumentException("Unknown agent tool: " + toolName);
+    if (!AgentWorkflowToolPolicy.allowed(context.workflowRole()).contains(toolName)) {
+      throw new IllegalArgumentException("Tool is not permitted for role " + context.workflowRole());
+    }
     Map<String, Object> safeInput = input == null ? Map.of() : Map.copyOf(input);
     return new ToolExecutionResult(toolName, tool.execute(context, safeInput));
   }

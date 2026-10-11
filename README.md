@@ -120,7 +120,7 @@ spring:
 
 ## Status
 
-The current implementation provides a reproducible backend/frontend build, Flyway-managed persistence, local and optional OIDC authentication, owner-scoped projects and API keys, connected Git-provider accounts, encrypted Git/model credentials, controlled mirrors and worktrees, approval-gated file tools, Podman-isolated tests, lazy-loaded skills, persistent SSE lifecycle events, provider-neutral model/tool orchestration and the browser workspace with embedded durable chat.
+The current implementation provides a reproducible backend/frontend build, Flyway-managed persistence, local and optional OIDC authentication, owner-scoped projects and API keys, connected Git-provider accounts, encrypted Git/model credentials, controlled mirrors and worktrees, approval-gated file tools, Podman-isolated tests, lazy-loaded skills, persistent SSE lifecycle events, provider-neutral model/tool execution, gated multi-agent workflows and the browser workspace with embedded durable chat.
 
 ## License
 

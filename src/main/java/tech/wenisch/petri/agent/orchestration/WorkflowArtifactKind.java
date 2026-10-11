@@ -1,0 +1,17 @@
+package tech.wenisch.petri.agent.orchestration;
+
+public enum WorkflowArtifactKind {
+  PLANNER_BRIEF,
+  QUESTIONS,
+  ANSWERS,
+  PLAN,
+  PLAN_VERDICT,
+  USER_GUIDANCE,
+  IMPLEMENTATION_REPORT,
+  IMPLEMENTATION_VERDICT,
+  TASK_DIFF,
+  REVIEW,
+  FINAL_VERDICT,
+  STAGE_FAILURE,
+  CHAT_FORK_CONTEXT
+}

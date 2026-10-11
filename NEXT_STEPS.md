@@ -4,7 +4,7 @@ Updated after the implementation audit on 2026-10-11.
 
 ## Current state
 
-Petri now includes durable chats and queues, streaming model output, Monaco editing and diffs,
+Petri now includes durable direct chats and gated multi-agent workflow queues, streaming model output, Monaco editing and diffs,
 branch/worktree Git workflows, personal and global GitHub/GitLab/Forgejo instances, PAT/OAuth
 connections, repository import jobs, owner-scoped projects/API keys, and rootless Podman test
 sandboxes.
@@ -24,7 +24,8 @@ The audit fixed the following concrete defects:
 - chat snapshot refreshes preserve the reader's scroll position, and approval failures are shown
   in the chat instead of becoming unhandled promise rejections.
 
-Current quality gate: frontend bundles build and all 70 Java tests pass. `git diff --check` passes.
+The orchestration layer adds focused parser and state tests. Its browser-level stage interactions and
+multi-instance coordination remain part of the test expansion below.
 
 ## 1. Add browser-level workspace regression tests
 

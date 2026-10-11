@@ -24,7 +24,17 @@ public class AgentChatStream {
   }
 
   public void textDelta(UUID chatId, UUID runId, String delta) {
-    publish(chatId, "assistant-delta", Map.of("runId", runId, "delta", delta));
+    textDelta(chatId, runId, null, null, delta);
+  }
+
+  public void textDelta(UUID chatId, UUID runId, UUID workflowId,
+      AgentWorkflowRole role, String delta) {
+    Map<String, Object> value = new java.util.LinkedHashMap<>();
+    value.put("runId", runId);
+    value.put("delta", delta);
+    if (workflowId != null) value.put("workflowId", workflowId);
+    if (role != null) value.put("role", role);
+    publish(chatId, "assistant-delta", value);
   }
 
   public void runStatus(UUID chatId, AgentRunView run) {
@@ -40,6 +50,36 @@ public class AgentChatStream {
 
   public void summaryStatus(UUID chatId, String status) {
     publish(chatId, "summary-status", Map.of("status", status));
+  }
+
+  public void workflowStatus(UUID chatId, AgentWorkflowView workflow) {
+    publish(chatId, "workflow-status", Map.of(
+        "workflowId", workflow.id(), "status", workflow.status(), "stage", workflow.currentStage()));
+    publish(chatId, "workflow-stage", Map.of(
+        "workflowId", workflow.id(), "role", stageRole(workflow.currentStage()),
+        "stage", workflow.currentStage()));
+    workflowTransition(chatId, workflow.id(), workflow.currentStage());
+  }
+
+  public void workflowArtifact(UUID chatId, UUID workflowId, AgentWorkflowArtifactView artifact) {
+    publish(chatId, artifact.kind() == WorkflowArtifactKind.QUESTIONS
+        ? "workflow-question" : "workflow-artifact", Map.of(
+            "workflowId", workflowId, "artifact", artifact));
+  }
+
+  public void workflowTransition(UUID chatId, UUID workflowId, AgentWorkflowStage stage) {
+    publish(chatId, "workflow-transition", Map.of("workflowId", workflowId, "stage", stage));
+  }
+
+  private static String stageRole(AgentWorkflowStage stage) {
+    return switch (stage) {
+      case ORCHESTRATOR_INTAKE, ORCHESTRATOR_PLAN_REVIEW,
+          ORCHESTRATOR_IMPLEMENTATION_REVIEW, ORCHESTRATOR_FINAL_REVIEW -> "ORCHESTRATOR";
+      case PLANNING -> "PLANNER";
+      case IMPLEMENTING -> "IMPLEMENTER";
+      case REVIEWING -> "REVIEWER";
+      default -> "SYSTEM";
+    };
   }
 
   private void publish(UUID chatId, String name, Object data) {

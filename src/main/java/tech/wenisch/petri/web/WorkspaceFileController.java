@@ -19,16 +19,21 @@ import tech.wenisch.petri.agent.tool.ReadFileResult;
 import tech.wenisch.petri.agent.tool.WorkspaceEntryMutation;
 import tech.wenisch.petri.workspace.WorkspaceEditorService;
 import tech.wenisch.petri.project.ProjectAccessService;
+import tech.wenisch.petri.agent.orchestration.WorkflowReservationService;
 
 @RestController
 @RequestMapping("/workspace/api/worktrees/{worktreeId}")
 public class WorkspaceFileController {
   private final WorkspaceEditorService editor;
   private final ProjectAccessService access;
+  private final WorkflowReservationService reservations;
 
-  public WorkspaceFileController(WorkspaceEditorService editor, ProjectAccessService access) {
+  public WorkspaceFileController(
+      WorkspaceEditorService editor, ProjectAccessService access,
+      WorkflowReservationService reservations) {
     this.editor = editor;
     this.access = access;
+    this.reservations = reservations;
   }
 
   @GetMapping("/tree")
@@ -55,6 +60,7 @@ public class WorkspaceFileController {
   public ResponseEntity<?> save(
       @PathVariable UUID worktreeId, @RequestBody SaveWorkspaceFileRequest request, Principal principal) {
     access.requireWorktree(worktreeId, principal.getName());
+    reservations.assertUnreserved(worktreeId);
     return invoke(() -> editor.save(
         worktreeId, request.path(), request.content(), request.expectedSha256(), principal.getName()));
   }
@@ -63,6 +69,7 @@ public class WorkspaceFileController {
   public ResponseEntity<?> create(
       @PathVariable UUID worktreeId, @RequestBody CreateWorkspaceEntryRequest request, Principal principal) {
     access.requireWorktree(worktreeId, principal.getName());
+    reservations.assertUnreserved(worktreeId);
     return invoke(HttpStatus.CREATED, () -> editor.create(worktreeId, request.path(),
         "DIRECTORY".equals(request.type()), request.content(), principal.getName()));
   }
@@ -71,6 +78,7 @@ public class WorkspaceFileController {
   public ResponseEntity<?> move(
       @PathVariable UUID worktreeId, @RequestBody MoveWorkspaceEntryRequest request, Principal principal) {
     access.requireWorktree(worktreeId, principal.getName());
+    reservations.assertUnreserved(worktreeId);
     return invoke(() -> editor.move(worktreeId, request.sourcePath(), request.targetPath(),
         request.expectedSha256(), principal.getName()));
   }
@@ -79,6 +87,7 @@ public class WorkspaceFileController {
   public ResponseEntity<?> delete(
       @PathVariable UUID worktreeId, @RequestBody DeleteWorkspaceEntryRequest request, Principal principal) {
     access.requireWorktree(worktreeId, principal.getName());
+    reservations.assertUnreserved(worktreeId);
     if (request.recursive()
         && (request.path() == null || !java.util.Objects.equals(request.path(), request.confirmationPath()))) {
       return problem(HttpStatus.BAD_REQUEST, "Recursive deletion requires the exact path confirmation");

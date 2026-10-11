@@ -21,8 +21,25 @@ class AgentRun {
   @Column(name = "chat_id", nullable = false)
   private UUID chatId;
 
-  @Column(name = "chat_message_index", nullable = false)
-  private int chatMessageIndex;
+  @Column(name = "chat_message_index")
+  private Integer chatMessageIndex;
+
+  @Column(name = "workflow_id")
+  private UUID workflowId;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "workflow_role", length = 32)
+  private AgentWorkflowRole workflowRole;
+
+  @Enumerated(EnumType.STRING)
+  @Column(name = "workflow_phase", length = 48)
+  private AgentWorkflowStage workflowPhase;
+
+  @Column(name = "workflow_attempt")
+  private Integer workflowAttempt;
+
+  @Column(name = "instructions_snapshot", columnDefinition = "TEXT")
+  private String instructionsSnapshot;
 
   @Column(name = "worktree_id", nullable = false)
   private UUID worktreeId;
@@ -125,6 +142,22 @@ class AgentRun {
     this.nextTurnIndex = 1;
     this.createdBy = createdBy;
     this.createdAt = createdAt;
+  }
+
+  AgentRun(
+      UUID id, UUID chatId, UUID workflowId, AgentWorkflowRole workflowRole,
+      AgentWorkflowStage workflowPhase, int workflowAttempt, UUID worktreeId,
+      ModelProvider provider, String model, String prompt, int maxModelTurns,
+      int maxOutputTokens, int contextWindowTokens, ReasoningEffort reasoningEffort,
+      TextVerbosity textVerbosity, String instructionsSnapshot, UUID createdBy, Instant createdAt) {
+    this(id, chatId, 0, worktreeId, provider, model, prompt, maxModelTurns,
+        maxOutputTokens, contextWindowTokens, reasoningEffort, textVerbosity, createdBy, createdAt);
+    this.chatMessageIndex = null;
+    this.workflowId = workflowId;
+    this.workflowRole = workflowRole;
+    this.workflowPhase = workflowPhase;
+    this.workflowAttempt = workflowAttempt;
+    this.instructionsSnapshot = instructionsSnapshot;
   }
 
   AgentRun(
@@ -262,7 +295,7 @@ class AgentRun {
 
   UUID id() { return id; }
   UUID chatId() { return chatId; }
-  int chatMessageIndex() { return chatMessageIndex; }
+  Integer chatMessageIndex() { return chatMessageIndex; }
   UUID worktreeId() { return worktreeId; }
   ModelProvider provider() { return provider; }
   String model() { return model; }
@@ -281,4 +314,9 @@ class AgentRun {
   Instant createdAt() { return createdAt; }
   Instant startedAt() { return startedAt; }
   Instant completedAt() { return completedAt; }
+  UUID workflowId() { return workflowId; }
+  AgentWorkflowRole workflowRole() { return workflowRole; }
+  AgentWorkflowStage workflowPhase() { return workflowPhase; }
+  Integer workflowAttempt() { return workflowAttempt; }
+  String instructionsSnapshot() { return instructionsSnapshot; }
 }

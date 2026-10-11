@@ -16,6 +16,8 @@ import tech.wenisch.petri.audit.AuditLogService;
 import tech.wenisch.petri.security.AppUser;
 import tech.wenisch.petri.security.AppUserRepository;
 import tech.wenisch.petri.workspace.WorktreeLocator;
+import tech.wenisch.petri.agent.orchestration.AgentRunService;
+import tech.wenisch.petri.git.WorkflowPathPolicy;
 
 @Service
 public class ChangeProposalService {
@@ -26,6 +28,8 @@ public class ChangeProposalService {
   private final AuditLogService auditLog;
   private final Clock clock;
   private final ApplicationEventPublisher events;
+  private final AgentRunService runs;
+  private final WorkflowPathPolicy workflowPaths;
 
   @Autowired
   public ChangeProposalService(
@@ -34,8 +38,10 @@ public class ChangeProposalService {
       WorkspaceFileService files,
       AppUserRepository users,
       AuditLogService auditLog,
-      ApplicationEventPublisher events) {
-    this(proposals, worktrees, files, users, auditLog, Clock.systemUTC(), events);
+      ApplicationEventPublisher events,
+      AgentRunService runs,
+      WorkflowPathPolicy workflowPaths) {
+    this(proposals, worktrees, files, users, auditLog, Clock.systemUTC(), events, runs, workflowPaths);
   }
 
   ChangeProposalService(
@@ -45,7 +51,7 @@ public class ChangeProposalService {
       AppUserRepository users,
       AuditLogService auditLog,
       Clock clock) {
-    this(proposals, worktrees, files, users, auditLog, clock, null);
+    this(proposals, worktrees, files, users, auditLog, clock, null, null, null);
   }
 
   ChangeProposalService(
@@ -55,7 +61,9 @@ public class ChangeProposalService {
       AppUserRepository users,
       AuditLogService auditLog,
       Clock clock,
-      ApplicationEventPublisher events) {
+      ApplicationEventPublisher events,
+      AgentRunService runs,
+      WorkflowPathPolicy workflowPaths) {
     this.proposals = proposals;
     this.worktrees = worktrees;
     this.files = files;
@@ -63,6 +71,8 @@ public class ChangeProposalService {
     this.auditLog = auditLog;
     this.clock = clock;
     this.events = events;
+    this.runs = runs;
+    this.workflowPaths = workflowPaths;
   }
 
   @Transactional
@@ -72,6 +82,7 @@ public class ChangeProposalService {
       String path,
       String expectedSha256,
       String replacementContent) {
+    enforceWorkflowPath(agentRunId, worktreeId, path);
     Path worktree = worktrees.requireActiveWorktree(worktreeId);
     ReplacementPreview preview =
         files.previewReplacement(worktree, path, expectedSha256, replacementContent);
@@ -96,6 +107,7 @@ public class ChangeProposalService {
       UUID agentRunId,
       String path,
       String content) {
+    enforceWorkflowPath(agentRunId, worktreeId, path);
     Path worktree = worktrees.requireActiveWorktree(worktreeId);
     ReplacementPreview preview = files.previewCreation(worktree, path, content);
     ChangeProposal proposal = proposals.save(new ChangeProposal(
@@ -242,6 +254,13 @@ public class ChangeProposalService {
     if (events != null && proposal.agentRunId() != null) {
       events.publishEvent(new AgentActionRequestedEvent(
           proposal.agentRunId(), proposal.id(), AgentActionRequestedEvent.AgentActionKind.CHANGE_PROPOSAL));
+    }
+  }
+
+  private void enforceWorkflowPath(UUID agentRunId, UUID worktreeId, String path) {
+    if (agentRunId != null && runs != null && workflowPaths != null
+        && runs.get(agentRunId).workflowId() != null) {
+      workflowPaths.assertNotIgnored(worktreeId, path);
     }
   }
 

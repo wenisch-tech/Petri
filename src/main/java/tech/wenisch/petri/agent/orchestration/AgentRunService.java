@@ -29,6 +29,7 @@ public class AgentRunService {
   private final WorktreeLocator worktrees;
   private final AuditLogService auditLog;
   private final WorkspaceGitOperationCoordinator gitOperations;
+  private final WorkflowReservationService workflowReservations;
   private final Clock clock;
 
   @Autowired
@@ -41,9 +42,10 @@ public class AgentRunService {
       AppUserRepository users,
       WorktreeLocator worktrees,
       AuditLogService auditLog,
-      WorkspaceGitOperationCoordinator gitOperations) {
+      WorkspaceGitOperationCoordinator gitOperations,
+      WorkflowReservationService workflowReservations) {
     this(runs, chats, summaries, turns, credentials, users, worktrees, auditLog,
-        gitOperations, Clock.systemUTC());
+        gitOperations, workflowReservations, Clock.systemUTC());
   }
 
   AgentRunService(
@@ -56,6 +58,7 @@ public class AgentRunService {
       WorktreeLocator worktrees,
       AuditLogService auditLog,
       WorkspaceGitOperationCoordinator gitOperations,
+      WorkflowReservationService workflowReservations,
       Clock clock) {
     this.runs = runs;
     this.chats = chats;
@@ -66,6 +69,7 @@ public class AgentRunService {
     this.worktrees = worktrees;
     this.auditLog = auditLog;
     this.gitOperations = gitOperations;
+    this.workflowReservations = workflowReservations;
     this.clock = clock;
   }
 
@@ -76,6 +80,7 @@ public class AgentRunService {
       UUID actorId,
       String auditActor) {
     worktrees.requireActiveWorktree(worktreeId);
+    workflowReservations.assertUnreserved(worktreeId);
     gitOperations.assertAgentAllowed(worktreeId);
     if (!users.existsById(actorId)) throw new IllegalArgumentException("Unknown run creator");
     String prompt = required(command.prompt(), "Prompt", MAX_PROMPT_LENGTH);
@@ -122,7 +127,11 @@ public class AgentRunService {
       UUID chatId, CreateAgentRunCommand command, UUID actorId, String auditActor) {
     AgentChat chat = lockedChat(chatId);
     if (!chat.createdBy().equals(actorId)) throw new IllegalArgumentException("Chat belongs to another creator");
+    if (chat.executionMode() != AgentChatExecutionMode.DIRECT) {
+      throw new IllegalStateException("Orchestrated chats accept workflow tasks, not direct runs");
+    }
     worktrees.requireActiveWorktree(chat.worktreeId());
+    workflowReservations.assertUnreserved(chat.worktreeId());
     gitOperations.assertAgentAllowed(chat.worktreeId());
     if (!users.existsById(actorId)) throw new IllegalArgumentException("Unknown run creator");
     String prompt = required(command.prompt(), "Prompt", MAX_PROMPT_LENGTH);
@@ -153,6 +162,37 @@ public class AgentRunService {
         auditActor, "AGENT_RUN_CREATED", "AGENT_RUN", run.id(),
         "Created agent run for worktree " + chat.worktreeId());
     return view(run, turns.findByRunIdOrderByIndexAsc(run.id()));
+  }
+
+  @Transactional
+  AgentRunView createWorkflowStage(
+      AgentWorkflow workflow,
+      AgentWorkflowRoleSnapshot snapshot,
+      AgentWorkflowStage phase,
+      int attempt,
+      String prompt,
+      String auditActor) {
+    if (workflow.terminal()) throw new IllegalStateException("Workflow is already terminal");
+    String safePrompt = required(prompt, "Stage prompt", MAX_PROMPT_LENGTH);
+    Instant now = Instant.now(clock);
+    AgentRun run = runs.save(new AgentRun(
+        UUID.randomUUID(), workflow.chatId(), workflow.id(), snapshot.role(), phase, attempt,
+        workflow.executionWorktreeId(), snapshot.provider(), snapshot.model(), safePrompt,
+        snapshot.maxModelTurns(), snapshot.maxOutputTokens(), snapshot.contextWindowTokens(),
+        snapshot.reasoningEffort(), snapshot.textVerbosity(),
+        WorkflowPrompts.instructions(snapshot.role(), snapshot.promptAddendum()),
+        workflow.createdBy(), now));
+    turns.save(new AgentTurn(UUID.randomUUID(), run.id(), 0, AgentTurnKind.USER_PROMPT,
+        null, null, null, safePrompt, now));
+    auditLog.record(auditActor, "WORKFLOW_STAGE_RUN_CREATED", "AGENT_RUN", run.id(),
+        "Created " + snapshot.role() + " run for workflow " + workflow.id());
+    return view(run, turns.findByRunIdOrderByIndexAsc(run.id()));
+  }
+
+  @Transactional(readOnly = true)
+  public List<AgentRunView> workflowRuns(UUID workflowId) {
+    return runs.findByWorkflowIdOrderByCreatedAtAsc(workflowId).stream()
+        .map(run -> view(run, turns.findByRunIdOrderByIndexAsc(run.id()))).toList();
   }
 
   @Transactional(readOnly = true)
@@ -188,7 +228,7 @@ public class AgentRunService {
   @Transactional(readOnly = true)
   public List<AgentRunView> chatRuns(UUID chatId) {
     requireChat(chatId);
-    return runs.findByChatIdOrderByChatMessageIndexAsc(chatId).stream()
+    return runs.findByChatIdAndWorkflowIdIsNullOrderByChatMessageIndexAsc(chatId).stream()
         .map(run -> view(run, turns.findByRunIdOrderByIndexAsc(run.id()))).toList();
   }
 
@@ -238,22 +278,38 @@ public class AgentRunService {
 
   @Transactional(readOnly = true)
   public List<AgentRunView> list(UUID worktreeId) {
+    return list(worktreeId, false);
+  }
+
+  @Transactional(readOnly = true)
+  public List<AgentRunView> list(UUID worktreeId, boolean includeWorkflowStages) {
     worktrees.requireActiveWorktree(worktreeId);
-    return runs.findByWorktreeIdOrderByCreatedAtDesc(worktreeId).stream()
+    List<AgentRun> values = includeWorkflowStages
+        ? runs.findByWorktreeIdOrderByCreatedAtDesc(worktreeId)
+        : runs.findByWorktreeIdAndWorkflowIdIsNullOrderByCreatedAtDesc(worktreeId);
+    return values.stream()
         .map(run -> view(run, List.of()))
         .toList();
   }
 
   @Transactional(readOnly = true)
   public List<AgentRunView> listAll() {
-    return runs.findAllByOrderByCreatedAtDesc().stream()
+    return runs.findByWorkflowIdIsNullOrderByCreatedAtDesc().stream()
         .map(run -> view(run, List.of()))
         .toList();
   }
 
   @Transactional(readOnly = true)
   public List<AgentRunView> listAll(UUID actorId) {
-    return runs.findByCreatedByOrderByCreatedAtDesc(actorId).stream()
+    return listAll(actorId, false);
+  }
+
+  @Transactional(readOnly = true)
+  public List<AgentRunView> listAll(UUID actorId, boolean includeWorkflowStages) {
+    List<AgentRun> values = includeWorkflowStages
+        ? runs.findByCreatedByOrderByCreatedAtDesc(actorId)
+        : runs.findByCreatedByAndWorkflowIdIsNullOrderByCreatedAtDesc(actorId);
+    return values.stream()
         .map(run -> view(run, List.of()))
         .toList();
   }
@@ -324,12 +380,13 @@ public class AgentRunService {
   }
 
   private AgentChatView chatView(AgentChat chat) {
-    List<AgentRunView> values = runs.findByChatIdOrderByChatMessageIndexAsc(chat.id()).stream()
+    List<AgentRunView> values = runs.findByChatIdAndWorkflowIdIsNullOrderByChatMessageIndexAsc(chat.id()).stream()
         .map(run -> view(run, List.of())).toList();
     boolean active = values.stream().anyMatch(run -> !terminal(run.status()));
     int queued = (int) values.stream().filter(run -> run.status() == AgentRunStatus.PENDING).count();
     return new AgentChatView(chat.id(), chat.worktreeId(), chat.title(), chat.queuePaused(),
-        chat.approvalGateOverridden(), chat.autoApproveChanges(), chat.autoApproveTests(), queued, active, chat.createdBy(), chat.createdAt(),
+        chat.approvalGateOverridden(), chat.autoApproveChanges(), chat.autoApproveTests(),
+        chat.executionMode(), chat.parentChatId(), chat.forkedFromWorkflowId(), queued, active, chat.createdBy(), chat.createdAt(),
         chat.updatedAt(), values);
   }
 
@@ -358,7 +415,8 @@ public class AgentRunService {
         run.maxOutputTokens(), run.reasoningEffort(), run.textVerbosity(), run.modelTurnCount(),
         run.finalOutput(), run.errorMessage(), run.createdBy(), run.createdAt(),
         run.startedAt(), run.completedAt(), turns.stream().map(AgentRunService::view).toList(),
-        run.chatId(), run.chatMessageIndex(), run.contextWindowTokens(), run.partialOutput());
+        run.chatId(), run.chatMessageIndex(), run.contextWindowTokens(), run.partialOutput(),
+        run.workflowId(), run.workflowRole(), run.workflowPhase(), run.workflowAttempt());
   }
 
   private static AgentTurnView view(AgentTurn turn) {

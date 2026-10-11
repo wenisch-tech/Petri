@@ -10,6 +10,7 @@ import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Component;
 import tech.wenisch.petri.workspace.WorktreeLocator;
+import tech.wenisch.petri.agent.orchestration.WorkflowReservationService;
 
 @Component
 public class WorkspaceGitOperationCoordinator {
@@ -17,12 +18,15 @@ public class WorkspaceGitOperationCoordinator {
   private final WorktreeLocator worktrees;
   private final GitCommandRunner git;
   private final ProjectWorktreeRepository records;
+  private final WorkflowReservationService reservations;
 
   public WorkspaceGitOperationCoordinator(
-      WorktreeLocator worktrees, GitCommandRunner git, ProjectWorktreeRepository records) {
+      WorktreeLocator worktrees, GitCommandRunner git, ProjectWorktreeRepository records,
+      WorkflowReservationService reservations) {
     this.worktrees = worktrees;
     this.git = git;
     this.records = records;
+    this.reservations = reservations;
   }
 
   public <T> T project(UUID projectId, Supplier<T> operation) {
@@ -30,6 +34,7 @@ public class WorkspaceGitOperationCoordinator {
   }
 
   public <T> T worktree(UUID worktreeId, Supplier<T> operation) {
+    reservations.assertUnreserved(worktreeId);
     UUID projectId = record(worktreeId).projectId();
     return locked("project:" + projectId,
         () -> locked("worktree:" + worktreeId, operation));

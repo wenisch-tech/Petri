@@ -63,6 +63,11 @@
 - One active run per chat, recovery of pending/expired work after restart, explicit queue resume and approval gates.
 - Token-by-token model text streaming with persisted partial output for reload/reconnect recovery.
 - Cumulative context summaries when a conversation exceeds its configured context budget; source history remains visible.
+- Gated Orchestrator → Planner → Implementer → Reviewer workflows with strict typed artifacts and fail-closed model gates.
+- Structured planner questions, revision-bound plan approval, reviewer findings and user guidance at safe boundaries.
+- Per-user/project model and generation profiles for all four isolated roles, with immutable task snapshots.
+- Exclusive worktree reservations, dirty-state Git baselines, workflow-only diffs/hashes and ordered follow-up workflow queues.
+- Role-specific server-side tool allowlists, workflow-scoped automatic patch/test consent and idempotent recovery.
 - Lazy-loaded operator-controlled `SKILL.md` workflows.
 
 ## Native tools

@@ -26,6 +26,8 @@ import tech.wenisch.petri.agent.orchestration.AgentRunLauncher;
 import tech.wenisch.petri.agent.orchestration.AgentRunService;
 import tech.wenisch.petri.agent.orchestration.AgentRunView;
 import tech.wenisch.petri.agent.orchestration.CreateAgentRunCommand;
+import tech.wenisch.petri.agent.orchestration.AgentWorkflowService;
+import tech.wenisch.petri.agent.orchestration.AgentWorkflowView;
 import tech.wenisch.petri.agent.run.TestRunService;
 import tech.wenisch.petri.agent.run.TestRunView;
 import tech.wenisch.petri.git.ProjectWorktreeService;
@@ -46,6 +48,7 @@ public class WorkspaceCollaborationController {
   private final WorkspaceModelPreferenceService preferences;
   private final ModelCredentialService credentials;
   private final AgentRunService runs;
+  private final AgentWorkflowService workflows;
   private final AgentRunLauncher launcher;
   private final AgentChatQueueService queue;
   private final ChangeProposalService changes;
@@ -60,6 +63,7 @@ public class WorkspaceCollaborationController {
       WorkspaceModelPreferenceService preferences,
       ModelCredentialService credentials,
       AgentRunService runs,
+      AgentWorkflowService workflows,
       AgentRunLauncher launcher,
       AgentChatQueueService queue,
       ChangeProposalService changes,
@@ -72,6 +76,7 @@ public class WorkspaceCollaborationController {
     this.preferences = preferences;
     this.credentials = credentials;
     this.runs = runs;
+    this.workflows = workflows;
     this.launcher = launcher;
     this.queue = queue;
     this.changes = changes;
@@ -200,7 +205,7 @@ public class WorkspaceCollaborationController {
     List<WorkspaceChatRun> reviewed = values.stream().map(run -> new WorkspaceChatRun(
         run, changes.listForAgentRun(run.id()), tests.listForAgentRun(run.id()))).toList();
     return new WorkspaceChatSnapshot(worktrees.get(chat.worktreeId()).projectId(), chat, reviewed,
-        runs.chatSummaries(chatId));
+        runs.chatSummaries(chatId), workflows.chatWorkflows(chatId, actor.getId()));
   }
 
   private AgentRunView ownedRunForProposal(UUID chatId, UUID proposalId, AppUser actor) {
@@ -258,5 +263,6 @@ public class WorkspaceCollaborationController {
       AgentRunView run, List<ChangeProposalView> proposals, List<TestRunView> tests) {}
   public record WorkspaceChatSnapshot(
       UUID projectId, AgentChatView chat, List<WorkspaceChatRun> runs,
-      List<tech.wenisch.petri.agent.orchestration.AgentChatSummaryView> summaries) {}
+      List<tech.wenisch.petri.agent.orchestration.AgentChatSummaryView> summaries,
+      List<AgentWorkflowView> workflows) {}
 }

@@ -92,7 +92,7 @@ public class AgentChatQueueService {
   void advance(UUID chatId, boolean userRequested, boolean explicitOverride) {
     AgentChat chat = chats.findForUpdateById(chatId).orElse(null);
     if (chat == null) return;
-    List<AgentRun> history = runs.findByChatIdOrderByChatMessageIndexAsc(chatId);
+    List<AgentRun> history = runs.findByChatIdAndWorkflowIdIsNullOrderByChatMessageIndexAsc(chatId);
     if (history.stream().anyMatch(run -> active(run.status()))) return;
     if (chat.queuePaused() && !userRequested) return;
     AgentRun latestExecuted = history.stream().filter(run -> run.startedAt() != null)

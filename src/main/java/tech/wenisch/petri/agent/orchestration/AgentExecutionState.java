@@ -24,7 +24,11 @@ record AgentExecutionState(
     String previousResponseId,
     List<AgentPendingToolCall> pendingToolCalls,
     List<ModelToolOutput> toolOutputs,
-    List<ModelConversationMessage> conversation) {
+    List<ModelConversationMessage> conversation,
+    UUID workflowId,
+    AgentWorkflowRole workflowRole,
+    AgentWorkflowStage workflowPhase,
+    String instructionsSnapshot) {
 
   boolean terminal() {
     return switch (status) {

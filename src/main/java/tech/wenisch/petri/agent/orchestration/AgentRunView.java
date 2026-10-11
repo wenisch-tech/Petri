@@ -27,6 +27,10 @@ public record AgentRunView(
     Instant completedAt,
     List<AgentTurnView> turns,
     UUID chatId,
-    int chatMessageIndex,
+    Integer chatMessageIndex,
     int contextWindowTokens,
-    String partialOutput) {}
+    String partialOutput,
+    UUID workflowId,
+    AgentWorkflowRole workflowRole,
+    AgentWorkflowStage workflowPhase,
+    Integer workflowAttempt) {}
