@@ -43,6 +43,7 @@ public class LocalToolchain {
     env.put("JAVA_HOME", javaHome);
     env.put("HOME", home.toString());
     env.put("TMPDIR", home.toString());
+    env.put("JAVA_TOOL_OPTIONS", "-Djava.io.tmpdir=" + home);
     env.put("CI", "true");
     env.put("LC_ALL", "C");
     env.putAll(extra);

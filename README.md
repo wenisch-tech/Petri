@@ -42,6 +42,8 @@ PostgreSQL, and works with OpenAI, LiteLLM, Ollama and any OpenAI-compatible end
 
 - **Workspace UI:** lazy file explorer, Monaco tabs with persistent drafts, optimistic saves and
   conflict-safe reloads, side-by-side or inline diffs.
+- **Terminal panel** below the editor; agents get an approval-gated `run_command` tool (per-project
+  auto-approve) whose commands run as an OS-level user confined to the worktree.
 - **Live workflow panel** with stage rail, status, attempts and cancel; it stays on *Done* until the
   next workflow starts.
 - **Streaming chat** with timestamped tool calls, agent messages and artifacts, reconnect recovery
@@ -69,7 +71,7 @@ PostgreSQL, and works with OpenAI, LiteLLM, Ollama and any OpenAI-compatible end
 ### Tools and testing
 
 - Native tools: `list_files`, `read_file`, `search_files`, `create_patch`, `create_file`,
-  `show_diff`, `run_tests`, `install_packages`, `list_skills`, `load_skill`.
+  `show_diff`, `run_tests`, `install_packages`, `run_command`, `list_skills`, `load_skill`.
 - **Approval-gated Alpine package installs:** agents request tools (`jq`, `python3`, `nodejs`, …)
   with a reason; installs run only after approval (or per-project auto-approve) into an unprivileged
   toolchain prefix. Models are told they run on Alpine and how installs work.

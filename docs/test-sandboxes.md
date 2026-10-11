@@ -36,3 +36,29 @@ packages are already present. With the Podman executor the tool is disabled and 
 **Trade-off:** in `local` mode repository code runs as the same operating-system user as Petri and
 can read `./data`. Prefer `PETRI_SECRETS_MASTER_KEY` (environment) over the key file, an external
 PostgreSQL, and use the Podman executor for untrusted repositories.
+
+## Terminal
+
+The workspace has a **Terminal** panel below the editor. It is open by default (toggle it with the
+status-bar button or `Ctrl+\``, drag its top edge to resize; the choice is remembered). Commands you
+type run immediately in the worktree root; there is no approval because you are the one running them.
+
+Agents get the `run_command` tool (implementer and direct runs). An agent command is a proposal:
+it runs only after the user approves it in the review tray/chat, unless **Auto-approve agent
+terminal commands** is enabled for the project at `/sandbox-profiles`. The run waits for the
+decision, and a decline is reported back to the model together with the exit code and output of
+approved commands.
+
+**Confinement is enforced by the operating system, not by filtering strings:**
+
+| Executor | How commands are confined |
+| --- | --- |
+| `podman` | A rootless container with only the worktree mounted, read-only root filesystem, no capabilities, the project's profile limits and network setting. |
+| `local` | `petri-confine` (a small static Landlock helper, `PETRI_TERMINAL_CONFINE_COMMAND`) wraps the command: it may read the system, the JDK and the toolchain, and write only the worktree, the build cache and a private temporary home. Everything else, including `/app/data` (database, master key, other worktrees), is denied even for the same user. Without the helper, commands are refused. |
+
+Landlock needs no root, no setuid and no user namespace, so it works with **any UID**
+(`docker run --user 12345`, OpenShift `anyuid`) and with the Helm chart's hardened
+`securityContext`. It requires a kernel with Landlock (Linux 5.13+; Docker's default seccomp profile
+allows it). If Landlock is unavailable the helper exits with status 125 and the command is not run.
+In `local` mode approved tests are wrapped the same way. Network access follows the container's
+network (`local`) or the sandbox profile (`podman`).

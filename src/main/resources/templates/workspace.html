@@ -129,7 +129,22 @@
     <section class="workspace-editor" data-workspace-editor>
       <div class="workspace-tabs" data-editor-tabs><span class="px-4 text-xs text-ink-500">No file open</span></div>
       <div class="min-h-0 flex-1" data-editor-host><div class="workspace-editor-empty" data-editor-empty><i data-lucide="FileCode2" data-icon-size="28"></i><h1>Select a file</h1><p>Open a file from the explorer, or inspect a change from the Changes view.</p></div></div>
-      <footer class="workspace-statusbar"><span data-editor-status>Ready</span><span data-editor-path>—</span><span data-editor-cursor>Ln 1, Col 1</span></footer>
+      <div class="workspace-terminal-resizer" data-terminal-resizer role="separator" aria-orientation="horizontal" tabindex="0" hidden></div>
+      <section class="workspace-terminal" data-terminal aria-label="Terminal" hidden>
+        <header class="workspace-terminal-header">
+          <span><i data-lucide="SquareTerminal"></i> Terminal <small data-terminal-scope>confined to this worktree</small></span>
+          <span class="flex gap-1">
+            <button class="icon-button" type="button" data-terminal-clear title="Clear" aria-label="Clear terminal"><i data-lucide="Trash2"></i></button>
+            <button class="icon-button" type="button" data-terminal-close title="Close terminal" aria-label="Close terminal"><i data-lucide="X"></i></button>
+          </span>
+        </header>
+        <div class="workspace-terminal-output" data-terminal-output tabindex="-1"></div>
+        <form class="workspace-terminal-form" data-terminal-form>
+          <span aria-hidden="true">$</span>
+          <input data-terminal-input autocomplete="off" autocapitalize="off" spellcheck="false" maxlength="4000" aria-label="Terminal command" placeholder="Run a command in the worktree…">
+        </form>
+      </section>
+      <footer class="workspace-statusbar"><span data-editor-status>Ready</span><span data-editor-path>—</span><span data-editor-cursor>Ln 1, Col 1</span><button type="button" class="workspace-statusbar-button" data-terminal-toggle title="Toggle terminal (Ctrl+`)"><i data-lucide="SquareTerminal"></i> Terminal</button></footer>
     </section>
     <div class="workspace-resizer" data-resize="chat" role="separator" aria-orientation="vertical" tabindex="0"></div>
 

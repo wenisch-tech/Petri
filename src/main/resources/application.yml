@@ -34,6 +34,11 @@ petri:
     toolchain-root: ${PETRI_TOOLCHAIN_ROOT:./data/toolchain}
     apk-executable: ${PETRI_APK_EXECUTABLE:apk}
     install-timeout: ${PETRI_INSTALL_TIMEOUT:10m}
+  terminal:
+    # Path of the Landlock helper (petri-confine); empty disables terminal/confinement in local mode
+    confine-command: ${PETRI_TERMINAL_CONFINE_COMMAND:}
+    timeout: ${PETRI_TERMINAL_TIMEOUT:2m}
+    max-output-bytes: ${PETRI_TERMINAL_MAX_OUTPUT_BYTES:200000}
   security:
     initial-admin-email: ${PETRI_ADMIN_EMAIL:admin@petri.local}
     initial-admin-password: ${PETRI_ADMIN_PASSWORD:admin}

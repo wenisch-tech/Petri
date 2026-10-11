@@ -24,6 +24,7 @@ class AgentWorkflowLedger {
   private final ChangeProposalService changes;
   private final TestRunService tests;
   private final tech.wenisch.petri.agent.run.PackageInstallService packageInstalls;
+  private final tech.wenisch.petri.agent.run.TerminalService terminalCommands;
 
   AgentWorkflowLedger(
       AgentWorkflowRepository workflows,
@@ -37,11 +38,12 @@ class AgentWorkflowLedger {
       AuditLogService audit,
       ChangeProposalService changes,
       TestRunService tests,
-      tech.wenisch.petri.agent.run.PackageInstallService packageInstalls) {
+      tech.wenisch.petri.agent.run.PackageInstallService packageInstalls,
+      tech.wenisch.petri.agent.run.TerminalService terminalCommands) {
     this.workflows = workflows; this.artifacts = artifacts; this.transitions = transitions;
     this.snapshots = snapshots; this.reservations = reservations; this.chats = chats;
     this.runs = runs; this.profiles = profiles; this.audit = audit;
-    this.changes = changes; this.tests = tests; this.packageInstalls = packageInstalls;
+    this.changes = changes; this.tests = tests; this.packageInstalls = packageInstalls; this.terminalCommands = terminalCommands;
   }
 
   @Transactional
@@ -272,7 +274,8 @@ class AgentWorkflowLedger {
         workflow.completedAt(), artifactViews, transitionViews, stageRuns,
         stageRuns.stream().flatMap(run -> changes.listForAgentRun(run.id()).stream()).toList(),
         stageRuns.stream().flatMap(run -> tests.listForAgentRun(run.id()).stream()).toList(),
-        stageRuns.stream().flatMap(run -> packageInstalls.listForAgentRun(run.id()).stream()).toList());
+        stageRuns.stream().flatMap(run -> packageInstalls.listForAgentRun(run.id()).stream()).toList(),
+        stageRuns.stream().flatMap(run -> terminalCommands.listForAgentRun(run.id()).stream()).toList());
   }
 
   private AgentWorkflow locked(UUID id) {

@@ -9,7 +9,7 @@ public final class AgentWorkflowToolPolicy {
       "install_packages");
   private static final Set<String> IMPLEMENT = Set.of(
       "list_files", "read_file", "search_files", "show_diff", "list_skills", "load_skill",
-      "create_patch", "create_file", "run_tests", "install_packages");
+      "create_patch", "create_file", "run_tests", "install_packages", "run_command");
 
   private AgentWorkflowToolPolicy() {}
 

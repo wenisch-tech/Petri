@@ -3,6 +3,7 @@ package tech.wenisch.petri.agent.run;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -19,10 +20,13 @@ import tech.wenisch.petri.workspace.WorkspacePaths;
 class LocalContainerTestExecutor implements TestExecutor {
   private final WorkspacePaths paths;
   private final LocalToolchain toolchain;
+  private final Confinement confinement;
 
-  LocalContainerTestExecutor(WorkspacePaths paths, LocalToolchain toolchain) {
+  LocalContainerTestExecutor(
+      WorkspacePaths paths, LocalToolchain toolchain, Confinement confinement) {
     this.paths = paths;
     this.toolchain = toolchain;
+    this.confinement = confinement;
   }
 
   @Override
@@ -39,9 +43,12 @@ class LocalContainerTestExecutor implements TestExecutor {
       Map<String, String> extra = command.buildSystem() == TestBuildSystem.MAVEN
           ? Map.of("MAVEN_OPTS", "-Dmaven.repo.local=" + cache.resolve("maven"))
           : Map.of("GRADLE_USER_HOME", cache.resolve("gradle").toString());
-      return BoundedProcess.run(command.arguments(), safeWorktree,
+      List<String> argv = confinement.available()
+          ? confinement.wrap(List.of(safeWorktree, cache, home), command.arguments())
+          : command.arguments();
+      return BoundedProcess.run(argv, safeWorktree,
           toolchain.environment(home, extra), profile.timeout(), profile.outputLimitBytes(),
-          "local-container");
+          confinement.available() ? "local-container-landlock" : "local-container");
     } finally {
       deleteQuietly(home);
     }

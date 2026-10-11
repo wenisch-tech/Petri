@@ -16,7 +16,7 @@ import tools.jackson.databind.ObjectMapper;
 class ApprovalGateTest {
   private final PackageInstallService installs = mock(PackageInstallService.class);
   private final ApprovalGate gate = new ApprovalGate(
-      null, null, installs, new ObjectMapper());
+      null, null, installs, null, new ObjectMapper());
 
   private PackageInstallView view(UUID id, PackageInstallStatus status, String output) {
     return new PackageInstallView(id, UUID.randomUUID(), UUID.randomUUID(), List.of("jq"), "need jq",
@@ -28,6 +28,9 @@ class ApprovalGateTest {
     UUID id = UUID.randomUUID();
     assertThat(gate.detect("install_packages", "c1", "{\"packageInstallId\":\"" + id + "\"}"))
         .hasValueSatisfying(value -> assertThat(value.id()).isEqualTo(id));
+    UUID command = UUID.randomUUID();
+    assertThat(gate.detect("run_command", "c4", "{\"terminalCommandId\":\"" + command + "\"}"))
+        .hasValueSatisfying(value -> assertThat(value.kind()).isEqualTo(ApprovalGate.Kind.TERMINAL));
     assertThat(gate.detect("read_file", "c2", "{\"id\":\"" + id + "\"}")).isEmpty();
     assertThat(gate.detect("install_packages", "c3", "not json")).isEmpty();
   }

@@ -81,7 +81,165 @@ export function initializeWorkspace() {
 function initializeLayout(state) {
   document.querySelector('[data-worktree-selector]')?.addEventListener('change', event => { const query = new URLSearchParams({ worktree: event.target.value }); location.assign(`/workspace/projects/${state.projectId}?${query}`); });
   document.querySelector('[data-toggle-chat]')?.addEventListener('click', () => state.root.classList.toggle('chat-collapsed'));
-  state.root.querySelectorAll('[data-resize]').forEach(handle => { const kind = handle.dataset.resize; try { const width = localStorage.getItem(`petri:workspace:${kind}:width`); if (width) state.root.style.setProperty(`--${kind}-width`, width); } catch {} handle.addEventListener('pointerdown', event => { handle.setPointerCapture(event.pointerId); const move = pointer => { const width = kind === 'explorer' ? pointer.clientX : innerWidth - pointer.clientX; state.root.style.setProperty(`--${kind}-width`, `${Math.max(220, Math.min(560, width))}px`); }; const done = () => { try { localStorage.setItem(`petri:workspace:${kind}:width`, getComputedStyle(state.root).getPropertyValue(`--${kind}-width`)); } catch {} handle.removeEventListener('pointermove', move); }; handle.addEventListener('pointermove', move); handle.addEventListener('pointerup', done, { once: true }); }); });
+  initializeResizers(state);
+  initializeTerminal(state);
+}
+
+const resizeLimits = {
+  explorer: () => [180, Math.min(600, innerWidth * 0.4)],
+  chat: () => [320, Math.min(1000, innerWidth * 0.65)]
+};
+
+function initializeResizers(state) {
+  state.root.querySelectorAll('[data-resize]').forEach(handle => {
+    const kind = handle.dataset.resize;
+    const limits = () => (resizeLimits[kind] || (() => [180, 600]))();
+    const setWidth = width => {
+      const [min, max] = limits();
+      state.root.style.setProperty(`--${kind}-width`, `${Math.round(Math.max(min, Math.min(max, width)))}px`);
+    };
+    const currentWidth = () => parseFloat(getComputedStyle(state.root).getPropertyValue(`--${kind}-width`)) || 0;
+    const save = () => {
+      try { localStorage.setItem(`petri:workspace:${kind}:width`, getComputedStyle(state.root).getPropertyValue(`--${kind}-width`).trim()); } catch {}
+    };
+    try {
+      const stored = parseFloat(localStorage.getItem(`petri:workspace:${kind}:width`) || '');
+      if (Number.isFinite(stored)) setWidth(stored);
+    } catch {}
+    handle.addEventListener('pointerdown', event => {
+      event.preventDefault();
+      handle.setPointerCapture(event.pointerId);
+      handle.classList.add('is-dragging');
+      document.body.style.userSelect = 'none';
+      const move = pointer => setWidth(kind === 'explorer' ? pointer.clientX : innerWidth - pointer.clientX);
+      const done = () => {
+        handle.classList.remove('is-dragging');
+        document.body.style.userSelect = '';
+        handle.removeEventListener('pointermove', move);
+        save();
+      };
+      handle.addEventListener('pointermove', move);
+      handle.addEventListener('pointerup', done, { once: true });
+      handle.addEventListener('pointercancel', done, { once: true });
+    });
+    handle.addEventListener('keydown', event => {
+      const step = event.shiftKey ? 60 : 20;
+      const direction = kind === 'explorer' ? 1 : -1;
+      if (event.key === 'ArrowLeft') { setWidth(currentWidth() - direction * step); save(); event.preventDefault(); }
+      if (event.key === 'ArrowRight') { setWidth(currentWidth() + direction * step); save(); event.preventDefault(); }
+    });
+    handle.addEventListener('dblclick', () => {
+      state.root.style.removeProperty(`--${kind}-width`);
+      try { localStorage.removeItem(`petri:workspace:${kind}:width`); } catch {}
+    });
+  });
+}
+
+function initializeTerminal(state) {
+  const panel = state.root.querySelector('[data-terminal]');
+  if (!panel) return;
+  const resizer = state.root.querySelector('[data-terminal-resizer]');
+  const output = panel.querySelector('[data-terminal-output]');
+  const form = panel.querySelector('[data-terminal-form]');
+  const input = panel.querySelector('[data-terminal-input]');
+  const toggle = state.root.querySelector('[data-terminal-toggle]');
+  const history = [];
+  let cursor = 0;
+  let busy = false;
+  const setOpen = open => {
+    panel.hidden = !open;
+    resizer.hidden = !open;
+    toggle?.classList.toggle('is-active', open);
+    try { localStorage.setItem('petri:workspace:terminal:open', open ? '1' : '0'); } catch {}
+    if (open) { requestAnimationFrame(() => input.focus()); }
+    requestAnimationFrame(() => layoutEditor(state));
+  };
+  const setHeight = height => {
+    const max = Math.max(120, state.root.clientHeight - 160);
+    panel.style.setProperty('--terminal-height', `${Math.round(Math.max(96, Math.min(max, height)))}px`);
+  };
+  try {
+    const stored = parseFloat(localStorage.getItem('petri:workspace:terminal:height') || '');
+    if (Number.isFinite(stored)) setHeight(stored);
+    if (localStorage.getItem('petri:workspace:terminal:open') !== '0') setOpen(true);
+  } catch { setOpen(true); }
+  toggle?.addEventListener('click', () => setOpen(panel.hidden));
+  panel.querySelector('[data-terminal-close]').addEventListener('click', () => setOpen(false));
+  panel.querySelector('[data-terminal-clear]').addEventListener('click', () => output.replaceChildren());
+  document.addEventListener('keydown', event => {
+    if (event.ctrlKey && event.key === '`') { event.preventDefault(); setOpen(panel.hidden); }
+  });
+  resizer.addEventListener('pointerdown', event => {
+    event.preventDefault();
+    resizer.setPointerCapture(event.pointerId);
+    resizer.classList.add('is-dragging');
+    const bottom = panel.getBoundingClientRect().bottom;
+    const move = pointer => { setHeight(bottom - pointer.clientY); layoutEditor(state); };
+    const done = () => {
+      resizer.classList.remove('is-dragging');
+      resizer.removeEventListener('pointermove', move);
+      try { localStorage.setItem('petri:workspace:terminal:height', parseFloat(panel.style.getPropertyValue('--terminal-height'))); } catch {}
+    };
+    resizer.addEventListener('pointermove', move);
+    resizer.addEventListener('pointerup', done, { once: true });
+    resizer.addEventListener('pointercancel', done, { once: true });
+  });
+  resizer.addEventListener('keydown', event => {
+    const current = panel.getBoundingClientRect().height;
+    if (event.key === 'ArrowUp') { setHeight(current + 24); event.preventDefault(); }
+    if (event.key === 'ArrowDown') { setHeight(current - 24); event.preventDefault(); }
+  });
+  const append = (command, result, failed) => {
+    const entry = el('div', 'workspace-terminal-entry');
+    entry.append(el('div', 'workspace-terminal-command', `$ ${command}`));
+    if (result.output) entry.append(el('div', 'workspace-terminal-result', result.output));
+    const meta = result.status === 'COMPLETED' ? `exit 0`
+      : result.status === 'TIMED_OUT' ? 'timed out'
+        : result.exitCode != null ? `exit ${result.exitCode}` : (result.status || 'failed').toLowerCase();
+    entry.append(el('div', `workspace-terminal-meta${failed ? ' is-failed' : ''}`,
+      `${meta}${result.outputTruncated ? ' · output truncated' : ''}`));
+    output.append(entry);
+    output.scrollTop = output.scrollHeight;
+  };
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    const command = input.value.trim();
+    if (!command || busy) return;
+    if (!state.worktreeId) { append(command, { output: 'Prepare a branch worktree first.', status: 'ERROR' }, true); return; }
+    history.push(command);
+    cursor = history.length;
+    input.value = '';
+    busy = true;
+    input.disabled = true;
+    const pending = el('div', 'workspace-terminal-meta', `running: ${command}`);
+    output.append(pending);
+    output.scrollTop = output.scrollHeight;
+    try {
+      const result = await request(`/workspace/api/worktrees/${state.worktreeId}/terminal`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body: JSON.stringify({ command })
+      });
+      pending.remove();
+      append(command, result, result.status !== 'COMPLETED');
+      loadTree(state);
+      refreshChanges(state);
+    } catch (error) {
+      pending.remove();
+      append(command, { output: error.message, status: 'ERROR' }, true);
+    } finally {
+      busy = false;
+      input.disabled = false;
+      input.focus();
+    }
+  });
+  input.addEventListener('keydown', event => {
+    if (event.key === 'ArrowUp' && history.length) { cursor = Math.max(0, cursor - 1); input.value = history[cursor]; event.preventDefault(); }
+    if (event.key === 'ArrowDown' && history.length) {
+      cursor = Math.min(history.length, cursor + 1);
+      input.value = history[cursor] ?? '';
+      event.preventDefault();
+    }
+  });
 }
 
 function initializeGit(state) {
@@ -1030,7 +1188,7 @@ function renderSnapshot(state, data, preservePosition = false) {
   if (!preservePosition || wasBottom) timeline.scrollTop = timeline.scrollHeight;
   else timeline.scrollTop = previousTop;
 }
-function renderRun(state, entry, timeline) { const run = entry.run; const user = el('article', 'workspace-message workspace-message-user'); user.append(el('p', '', run.prompt)); const meta = el('div', 'workspace-message-meta', `Turn ${run.chatMessageIndex + 1} · ${run.status}`); user.append(meta); timeline.append(user); for (const turn of run.turns || []) { if (turn.kind === 'USER_PROMPT') continue; if (turn.kind === 'MODEL_RESPONSE') { const assistant = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.raw = turn.content || ''; applyMarkdown(body, turn.content || ''); assistant.append(body); timeline.append(assistant); } else if (turn.kind === 'ERROR') timeline.append(el('article', 'workspace-message-error', turn.content || 'Agent error')); else { const details = el('details', 'workspace-tool-turn'); details.append(el('summary', '', turn.toolName || turn.kind), el('pre', '', turn.content || '')); timeline.append(details); } } if (run.partialOutput) { const partial = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.runOutput = run.id; body.dataset.raw = run.partialOutput; applyMarkdown(body, run.partialOutput); partial.append(el('small', 'workspace-writing', 'Petri · writing…'), body); timeline.append(partial); } for (const proposal of entry.proposals || []) timeline.append(proposalCard(state, proposal)); for (const test of entry.tests || []) timeline.append(testCard(state, test)); for (const install of entry.packageInstalls || []) timeline.append(packageCard(state, install)); }
+function renderRun(state, entry, timeline) { const run = entry.run; const user = el('article', 'workspace-message workspace-message-user'); user.append(el('p', '', run.prompt)); const meta = el('div', 'workspace-message-meta', `Turn ${run.chatMessageIndex + 1} · ${run.status}`); user.append(meta); timeline.append(user); for (const turn of run.turns || []) { if (turn.kind === 'USER_PROMPT') continue; if (turn.kind === 'MODEL_RESPONSE') { const assistant = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.raw = turn.content || ''; applyMarkdown(body, turn.content || ''); assistant.append(body); timeline.append(assistant); } else if (turn.kind === 'ERROR') timeline.append(el('article', 'workspace-message-error', turn.content || 'Agent error')); else { const details = el('details', 'workspace-tool-turn'); details.append(el('summary', '', turn.toolName || turn.kind), el('pre', '', turn.content || '')); timeline.append(details); } } if (run.partialOutput) { const partial = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.runOutput = run.id; body.dataset.raw = run.partialOutput; applyMarkdown(body, run.partialOutput); partial.append(el('small', 'workspace-writing', 'Petri · writing…'), body); timeline.append(partial); } for (const proposal of entry.proposals || []) timeline.append(proposalCard(state, proposal)); for (const test of entry.tests || []) timeline.append(testCard(state, test)); for (const install of entry.packageInstalls || []) timeline.append(packageCard(state, install)); for (const command of entry.terminalCommands || []) timeline.append(terminalCard(state, command)); }
 
 const workflowStages = [
   ['ORCHESTRATOR_INTAKE', 'Intake'], ['PLANNING', 'Plan'],
@@ -1151,6 +1309,7 @@ const workflowToolPresentation = {
   create_file: ['FilePlus2', 'Preparing new file'],
   run_tests: ['Play', 'Preparing test run'],
   install_packages: ['Package', 'Requesting package install'],
+  run_command: ['SquareTerminal', 'Requesting terminal command'],
   list_skills: ['List', 'Listing skills'],
   load_skill: ['BookOpen', 'Loading skill']
 };
@@ -1185,6 +1344,7 @@ function workflowFeed(workflow) {
     } });
   }
   for (const proposal of workflow.proposals || []) events.push({ kind: 'node', time: proposal.createdAt, order: 0.5, build: state => workflowProposal(state, proposal) });
+  for (const command of workflow.terminalCommands || []) events.push({ kind: 'node', time: command.requestedAt, order: 0.5, build: state => terminalCard(state, command) });
   for (const install of workflow.packageInstalls || []) events.push({ kind: 'node', time: install.requestedAt, order: 0.5, build: state => packageCard(state, install) });
   for (const test of workflow.tests || []) events.push({ kind: 'node', time: test.requestedAt, order: 0.5, build: () => workflowTest(test) });
   events.sort((a, b) => String(a.time || '').localeCompare(String(b.time || '')) || a.order - b.order);
@@ -1413,6 +1573,30 @@ async function workflowAction(state, button, workflowId, action, body, valid = t
   finally { if (button.isConnected) button.disabled = false; }
 }
 function proposalCard(state, proposal) { const card = el('article', 'workspace-review-card'); card.append(el('strong', '', proposal.filePath), el('span', 'workspace-review-state', proposal.status)); const diff = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'View diff'); diff.type = 'button'; diff.addEventListener('click', () => openDiff(state, proposal.filePath, proposal.id)); card.append(diff); if (proposal.status === 'PROPOSED' || proposal.status === 'APPROVED') { const apply = el('button', 'btn-primary !min-h-8 !px-2 text-xs', 'Approve & apply'); apply.type = 'button'; apply.addEventListener('click', () => reviewAction(state, apply, async () => { await request(`/workspace/api/proposals/${proposal.id}/approve-and-apply`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); refreshChanges(state); })); const reject = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'Reject'); reject.type = 'button'; reject.addEventListener('click', () => reviewAction(state, reject, async () => { await request(`/workspace/api/chats/${state.chatId}/proposals/${proposal.id}/reject`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); card.append(apply, reject); } return card; }
+function terminalCard(state, command) {
+  const card = el('article', 'workspace-review-card');
+  card.append(renderIcon('SquareTerminal'), el('strong', '', `$ ${command.command}`),
+    el('span', 'workspace-review-state', command.status));
+  if (command.reason) card.append(el('small', 'workspace-package-reason', command.reason));
+  if (command.status === 'PROPOSED' || command.status === 'APPROVED') {
+    const approve = el('button', 'btn-primary !min-h-8 !px-2 text-xs', 'Approve & run'); approve.type = 'button';
+    approve.addEventListener('click', () => reviewAction(state, approve, async () => {
+      await request(`/workspace/api/chats/${state.chatId}/terminal/${command.id}/approve`, { method: 'POST', headers: csrfHeaders() });
+      await snapshot(state, true);
+    }));
+    const reject = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'Decline'); reject.type = 'button';
+    reject.addEventListener('click', () => reviewAction(state, reject, async () => {
+      await request(`/workspace/api/chats/${state.chatId}/terminal/${command.id}/reject`, { method: 'POST', headers: csrfHeaders() });
+      await snapshot(state, true);
+    }));
+    card.append(approve, reject);
+  } else if (command.output) {
+    const details = el('details', 'workspace-package-output');
+    details.append(el('summary', '', command.exitCode != null ? `Output (exit ${command.exitCode})` : 'Output'), el('pre', '', command.output));
+    card.append(details);
+  }
+  return card;
+}
 function packageCard(state, install) {
   const card = el('article', 'workspace-review-card');
   card.append(renderIcon('Package'), el('strong', '', `Install packages: ${(install.packages || []).join(', ')}`),
@@ -1439,7 +1623,7 @@ function packageCard(state, install) {
 }
 function testCard(state, test) { const card = el('article', 'workspace-review-card'); card.append(el('strong', '', test.command), el('span', 'workspace-review-state', test.status)); if (test.status === 'PROPOSED' || test.status === 'APPROVED') { const run = el('button', 'btn-primary !min-h-8 !px-2 text-xs', 'Run'); run.type = 'button'; run.addEventListener('click', () => reviewAction(state, run, async () => { await request(`/workspace/api/chats/${state.chatId}/tests/${test.id}/run`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); const reject = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'Reject'); reject.type = 'button'; reject.addEventListener('click', () => reviewAction(state, reject, async () => { await request(`/workspace/api/chats/${state.chatId}/tests/${test.id}/reject`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); card.append(run, reject); } return card; }
 async function reviewAction(state, button, operation) { button.disabled = true; try { await operation(); } catch (error) { state.chat.querySelector('[data-chat-status]').textContent = error.message; } finally { if (button.isConnected) button.disabled = false; } }
-function renderReviews(state) { const tray = state.chat.querySelector('[data-review-tray]'), items = tray.querySelector('[data-review-items]'); const pending = state.snapshot.runs.flatMap(value => [...value.proposals, ...value.tests, ...(value.packageInstalls || [])]).filter(value => value.status === 'PROPOSED' || value.status === 'APPROVED'); tray.hidden = pending.length === 0; tray.querySelector('[data-review-count]').textContent = `${pending.length} review${pending.length === 1 ? '' : 's'} waiting`; items.replaceChildren(); for (const proposal of pending.filter(value => value.filePath)) items.append(proposalCard(state, proposal)); for (const test of pending.filter(value => value.command)) items.append(testCard(state, test)); for (const install of pending.filter(value => value.packages)) items.append(packageCard(state, install)); }
+function renderReviews(state) { const tray = state.chat.querySelector('[data-review-tray]'), items = tray.querySelector('[data-review-items]'); const pending = state.snapshot.runs.flatMap(value => [...value.proposals, ...value.tests, ...(value.packageInstalls || []), ...(value.terminalCommands || [])]).filter(value => value.status === 'PROPOSED' || value.status === 'APPROVED'); tray.hidden = pending.length === 0; tray.querySelector('[data-review-count]').textContent = `${pending.length} review${pending.length === 1 ? '' : 's'} waiting`; items.replaceChildren(); for (const proposal of pending.filter(value => value.filePath)) items.append(proposalCard(state, proposal)); for (const test of pending.filter(value => value.command && !value.source)) items.append(testCard(state, test)); for (const command of pending.filter(value => value.command && value.source)) items.append(terminalCard(state, command)); for (const install of pending.filter(value => value.packages)) items.append(packageCard(state, install)); }
 
 async function openOrchestrationProfiles(state) {
   const dialog = state.root.querySelector('[data-orchestration-dialog]');

@@ -103,6 +103,9 @@ Paths are relative to `/workspace/api`.
 | `POST /workflows/{id}/final/approve` | Finish a workflow waiting at the final gate without executed tests. |
 | `POST /chats/{chatId}/packages/{installId}/approve` | Approve and run a requested package install. |
 | `POST /chats/{chatId}/packages/{installId}/reject` | Reject a requested package install. |
+| `POST /worktrees/{worktreeId}/terminal` | Run a command typed in the workspace terminal as the signed-in user. |
+| `POST /chats/{chatId}/terminal/{commandId}/approve` | Approve and run an agent terminal command. |
+| `POST /chats/{chatId}/terminal/{commandId}/reject` | Decline an agent terminal command. |
 | `POST /workflows/{id}/guidance` | Send guidance to the active task. |
 | `POST /workflows/{id}/retry` | Restart a held workflow with a fresh attempt budget. |
 | `POST /workflows/{id}/cancel` | Cancel; applied changes are preserved. |

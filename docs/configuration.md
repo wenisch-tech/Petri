@@ -65,6 +65,9 @@ Test timeout, output, CPU, memory, PIDs, image and network settings are managed 
 | `PETRI_APK_EXECUTABLE` | `apk` | apk binary used for package installs. |
 | `PETRI_INSTALL_TIMEOUT` | `10m` | Maximum duration of one package install. |
 | `PETRI_AGENT_APPROVAL_WAIT` | `12h` | How long a run waits for a decision on a proposal before continuing with a "still pending" result. |
+| `PETRI_TERMINAL_CONFINE_COMMAND` | empty | Path of the Landlock helper `petri-confine`. Required for terminal commands (and confined tests) with the `local` executor; set by the image. |
+| `PETRI_TERMINAL_TIMEOUT` | `2m` | Maximum duration of one terminal command. |
+| `PETRI_TERMINAL_MAX_OUTPUT_BYTES` | `200000` | Maximum retained output per command. |
 | `PETRI_SKILLS_ROOT` | `./skills` | Operator-controlled skill directory. |
 | `PETRI_MAX_SKILL_BYTES` | `200000` | Maximum `SKILL.md` size. |
 

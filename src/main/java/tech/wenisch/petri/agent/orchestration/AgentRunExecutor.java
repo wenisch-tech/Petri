@@ -120,9 +120,9 @@ public class AgentRunExecutor {
           }
           state = stateService.cancelIfRequested(runId, claimId, actor);
           if (state.terminal()) break;
-          // Only interactive runs (workspace chats, workflows) can be approved by a person while
-          // they run; API-created runs keep returning with pending proposals.
-          if (!gated.isEmpty() && state.chatId() != null) {
+          // Only interactive runs (workspace chats, workflows) wait for a person to decide; runs
+          // started by API keys cannot be approved by their client and keep returning pending.
+          if (!gated.isEmpty() && actor != null && !actor.startsWith("api-key:")) {
             state = awaitApprovals(state, claimId, gated, actor);
             if (state.terminal()) break;
           }

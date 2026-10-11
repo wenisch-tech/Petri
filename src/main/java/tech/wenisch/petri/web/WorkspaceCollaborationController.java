@@ -30,6 +30,8 @@ import tech.wenisch.petri.agent.orchestration.AgentWorkflowService;
 import tech.wenisch.petri.agent.orchestration.AgentWorkflowView;
 import tech.wenisch.petri.agent.run.PackageInstallService;
 import tech.wenisch.petri.agent.run.PackageInstallView;
+import tech.wenisch.petri.agent.run.TerminalCommandView;
+import tech.wenisch.petri.agent.run.TerminalService;
 import tech.wenisch.petri.agent.run.TestRunService;
 import tech.wenisch.petri.agent.run.TestRunView;
 import tech.wenisch.petri.git.ProjectWorktreeService;
@@ -56,6 +58,7 @@ public class WorkspaceCollaborationController {
   private final ChangeProposalService changes;
   private final TestRunService tests;
   private final PackageInstallService packageInstalls;
+  private final TerminalService terminal;
   private final AppUserRepository users;
   private final AgentChatAutomationService automation;
   private final ProjectAccessService access;
@@ -72,6 +75,7 @@ public class WorkspaceCollaborationController {
       ChangeProposalService changes,
       TestRunService tests,
       PackageInstallService packageInstalls,
+      TerminalService terminal,
       AppUserRepository users,
       AgentChatAutomationService automation,
       ProjectAccessService access) {
@@ -85,6 +89,7 @@ public class WorkspaceCollaborationController {
     this.queue = queue;
     this.changes = changes;
     this.packageInstalls = packageInstalls;
+    this.terminal = terminal;
     this.tests = tests;
     this.users = users;
     this.automation = automation;
@@ -228,6 +233,58 @@ public class WorkspaceCollaborationController {
     return snapshotFor(chatId, actor);
   }
 
+  @PostMapping("/chats/{chatId}/terminal/{commandId}/approve")
+  public WorkspaceChatSnapshot approveCommand(
+      @PathVariable UUID chatId, @PathVariable UUID commandId, Principal principal) {
+    AppUser actor = actor(principal);
+    ownedCommand(chatId, commandId, actor);
+    if (terminal.get(commandId).status() == tech.wenisch.petri.agent.run.TerminalCommandStatus.PROPOSED) {
+      terminal.approve(commandId, actor.getEmail());
+    }
+    terminal.execute(commandId);
+    queue.approvalsChanged(chatId);
+    return snapshotFor(chatId, actor);
+  }
+
+  @PostMapping("/chats/{chatId}/terminal/{commandId}/reject")
+  public WorkspaceChatSnapshot rejectCommand(
+      @PathVariable UUID chatId, @PathVariable UUID commandId, Principal principal) {
+    AppUser actor = actor(principal);
+    ownedCommand(chatId, commandId, actor);
+    terminal.reject(commandId, actor.getEmail());
+    queue.approvalsChanged(chatId);
+    return snapshotFor(chatId, actor);
+  }
+
+  /** Runs a command typed in the workspace terminal panel as the signed-in user. */
+  @PostMapping("/worktrees/{worktreeId}/terminal")
+  public TerminalCommandView runTerminal(
+      @PathVariable UUID worktreeId, @RequestBody TerminalRequest request, Principal principal) {
+    AppUser actor = actor(principal);
+    access.requireWorktree(worktreeId, actor.getEmail());
+    return terminal.runForUser(worktreeId, actor.getEmail(), request.command());
+  }
+
+  @GetMapping("/terminal/status")
+  public TerminalStatus terminalStatus() {
+    return new TerminalStatus(terminal.available());
+  }
+
+  private void ownedCommand(UUID chatId, UUID commandId, AppUser actor) {
+    runs.chat(chatId, actor.getId());
+    for (AgentRunView run : runs.chatRuns(chatId)) {
+      for (TerminalCommandView value : terminal.listForAgentRun(run.id())) {
+        if (value.id().equals(commandId)) return;
+      }
+    }
+    for (AgentWorkflowView workflow : workflows.chatWorkflows(chatId, actor.getId())) {
+      for (TerminalCommandView value : workflow.terminalCommands()) {
+        if (value.id().equals(commandId)) return;
+      }
+    }
+    throw new IllegalArgumentException("Terminal command belongs to another chat");
+  }
+
   private void ownedRunForPackages(UUID chatId, UUID installId, AppUser actor) {
     runs.chat(chatId, actor.getId());
     for (AgentRunView run : runs.chatRuns(chatId)) {
@@ -248,7 +305,7 @@ public class WorkspaceCollaborationController {
     List<AgentRunView> values = runs.chatRuns(chatId);
     List<WorkspaceChatRun> reviewed = values.stream().map(run -> new WorkspaceChatRun(
         run, changes.listForAgentRun(run.id()), tests.listForAgentRun(run.id()),
-        packageInstalls.listForAgentRun(run.id()))).toList();
+        packageInstalls.listForAgentRun(run.id()), terminal.listForAgentRun(run.id()))).toList();
     return new WorkspaceChatSnapshot(worktrees.get(chat.worktreeId()).projectId(), chat, reviewed,
         runs.chatSummaries(chatId), workflows.chatWorkflows(chatId, actor.getId()));
   }
@@ -298,6 +355,8 @@ public class WorkspaceCollaborationController {
         .orElseThrow(() -> new IllegalArgumentException("Unknown user"));
   }
 
+  public record TerminalRequest(String command) {}
+  public record TerminalStatus(boolean available) {}
   public record ModelPreferenceRequest(ModelProvider provider, String model) {}
   public record WorkspaceMessageRequest(
       String prompt, ModelProvider provider, Integer maxModelTurns, String model,
@@ -306,7 +365,7 @@ public class WorkspaceCollaborationController {
   public record AutomationRequest(boolean autoApproveChanges, boolean autoApproveTests) {}
   public record WorkspaceChatRun(
       AgentRunView run, List<ChangeProposalView> proposals, List<TestRunView> tests,
-      List<PackageInstallView> packageInstalls) {}
+      List<PackageInstallView> packageInstalls, List<TerminalCommandView> terminalCommands) {}
   public record WorkspaceChatSnapshot(
       UUID projectId, AgentChatView chat, List<WorkspaceChatRun> runs,
       List<tech.wenisch.petri.agent.orchestration.AgentChatSummaryView> summaries,

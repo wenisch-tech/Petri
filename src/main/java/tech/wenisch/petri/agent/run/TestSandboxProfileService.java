@@ -68,12 +68,13 @@ public class TestSandboxProfileService {
   @Transactional
   public void configureProject(
       UUID projectId, UUID profileId, Boolean networkEnabled, boolean autoApprovePackageInstalls,
-      String actorEmail) {
+      boolean autoApproveTerminalCommands, String actorEmail) {
     if (!profiles.existsById(profileId)) throw new IllegalArgumentException("Sandbox profile not found");
     ProjectSandboxSetting setting = settings.findById(projectId)
         .orElseGet(() -> new ProjectSandboxSetting(projectId, profileId, networkEnabled));
     setting.update(profileId, networkEnabled);
     setting.autoApprovePackageInstalls(autoApprovePackageInstalls);
+    setting.autoApproveTerminalCommands(autoApproveTerminalCommands);
     settings.save(setting);
     audit.record(actorEmail, "PROJECT_TEST_SANDBOX_CONFIGURED", "PROJECT", projectId,
         "Configured isolated test sandbox for project");

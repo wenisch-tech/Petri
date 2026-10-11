@@ -15,6 +15,16 @@ class InstallPackagesPolicyTest {
   }
 
   @Test
+  void onlyTheImplementerAndDirectRunsMayRunTerminalCommands() {
+    assertThat(AgentWorkflowToolPolicy.allowed(AgentWorkflowRole.IMPLEMENTER)).contains("run_command");
+    assertThat(AgentWorkflowToolPolicy.allowed(null)).contains("run_command");
+    for (AgentWorkflowRole role : new AgentWorkflowRole[] {AgentWorkflowRole.ORCHESTRATOR,
+        AgentWorkflowRole.PLANNER, AgentWorkflowRole.REVIEWER}) {
+      assertThat(AgentWorkflowToolPolicy.allowed(role)).doesNotContain("run_command");
+    }
+  }
+
+  @Test
   void onlyTheImplementerCanWriteFilesOrRunTests() {
     assertThat(AgentWorkflowToolPolicy.allowed(AgentWorkflowRole.PLANNER))
         .doesNotContain("create_patch", "create_file", "run_tests");

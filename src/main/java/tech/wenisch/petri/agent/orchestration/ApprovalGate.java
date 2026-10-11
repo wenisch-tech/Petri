@@ -10,6 +10,9 @@ import tech.wenisch.petri.agent.change.ChangeProposalView;
 import tech.wenisch.petri.agent.run.PackageInstallService;
 import tech.wenisch.petri.agent.run.PackageInstallStatus;
 import tech.wenisch.petri.agent.run.PackageInstallView;
+import tech.wenisch.petri.agent.run.TerminalCommandStatus;
+import tech.wenisch.petri.agent.run.TerminalCommandView;
+import tech.wenisch.petri.agent.run.TerminalService;
 import tech.wenisch.petri.agent.run.TestRunService;
 import tech.wenisch.petri.agent.run.TestRunStatus;
 import tech.wenisch.petri.agent.run.TestRunView;
@@ -23,7 +26,7 @@ import tools.jackson.databind.node.ObjectNode;
  */
 @Component
 class ApprovalGate {
-  enum Kind { CHANGE, TEST, PACKAGES }
+  enum Kind { CHANGE, TEST, PACKAGES, TERMINAL }
 
   record Gated(Kind kind, UUID id, String callId, String toolName) {}
 
@@ -32,11 +35,13 @@ class ApprovalGate {
   private final ChangeProposalService changes;
   private final TestRunService tests;
   private final PackageInstallService packageInstalls;
+  private final TerminalService terminal;
   private final ObjectMapper mapper;
 
   ApprovalGate(
       ChangeProposalService changes, TestRunService tests, PackageInstallService packageInstalls,
-      ObjectMapper mapper) {
+      TerminalService terminal, ObjectMapper mapper) {
+    this.terminal = terminal;
     this.changes = changes;
     this.tests = tests;
     this.packageInstalls = packageInstalls;
@@ -53,6 +58,8 @@ class ApprovalGate {
         case "run_tests" -> id(node, "id").map(id -> new Gated(Kind.TEST, id, callId, toolName));
         case "install_packages" -> id(node, "packageInstallId")
             .map(id -> new Gated(Kind.PACKAGES, id, callId, toolName));
+        case "run_command" -> id(node, "terminalCommandId")
+            .map(id -> new Gated(Kind.TERMINAL, id, callId, toolName));
         default -> Optional.empty();
       };
     } catch (RuntimeException exception) {
@@ -103,6 +110,21 @@ class ApprovalGate {
           default -> "The package installation failed; see the output.";
         }));
       }
+      case TERMINAL -> {
+        TerminalCommandView view = terminal.get(gated.id());
+        TerminalCommandStatus status = view.status();
+        if (status == TerminalCommandStatus.PROPOSED || status == TerminalCommandStatus.APPROVED
+            || status == TerminalCommandStatus.RUNNING) {
+          yield Optional.empty();
+        }
+        yield Optional.of(render(view, status.name(), switch (status) {
+          case COMPLETED -> "The command ran and exited with code 0.";
+          case REJECTED -> declined("terminal command");
+          case TIMED_OUT -> "The command exceeded the time limit and was stopped.";
+          case ERROR -> "The command could not be started; see the output.";
+          default -> "The command ran and exited with a non-zero code; inspect the output.";
+        }));
+      }
     };
   }
 
@@ -145,6 +167,6 @@ class ApprovalGate {
   }
 
   static Set<String> gatedTools() {
-    return Set.of("create_patch", "create_file", "run_tests", "install_packages");
+    return Set.of("create_patch", "create_file", "run_tests", "install_packages", "run_command");
   }
 }

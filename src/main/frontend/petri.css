@@ -82,17 +82,40 @@
   .workspace-git-output pre { @apply mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words text-xs; }
   .workspace-shell {
     --explorer-width: 17rem;
-    --chat-width: 25rem;
+    --chat-width: 450px;
+    --terminal-height: 240px;
     display: grid;
-    grid-template-columns: var(--explorer-width) 5px minmax(0, 1fr) 5px var(--chat-width);
+    grid-template-columns: var(--explorer-width) 6px minmax(0, 1fr) 6px var(--chat-width);
+    grid-template-rows: minmax(0, 1fr);
+    overflow: hidden;
     height: calc(100dvh - 10.5rem);
     min-height: 0;
   }
   .workspace-explorer, .workspace-chat { @apply min-h-0 bg-ink-900; }
   .workspace-explorer { @apply flex min-w-0 flex-col border-r border-ink-700/70; }
   .workspace-chat { @apply flex min-w-0 flex-col border-l border-ink-700/70; }
-  .workspace-editor { @apply flex min-w-0 flex-col bg-ink-950; }
-  .workspace-resizer { @apply cursor-col-resize bg-ink-900 transition hover:bg-brand-500/70; }
+  .workspace-editor { @apply flex min-h-0 min-w-0 flex-col overflow-hidden bg-ink-950; }
+  .workspace-editor > [data-editor-host] { @apply min-h-0 flex-1 overflow-hidden; }
+  .workspace-resizer { @apply cursor-col-resize bg-ink-800 transition hover:bg-brand-500/70 focus-visible:bg-brand-500/70; }
+  .workspace-resizer.is-dragging { @apply bg-brand-500/70; }
+  .workspace-terminal-resizer { @apply h-1.5 shrink-0 cursor-row-resize bg-ink-800 transition hover:bg-brand-500/70 focus-visible:bg-brand-500/70; }
+  .workspace-terminal-resizer.is-dragging { @apply bg-brand-500/70; }
+  .workspace-terminal-resizer[hidden], .workspace-terminal[hidden] { @apply hidden; }
+  .workspace-terminal { @apply flex shrink-0 flex-col border-t border-ink-700/70 bg-ink-950; height: var(--terminal-height); min-height: 6rem; max-height: 70%; }
+  .workspace-terminal-header { @apply flex h-8 shrink-0 items-center justify-between gap-2 border-b border-ink-700/70 bg-ink-900 px-3 text-[11px] font-bold uppercase tracking-wide text-ink-300; }
+  .workspace-terminal-header > span:first-child { @apply flex items-center gap-2; }
+  .workspace-terminal-header small { @apply font-normal normal-case tracking-normal text-ink-500; }
+  .workspace-terminal-output { @apply min-h-0 flex-1 overflow-y-auto px-3 py-2 font-mono text-xs leading-5 text-ink-300; }
+  .workspace-terminal-entry { @apply mb-2; }
+  .workspace-terminal-command { @apply font-semibold text-brand-400; }
+  .workspace-terminal-result { @apply whitespace-pre-wrap break-words; }
+  .workspace-terminal-meta { @apply text-[10px] text-ink-500; }
+  .workspace-terminal-meta.is-failed { @apply text-red-300; }
+  .workspace-terminal-form { @apply flex shrink-0 items-center gap-2 border-t border-ink-700/70 px-3 py-1.5 font-mono text-xs text-brand-400; }
+  .workspace-terminal-form input { @apply min-w-0 flex-1 bg-transparent text-ink-100 outline-none placeholder:text-ink-500; }
+  .workspace-statusbar-button { @apply ml-auto flex items-center gap-1.5 rounded px-2 text-ink-500 hover:bg-ink-800 hover:text-ink-100; }
+  .workspace-statusbar-button svg { @apply size-3.5; }
+  .workspace-statusbar-button.is-active { @apply text-brand-400; }
   .workspace-tabs { @apply flex h-10 min-w-0 items-stretch overflow-x-auto border-b border-ink-700/70 bg-ink-900 text-xs; }
   .workspace-tab { @apply flex max-w-48 shrink-0 items-center gap-2 border-r border-ink-700/70 px-3 text-ink-500 hover:bg-ink-800 hover:text-ink-100; }
   .workspace-tab.is-active { @apply border-t-2 border-t-brand-400 bg-ink-950 text-ink-100; }

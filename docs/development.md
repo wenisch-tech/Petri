@@ -72,8 +72,14 @@ and scan the image but never push it. The chart source is in `charts/petri`.
 ## Dev container
 
 `.devcontainer/` provides an Alpine JDK 25 environment that mirrors the release image (same
-`scripts/alpine-runtime.sh`, unprivileged user, `PETRI_TESTS_EXECUTOR=local`). Open the repository in
+`scripts/alpine-runtime.sh`, unprivileged user, Landlock helper, `PETRI_TESTS_EXECUTOR=local`). Open the repository in
 VS Code or any Dev Containers client; `postCreateCommand` builds the application. Run it with
 `./mvnw spring-boot:run` and open the forwarded port 8080. Node/npm come from Alpine (musl), so
 `MAVEN_ARGS` skips the frontend plugin's glibc Node download; run `npm ci && npm run build` once
 inside the container (done by `postCreateCommand`) before Maven builds.
+
+## Running the image with an arbitrary UID
+
+The image runs as UID 65532 by default and also works with any non-root UID (group 0, `g=u`
+permissions): `docker run --user 12345 -v petri-data:/app/data ghcr.io/wenisch-tech/petri`. A fresh
+volume must be writable by that UID/group.

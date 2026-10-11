@@ -44,6 +44,10 @@ class EnvironmentGuidance {
         the user approves it (unless the project auto-approves) and then applies to later
         run_tests. Never assume a package is available until a result shows it, and do not repeat
         a pending request. Extra packages already installed: %s.
+        The run_command tool (implementer and direct runs) executes a shell command in the worktree
+        root as an unprivileged user confined to that worktree; it needs user approval unless the
+        project auto-approves, and its result carries the exit code and output. Prefer file tools
+        for reading and editing files.
         """.formatted(installed.isEmpty() ? "none" : String.join(", ", installed));
   }
 }
