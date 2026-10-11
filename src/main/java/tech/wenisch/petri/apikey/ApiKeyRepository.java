@@ -11,4 +11,8 @@ public interface ApiKeyRepository extends JpaRepository<ApiKey, UUID> {
   Optional<ApiKey> findByKeyIdentifier(String keyIdentifier);
 
   List<ApiKey> findAllByOrderByCreatedAtDesc();
+
+  List<ApiKey> findByCreatedByOrderByCreatedAtDesc(UUID createdBy);
+
+  Optional<ApiKey> findByIdAndCreatedBy(UUID id, UUID createdBy);
 }

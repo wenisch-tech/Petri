@@ -89,26 +89,26 @@ class ProjectGitCredentialFlowTest {
   }
 
   @Test
-  void regularUserCannotReadOrChangeGitCredentialSettings() throws Exception {
+  void foreignProjectIsHiddenFromRegularUsers() throws Exception {
     Project project = project();
 
     mockMvc.perform(get("/projects/{id}/settings", project.getId())
             .with(user("member@petri.local").roles("USER")))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isNotFound());
     mockMvc.perform(post("/projects/{id}/credential", project.getId())
             .with(user("member@petri.local").roles("USER"))
             .with(csrf())
             .param("authenticationType", "TOKEN")
             .param("secret", "must-not-be-stored"))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isNotFound());
     mockMvc.perform(post("/projects/{id}/credential/delete", project.getId())
             .with(user("member@petri.local").roles("USER"))
             .with(csrf()))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isNotFound());
     mockMvc.perform(post("/projects/{id}/mirror/sync", project.getId())
             .with(user("member@petri.local").roles("USER"))
             .with(csrf()))
-        .andExpect(status().isForbidden());
+        .andExpect(status().isNotFound());
 
     assertThat(rowCount(project.getId())).isZero();
   }

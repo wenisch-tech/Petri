@@ -72,7 +72,25 @@ class ProjectMirrorServiceTest {
 
   @DynamicPropertySource
   static void workspaceProperties(DynamicPropertyRegistry registry) {
+    Path fakePodman = temporaryDirectory.resolve("fake-podman");
+    try {
+      Files.writeString(fakePodman, """
+          #!/bin/sh
+          if [ "$1" = "image" ]; then
+            printf 'sha256:petri-test-image\\n'
+            exit 0
+          fi
+          if [ "$1" = "kill" ] || [ "$1" = "rm" ]; then
+            exit 0
+          fi
+          printf 'fixture tests passed\\n'
+          """);
+      fakePodman.toFile().setExecutable(true, true);
+    } catch (java.io.IOException exception) {
+      throw new IllegalStateException(exception);
+    }
     registry.add("petri.workspace.root", () -> temporaryDirectory.resolve("workspace").toString());
+    registry.add("petri.tests.podman-executable", fakePodman::toString);
     registry.add(
         "petri.agent.open-ai-base-url",
         () -> "http://localhost:" + MODEL_SERVER.getAddress().getPort());

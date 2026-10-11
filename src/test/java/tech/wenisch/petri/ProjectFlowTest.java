@@ -20,6 +20,8 @@ import tech.wenisch.petri.project.CreateProjectCommand;
 import tech.wenisch.petri.project.Project;
 import tech.wenisch.petri.project.ProjectRepository;
 import tech.wenisch.petri.project.ProjectService;
+import tech.wenisch.petri.security.AppUser;
+import tech.wenisch.petri.security.AppUserRepository;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -31,6 +33,7 @@ class ProjectFlowTest {
   @Autowired ProjectRepository projects;
   @Autowired ProjectService projectService;
   @Autowired AuditEventRepository auditEvents;
+  @Autowired AppUserRepository users;
 
   @Test
   void administratorCanCreateAProjectAndAuditEvent() throws Exception {
@@ -65,15 +68,23 @@ class ProjectFlowTest {
   }
 
   @Test
-  void regularUserCannotCreateProjectsOrReadAuditLog() throws Exception {
-    mockMvc.perform(post("/projects")
-            .with(user("member@petri.local").roles("USER"))
-            .with(csrf())
-            .param("name", "Forbidden")
-            .param("repositoryUri", "https://git.example.test/forbidden.git"))
-        .andExpect(status().isForbidden());
+  void regularUserCanCreateOwnedProjectsButCannotReadAuditLog() throws Exception {
+    String memberEmail = "member@petri.local";
+    AppUser member = users.save(new AppUser(
+        java.util.UUID.randomUUID(), memberEmail, "unused", "USER"));
 
-    mockMvc.perform(get("/audit").with(user("member@petri.local").roles("USER")))
+    mockMvc.perform(post("/projects")
+            .with(user(memberEmail).roles("USER"))
+            .with(csrf())
+            .param("name", "Member repository")
+            .param("repositoryUri", "https://git.example.test/member.git"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/projects"));
+
+    assertThat(projects.findBySlug("member-repository").orElseThrow().getCreatedBy())
+        .isEqualTo(member.getId());
+
+    mockMvc.perform(get("/audit").with(user(memberEmail).roles("USER")))
         .andExpect(status().isForbidden());
   }
 

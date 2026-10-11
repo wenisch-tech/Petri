@@ -10,23 +10,30 @@ import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
 import tech.wenisch.petri.project.ProjectRepository;
+import tech.wenisch.petri.security.AppUserRepository;
 
 @Controller
 public class HomeController {
   private final ProjectRepository projects;
   private final ObjectProvider<ClientRegistrationRepository> clientRegistrations;
+  private final AppUserRepository users;
 
   public HomeController(
-      ProjectRepository projects, ObjectProvider<ClientRegistrationRepository> clientRegistrations) {
+      ProjectRepository projects,
+      ObjectProvider<ClientRegistrationRepository> clientRegistrations,
+      AppUserRepository users) {
     this.projects = projects;
     this.clientRegistrations = clientRegistrations;
+    this.users = users;
   }
 
   @GetMapping("/")
   String index(Principal principal, Model model) {
     model.addAttribute("username", principal.getName());
-    model.addAttribute("projectCount", projects.count());
-    model.addAttribute("recentProjects", projects.findTop5ByOrderByCreatedAtDesc());
+    var owner = users.findByEmailIgnoreCase(principal.getName())
+        .orElseThrow(() -> new IllegalArgumentException("Unknown user"));
+    model.addAttribute("projectCount", projects.countByCreatedBy(owner.getId()));
+    model.addAttribute("recentProjects", projects.findTop5ByCreatedByOrderByCreatedAtDesc(owner.getId()));
     return "index";
   }
 

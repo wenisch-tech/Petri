@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Git instances · Petri</title>
+  <link rel="stylesheet" href="/css/petri.css">
+  <script defer src="/js/petri.js"></script>
+</head>
+<body>
+<header class="topbar"><div class="page flex items-center justify-between py-4">
+  <a href="/" class="font-semibold">Petri</a>
+  <div class="flex gap-2"><a class="btn-secondary" href="/git-accounts"><i data-lucide="PlugZap"></i> Git accounts</a><a class="btn-secondary" href="/projects">Projects</a></div>
+</div></header>
+<main class="page max-w-6xl"><section class="panel p-6 sm:p-8">
+  <p class="text-xs font-bold uppercase tracking-[.2em] text-brand-400" th:text="${isInstanceAdmin ? 'Instance administration' : 'Personal configuration'}">Personal configuration</p>
+  <h1 class="mt-2 text-3xl font-semibold" th:text="${isInstanceAdmin ? 'Global Git instances' : 'Your self-hosted Git instances'}">Your self-hosted Git instances</h1>
+  <p class="mt-2 text-ink-500" th:if="${!isInstanceAdmin}">Add GitHub Enterprise, GitLab Self-Managed or Forgejo. These endpoints and OAuth credentials are private to your Petri account.</p>
+  <p class="mt-2 text-ink-500" th:if="${isInstanceAdmin}">Manage the global presets available to every user. Self-hosted instances created by users remain private.</p>
+  <p class="mt-3 text-sm text-amber-300">Use HTTPS whenever credentials cross an untrusted network. HTTP is intended only for trusted local networks.</p>
+  <p th:if="${notice}" class="mt-5 text-good-500" th:text="${notice}">Saved.</p>
+  <p th:if="${error}" class="mt-5 text-red-300" th:text="${error}">Error.</p>
+
+  <div class="mt-7 grid gap-6 lg:grid-cols-2">
+    <form th:each="instance : ${instances}" class="metric space-y-3" method="post" action="/git-provider-instances">
+      <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+      <input type="hidden" name="id" th:value="${instance.id}">
+      <input type="hidden" name="providerType" th:value="${instance.providerType}">
+      <div class="flex justify-between gap-3"><strong th:text="${instance.displayName}">Provider</strong><span class="badge" th:text="${instance.builtIn ? 'Built-in preset' : instance.providerType}">FORGEJO</span></div>
+      <label class="block"><span class="mb-1 block text-xs">Display name</span><input class="field" name="displayName" th:value="${instance.displayName}" required></label>
+      <label class="block"><span class="mb-1 block text-xs">Web base URL</span><input class="field" name="webBaseUrl" th:value="${instance.webBaseUrl}" required></label>
+      <label class="block"><span class="mb-1 block text-xs">API base URL</span><input class="field" name="apiBaseUrl" th:value="${instance.apiBaseUrl}" required></label>
+      <label class="block"><span class="mb-1 block text-xs">OAuth authorization URL <span class="text-ink-500">(optional)</span></span><input class="field" name="oauthAuthorizationUrl" th:value="${instance.oauthAuthorizationUrl}"></label>
+      <label class="block"><span class="mb-1 block text-xs">OAuth token URL <span class="text-ink-500">(optional)</span></span><input class="field" name="oauthTokenUrl" th:value="${instance.oauthTokenUrl}"></label>
+      <label class="block"><span class="mb-1 block text-xs">OAuth scopes</span><input class="field" name="oauthScopes" th:value="${instance.oauthScopes}"></label>
+      <label class="block"><span class="mb-1 block text-xs">OAuth client ID</span><input class="field" name="oauthClientId" th:value="${instance.oauthClientId}"></label>
+      <label class="block"><span class="mb-1 block text-xs">Replace OAuth client secret</span><input class="field" type="password" name="oauthClientSecret" autocomplete="new-password" placeholder="Leave empty to retain"></label>
+      <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="enabled" value="true" th:checked="${instance.enabled}"> Enabled</label>
+      <button class="btn-primary" type="submit"><i data-lucide="Save"></i> Save</button>
+    </form>
+
+    <form class="metric space-y-3" method="post" action="/git-provider-instances">
+      <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+      <div><h2 class="font-semibold">Add self-hosted instance</h2><p class="mt-1 text-xs text-ink-500">PAT works without OAuth configuration.</p></div>
+      <label class="block"><span class="mb-1 block text-xs">Provider</span><select class="field" name="providerType"><option th:each="type : ${providerTypes}" th:value="${type}" th:text="${type}">FORGEJO</option></select></label>
+      <label class="block"><span class="mb-1 block text-xs">Display name</span><input class="field" name="displayName" placeholder="Company Forgejo" required></label>
+      <label class="block"><span class="mb-1 block text-xs">Web base URL</span><input class="field" name="webBaseUrl" placeholder="https://git.example.com" required></label>
+      <label class="block"><span class="mb-1 block text-xs">API base URL</span><input class="field" name="apiBaseUrl" placeholder="Forgejo: https://git.example.com/api/v1" required></label>
+      <details class="rounded-lg border border-ink-700 p-3"><summary class="cursor-pointer text-sm font-medium">Optional OAuth application</summary><div class="mt-3 space-y-3">
+        <input class="field" name="oauthAuthorizationUrl" placeholder="OAuth authorization URL">
+        <input class="field" name="oauthTokenUrl" placeholder="OAuth token URL">
+        <input class="field" name="oauthScopes" placeholder="Scopes">
+        <input class="field" name="oauthClientId" placeholder="Client ID">
+        <input class="field" type="password" name="oauthClientSecret" autocomplete="new-password" placeholder="Client secret">
+      </div></details>
+      <div class="rounded-lg bg-ink-900/50 p-3 text-xs text-ink-500"><strong class="text-ink-300">Common API URLs:</strong> GitHub Enterprise <code>/api/v3</code>, GitLab <code>/api/v4</code>, Forgejo <code>/api/v1</code>.</div>
+      <label class="flex items-center gap-2 text-sm"><input type="checkbox" name="enabled" value="true" checked> Enabled</label>
+      <button class="btn-primary" type="submit"><i data-lucide="Plus"></i> Add instance</button>
+    </form>
+  </div>
+</section></main>
+</body></html>

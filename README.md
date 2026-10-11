@@ -29,13 +29,13 @@ export PETRI_SECRETS_MASTER_KEY_FILE=/var/lib/petri/secrets/master.key
 
 Back up whichever key source is used. Petri refuses malformed or symlinked key files instead of replacing them, because losing or changing the key makes existing encrypted records unrecoverable.
 
-An instance administrator can configure or remove an HTTPS token or username/password credential from a project's settings page. Petri only displays whether a credential exists; the stored secret is never rendered back into the UI.
+Users can configure project-specific Simple Git credentials or connect personal GitHub, GitLab and Forgejo accounts and import several repositories from a live catalog. Petri never renders stored secrets back into the UI. See [Git provider accounts](docs/git-provider-accounts.md).
 
 ## Git workspace
 
 Petri stores bare project mirrors and disposable run worktrees below `PETRI_WORKSPACE_ROOT` (default `./data/workspaces`). Git is executed directly without a shell, with interactive prompts disabled, a configurable timeout, bounded and redacted output, and global/system Git configuration disabled. HTTPS credentials are supplied through a temporary owner-only askpass helper and never through command arguments.
 
-After an administrator has synchronized a project mirror, API clients can create, list and remove disposable worktrees through `/api/v1/projects/{projectId}/worktrees`. Removal verifies both the project association and the UUID-derived safe path before invoking Git.
+After a project owner has synchronized a project mirror, that owner's API clients can create, list and remove disposable worktrees through `/api/v1/projects/{projectId}/worktrees`. Removal verifies ownership, the project association and the UUID-derived safe path before invoking Git.
 
 ```bash
 export PETRI_WORKSPACE_ROOT=/var/lib/petri/workspaces
@@ -45,14 +45,14 @@ export PETRI_MAX_COMMAND_OUTPUT_BYTES=1000000
 
 ## Agent tools
 
-The first native tools are `list_files`, `read_file`, `search_files`, `create_patch`, `show_diff` and `run_tests`. Every call is scoped to an active persisted worktree; relative paths, real paths and symlinks are checked before access. File reads return a SHA-256 hash, and a patch proposal must include that exact hash. Proposals are persisted for review and cannot modify a file until an instance administrator approves them. Application uses an atomic replacement and records `CONFLICT` instead of overwriting a file changed after the original read.
+The first native tools are `list_files`, `read_file`, `search_files`, `create_patch`, `show_diff` and `run_tests`. Every call is scoped to an active persisted worktree; relative paths, real paths and symlinks are checked before access. File reads return a SHA-256 hash, and a patch proposal must include that exact hash. Proposals are persisted for review and cannot modify a file until the project owner approves them. Application uses an atomic replacement and records `CONFLICT` instead of overwriting a file changed after the original read.
 
 `run_tests` also creates a proposal instead of launching a process. Once separately approved, Petri permits only one of these fixed commands, selected from safe build files and non-symlinked executable wrappers:
 
 - `./mvnw --batch-mode --no-transfer-progress test`
 - `./gradlew --no-daemon test`
 
-The test process receives a reduced environment, has its process tree terminated on timeout, and stores bounded combined output. Configure its limits with `PETRI_TEST_COMMAND_TIMEOUT` and `PETRI_MAX_TEST_OUTPUT_BYTES`. Approval is a safety boundary, not an operating-system sandbox: deploy Petri under an isolated, least-privileged account or container before running untrusted repositories.
+Approved tests run exclusively in rootless Podman with an immutable root filesystem, dropped capabilities, resource limits and project-isolated caches. There is no host fallback. See [test sandboxes](docs/test-sandboxes.md).
 
 Tool file/output sizes and search result counts are bounded through `PETRI_MAX_TOOL_FILE_BYTES`, `PETRI_MAX_TOOL_OUTPUT_BYTES` and `PETRI_MAX_SEARCH_RESULTS`.
 
@@ -67,7 +67,7 @@ export PETRI_SKILLS_ROOT=/etc/petri/skills
 export PETRI_MAX_SKILL_BYTES=200000
 ```
 
-API clients can discover and invoke tools below `/api/v1/agent`. Tool lifecycle events are stored, mirrored into the audit log, available as recent JSON events, and streamed live as Server-Sent Events from `/api/v1/agent/worktrees/{worktreeId}/events/stream`. API clients may request privileged work but cannot approve it. Approval, rejection and execution endpoints live below `/operations` and require an authenticated instance administrator plus CSRF protection.
+API clients can discover and invoke tools below `/api/v1/agent`. Tool lifecycle events are stored, mirrored into the audit log, available as recent JSON events, and streamed live as Server-Sent Events from `/api/v1/agent/worktrees/{worktreeId}/events/stream`. API clients may request privileged work but cannot approve it. Approval, rejection and execution endpoints live below `/operations` and require the authenticated project owner plus CSRF protection.
 
 ## Model providers and agent runs
 
@@ -88,9 +88,9 @@ API clients can create, inspect, list, execute and cancel persistent runs below 
 
 Run-scoped tool lifecycle events are available as replayable JSON and Server-Sent Events at `/api/v1/agent/worktrees/{worktreeId}/runs/{runId}/events` and `/events/stream`. Worktree-wide event endpoints remain available for broader monitoring.
 
-Each model response, tool call and tool result is persisted before the next model request. Continuations use the provider response ID and original tool-call ID. An execution lease prevents concurrent workers from driving the same run and allows an interrupted `RUNNING` run to be resumed after the lease expires. Cancellation is checked between external calls and tools. File changes and tests remain proposals: model execution never bypasses their administrator approval gates.
+Each model response, tool call and tool result is persisted before the next model request. Continuations use the provider response ID and original tool-call ID. An execution lease prevents concurrent workers from driving the same run and allows an interrupted `RUNNING` run to be resumed after the lease expires. Cancellation is checked between external calls and tools. File changes and tests remain proposals: model execution never bypasses owner approval gates.
 
-Instance administrators can work from the chat-style console at `/chat`. It selects a configured provider, project and active disposable worktree, starts the model loop in the background, refreshes model/tool progress, and embeds patch and test approval actions in the conversation. Per-task advanced controls can override model ID, output budget, reasoning effort and verbosity. The `/runs` pages remain the detailed operational view of prompts, ordered persisted turns, final output or failure, and proposals linked to an exact run. Approved changes and tests still require a separate explicit apply or execute action.
+Project owners work from the workspace and embedded chat at `/workspace/projects/{projectId}`; legacy `/chat` URLs redirect there. The workspace selects a configured provider, project worktree and durable chat, starts the model loop in the background, streams progress, and embeds patch and test approval actions in the conversation. Per-message controls can override model ID, output budget, reasoning effort and verbosity. The `/runs` pages remain the detailed operational view. Approved changes and tests still require a separate apply or execute action unless the chat owner explicitly enables the corresponding automation.
 
 ```bash
 export PETRI_OPENAI_BASE_URL=https://api.openai.com/v1
@@ -120,7 +120,7 @@ spring:
 
 ## Status
 
-Phase 1 is in progress. The current slices provide the reproducible backend/frontend build, Flyway-managed persistence, local and optional OIDC authentication, project registry, audit events, administrator-managed API keys, encrypted Git/model credentials, rich model generation settings, controlled repository mirrors, disposable worktrees, approval-gated file/test tools, lazy-loaded skills, REST invocation, persisted SSE lifecycle events, persistent provider-neutral model/tool orchestration and a browser-based chat console.
+The current implementation provides a reproducible backend/frontend build, Flyway-managed persistence, local and optional OIDC authentication, owner-scoped projects and API keys, connected Git-provider accounts, encrypted Git/model credentials, controlled mirrors and worktrees, approval-gated file tools, Podman-isolated tests, lazy-loaded skills, persistent SSE lifecycle events, provider-neutral model/tool orchestration and the browser workspace with embedded durable chat.
 
 ## License
 

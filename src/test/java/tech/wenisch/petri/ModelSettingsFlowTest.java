@@ -22,6 +22,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.transaction.annotation.Transactional;
 import tech.wenisch.petri.secret.SecretCipher;
+import tech.wenisch.petri.security.AppUser;
+import tech.wenisch.petri.security.AppUserRepository;
 
 @SpringBootTest(properties =
     "petri.secrets.master-key=AAECAwQFBgcICQoLDA0ODxAREhMUFRYXGBkaGxwdHh8=")
@@ -33,6 +35,7 @@ class ModelSettingsFlowTest {
   @Autowired MockMvc mockMvc;
   @Autowired JdbcTemplate jdbc;
   @Autowired SecretCipher cipher;
+  @Autowired AppUserRepository users;
   @PersistenceContext EntityManager entityManager;
 
   @Test
@@ -83,13 +86,17 @@ class ModelSettingsFlowTest {
   }
 
   @Test
-  void modelSettingsAndChatAreAdministratorOnly() throws Exception {
-    mockMvc.perform(get("/model-settings").with(user("member@petri.local").roles("USER")))
+  void modelSettingsRemainAdministratorOnlyWhileUsersCanOpenChat() throws Exception {
+    String memberEmail = "member@petri.local";
+    users.save(new AppUser(UUID.randomUUID(), memberEmail, "unused", "USER"));
+
+    mockMvc.perform(get("/model-settings").with(user(memberEmail).roles("USER")))
         .andExpect(status().isForbidden());
-    mockMvc.perform(get("/chat").with(user("member@petri.local").roles("USER")))
-        .andExpect(status().isForbidden());
+    mockMvc.perform(get("/chat").with(user(memberEmail).roles("USER")))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/projects"));
     mockMvc.perform(post("/model-settings")
-            .with(user("member@petri.local").roles("USER"))
+            .with(user(memberEmail).roles("USER"))
             .with(csrf())
             .param("apiKey", "must-not-be-stored")
             .param("model", "model")

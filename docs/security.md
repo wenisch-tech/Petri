@@ -2,17 +2,18 @@
 
 ## Trust boundaries
 
-Petri separates three roles:
+Petri separates four roles:
 
 - The **model** may request only registered tools.
-- An **API client** may create worktrees/runs and invoke tools but cannot approve privileged proposals.
-- An **instance administrator** controls credentials and approves file changes or test execution.
+- An **API client** acts only on projects owned by its key creator and cannot approve privileged proposals.
+- An authenticated **project owner** controls personal self-hosted Git instances, personal Git accounts, projects, workspaces, chats, project credentials, Git actions, file approvals and test approvals.
+- An **instance administrator** controls global Git-provider instances and OAuth applications, model endpoints, audit data and sandbox profiles. Administrators do not implicitly gain access to projects owned by another user.
 
 Model text and skill instructions are untrusted input. They cannot bypass Java-side path validation, tool registration or approval state transitions.
 
 ## Secrets
 
-- Git and model secrets are encrypted with AES-256-GCM before persistence.
+- Git, connected-account token and model secrets are encrypted with AES-256-GCM before persistence.
 - The master key comes from an explicit environment value or an owner-only filesystem file.
 - Secrets are not returned by status APIs or rendered into HTML.
 - Git secrets are supplied with a temporary askpass process rather than command arguments.
@@ -31,11 +32,15 @@ These checks constrain Petri's own operations; they are not a replacement for OS
 
 ## External processes
 
-Git and approved test commands run without a shell, with bounded output and timeouts. Git global/system configuration is disabled and interactive prompting is off. Test execution still runs repository-controlled build logic, so use a dedicated low-privilege account, container or stronger sandbox for untrusted projects.
+Git runs without a shell, with bounded output and timeouts. Git global/system configuration is disabled and interactive prompting is off.
+
+Approved tests run exclusively in rootless Podman; there is no host fallback. Containers use a read-only root filesystem, `--userns=keep-id`, dropped capabilities, `no-new-privileges`, CPU/memory/PID/time/output limits and an isolated temporary directory. Only the managed worktree and project-specific build cache are writable mounts. Petri does not mount the host home, secrets or container socket.
 
 ## Network controls
 
-Model base URLs may intentionally target local containers or LAN services. Petri validates URL structure but does not provide network egress isolation. Restrict the Petri process or container network when administrators must not be able to configure internal destinations.
+Model and Git-provider base URLs may intentionally target local containers or LAN services. Petri validates URL structure and provider clients reject redirects, but the Petri process itself has no general network egress isolation. Restrict its network when administrators must not be able to configure internal destinations.
+
+Test-container outbound access is enabled in the seeded profile so wrappers can resolve dependencies. Administrators can disable it per profile or project.
 
 Use HTTPS whenever bearer credentials cross an untrusted network. Plain HTTP is intended only for trusted local services such as Ollama.
 

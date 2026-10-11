@@ -7,7 +7,7 @@
 - Flyway-managed H2 and PostgreSQL schema.
 - Health endpoint and Prometheus registry support.
 - Local administrator login and optional OpenID Connect login.
-- Administrator-created API keys for programmatic clients.
+- Owner-scoped self-service API keys for programmatic clients.
 - Audited security-sensitive and agent lifecycle operations.
 
 ## Credentials and secrets
@@ -16,6 +16,8 @@
 - Automatic owner-only filesystem master key when no environment key is configured.
 - Secret values are never rendered back into forms or API status responses.
 - Project-scoped HTTPS token or username/password credentials.
+- Personal GitHub, GitLab and Forgejo PAT/OAuth connections with encrypted tokens.
+- Live provider repository catalogs, bulk import and recoverable mirror jobs.
 - Provider-scoped model credentials and endpoint settings.
 
 ## Repository isolation
@@ -75,10 +77,10 @@
 - `list_skills`
 - `load_skill`
 
-File edits are optimistic: a proposal includes the hash observed during the read and becomes `CONFLICT` if the file changed before application. `create_file` proposals for new files become `CONFLICT` if the file exists before application. Test execution is limited to recognized Maven or Gradle wrappers and requires separate approval.
+File edits are optimistic: a proposal includes the hash observed during the read and becomes `CONFLICT` if the file changed before application. `create_file` proposals for new files become `CONFLICT` if the file exists before application. Test execution is limited to recognized Maven or Gradle wrappers, requires separate approval and runs only in an administrator-managed rootless Podman profile.
 
 ## Current boundaries
 
 - Model configurations are one profile per provider; reusable named profiles are not implemented.
-- Test execution is an approval boundary, not an operating-system sandbox.
+- GitHub Apps, deploy keys, account-level SSH keys and provider webhooks are not implemented.
 - Git merge, cherry-pick, tags, interactive rebase, commit signing, submodules, LFS, staging individual hunks and reverting files are not implemented.

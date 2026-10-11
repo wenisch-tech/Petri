@@ -20,6 +20,8 @@ import tech.wenisch.petri.security.AppUser;
 import tech.wenisch.petri.security.AppUserRepository;
 import tech.wenisch.petri.workspace.WorkspacePaths;
 import tech.wenisch.petri.workspace.WorktreeLocator;
+import tech.wenisch.petri.git.provider.ProjectProviderSourceRepository;
+import tech.wenisch.petri.git.provider.ProjectCredentialMode;
 
 @Service
 public class WorkspaceGitService {
@@ -36,6 +38,7 @@ public class WorkspaceGitService {
   private final TestRunService testRuns;
   private final AppUserRepository users;
   private final AuditLogService audit;
+  private final ProjectProviderSourceRepository providerSources;
 
   public WorkspaceGitService(
       ProjectRepository projects,
@@ -50,7 +53,8 @@ public class WorkspaceGitService {
       AgentRunService agentRuns,
       TestRunService testRuns,
       AppUserRepository users,
-      AuditLogService audit) {
+      AuditLogService audit,
+      ProjectProviderSourceRepository providerSources) {
     this.projects = projects;
     this.worktreeRecords = worktreeRecords;
     this.worktrees = worktrees;
@@ -64,6 +68,7 @@ public class WorkspaceGitService {
     this.testRuns = testRuns;
     this.users = users;
     this.audit = audit;
+    this.providerSources = providerSources;
   }
 
   @Transactional(readOnly = true)
@@ -181,6 +186,7 @@ public class WorkspaceGitService {
             "delete local branch");
         audit(actorEmail, "GIT_BRANCH_DELETED", projectId, "Deleted local branch " + name);
       } else {
+        requireRemoteWrite(projectId);
         requireSuccess(remote(projectId, mirror, List.of(
             "--git-dir=" + mirror, "push", "origin", "--delete", name)),
             "delete remote branch");
@@ -353,6 +359,7 @@ public class WorkspaceGitService {
   public WorkspaceGitStatusView push(UUID worktreeId, boolean forceWithLease, String actorEmail) {
     ProjectWorktree record = record(worktreeId);
     return operations.worktree(worktreeId, () -> {
+      requireRemoteWrite(record.projectId());
       requireBranch(record);
       requireNoActiveExecution(worktreeId);
       requireClean(worktreeId);
@@ -376,6 +383,14 @@ public class WorkspaceGitService {
     if (agentRuns.hasActiveForWorktree(worktreeId) || testRuns.hasActiveForWorktree(worktreeId)) {
       throw new IllegalStateException("Git actions are blocked while agent or test work is pending");
     }
+  }
+
+  private void requireRemoteWrite(UUID projectId) {
+    providerSources.findByProjectId(projectId).ifPresent(source -> {
+      if (source.getCredentialMode() == ProjectCredentialMode.CONNECTION && !source.isCanWrite()) {
+        throw new IllegalStateException("Connected repository is read-only; push and remote branch changes are disabled");
+      }
+    });
   }
 
   private void requireClean(UUID worktreeId) {

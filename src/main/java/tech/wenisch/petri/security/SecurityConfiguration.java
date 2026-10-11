@@ -67,18 +67,11 @@ public class SecurityConfiguration {
             .requestMatchers("/css/**", "/js/**", "/actuator/health", "/actuator/health/**")
             .permitAll()
             .requestMatchers(apiRequests).hasRole("API_CLIENT")
-            .requestMatchers(HttpMethod.POST, "/projects").hasRole("INSTANCE_ADMIN")
-            .requestMatchers(
-                "/projects/*/settings", "/projects/*/credential", "/projects/*/credential/**",
-                "/projects/*/mirror/**")
-            .hasRole("INSTANCE_ADMIN")
             .requestMatchers("/audit", "/audit/**").hasRole("INSTANCE_ADMIN")
-            .requestMatchers("/workspace", "/workspace/**").hasRole("INSTANCE_ADMIN")
-            .requestMatchers("/chat", "/chat/**").hasRole("INSTANCE_ADMIN")
             .requestMatchers("/model-settings", "/model-settings/**").hasRole("INSTANCE_ADMIN")
-            .requestMatchers("/runs", "/runs/**").hasRole("INSTANCE_ADMIN")
-            .requestMatchers("/api-keys", "/api-keys/**").hasRole("INSTANCE_ADMIN")
-            .requestMatchers("/operations", "/operations/**").hasRole("INSTANCE_ADMIN")
+            .requestMatchers("/sandbox-profiles", "/sandbox-profiles/**").hasRole("INSTANCE_ADMIN")
+            .requestMatchers("/operations/model-credentials", "/operations/model-credentials/**")
+            .hasRole("INSTANCE_ADMIN")
             .anyRequest().authenticated())
         .exceptionHandling(exceptions -> exceptions.defaultAuthenticationEntryPointFor(
             new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED),

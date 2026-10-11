@@ -81,7 +81,7 @@ public class ApiKeyService {
   public boolean revoke(UUID keyId, String actorEmail) {
     AppUser actor = users.findByEmailIgnoreCase(actorEmail)
         .orElseThrow(() -> new IllegalArgumentException("Unknown API key revoker"));
-    ApiKey key = keys.findById(keyId)
+    ApiKey key = keys.findByIdAndCreatedBy(keyId, actor.getId())
         .orElseThrow(() -> new IllegalArgumentException("API key does not exist"));
     boolean revoked = key.revoke(Instant.now(), actor.getId());
     if (revoked) {
@@ -95,8 +95,10 @@ public class ApiKeyService {
     return revoked;
   }
 
-  public java.util.List<ApiKey> findAll() {
-    return keys.findAllByOrderByCreatedAtDesc();
+  public java.util.List<ApiKey> findAll(String actorEmail) {
+    AppUser actor = users.findByEmailIgnoreCase(actorEmail)
+        .orElseThrow(() -> new IllegalArgumentException("Unknown API key owner"));
+    return keys.findByCreatedByOrderByCreatedAtDesc(actor.getId());
   }
 
   private String nextIdentifier() {

@@ -61,6 +61,21 @@ class TestRun {
   @Column(name = "completed_at")
   private Instant completedAt;
 
+  @Column(name = "sandbox_profile_id")
+  private UUID sandboxProfileId;
+
+  @Column(name = "sandbox_profile_name", length = 120)
+  private String sandboxProfileName;
+
+  @Column(name = "sandbox_image", length = 1000)
+  private String sandboxImage;
+
+  @Column(name = "sandbox_image_digest", length = 255)
+  private String sandboxImageDigest;
+
+  @Column(name = "sandbox_network_enabled")
+  private Boolean sandboxNetworkEnabled;
+
   protected TestRun() {}
 
   TestRun(
@@ -104,10 +119,19 @@ class TestRun {
     exitCode = result.timedOut() ? null : result.exitCode();
     output = result.output();
     outputTruncated = result.truncated();
+    sandboxImageDigest = result.imageDigest();
     completedAt = now;
     status = result.timedOut()
         ? TestRunStatus.TIMED_OUT
         : result.exitCode() == 0 ? TestRunStatus.PASSED : TestRunStatus.FAILED;
+  }
+
+  void snapshot(TestSandboxProfileView profile) {
+    requireStatus(TestRunStatus.RUNNING);
+    sandboxProfileId = profile.id();
+    sandboxProfileName = profile.name();
+    sandboxImage = profile.image();
+    sandboxNetworkEnabled = profile.networkEnabled();
   }
 
   void error(String safeMessage, Instant now) {
@@ -137,4 +161,9 @@ class TestRun {
   Instant approvedAt() { return approvedAt; }
   Instant startedAt() { return startedAt; }
   Instant completedAt() { return completedAt; }
+  UUID sandboxProfileId() { return sandboxProfileId; }
+  String sandboxProfileName() { return sandboxProfileName; }
+  String sandboxImage() { return sandboxImage; }
+  String sandboxImageDigest() { return sandboxImageDigest; }
+  Boolean sandboxNetworkEnabled() { return sandboxNetworkEnabled; }
 }

@@ -20,9 +20,10 @@
         <a class="nav-link" href="/chat">Chat</a>
         <a class="nav-link" href="/projects">Projects</a>
         <a class="nav-link bg-ink-800 text-ink-100" href="/runs">Runs</a>
-        <a class="nav-link" href="/model-settings">Models</a>
-        <a class="nav-link" href="/audit">Audit</a>
+        <a th:if="${isInstanceAdmin}" class="nav-link" href="/model-settings">Models</a>
+        <a th:if="${isInstanceAdmin}" class="nav-link" href="/audit">Audit</a>
         <a class="nav-link" href="/api-keys">API keys</a>
+        <a class="nav-link" href="/git-accounts">Git accounts</a>
       </nav>
       <div class="flex items-center gap-2">
         <button class="btn-secondary" type="button" x-data @click="$store.theme.toggle()" aria-label="Toggle theme"><i data-lucide="Sun"></i></button>

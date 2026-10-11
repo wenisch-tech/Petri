@@ -22,7 +22,7 @@
       </div>
       <nav class="hidden items-center gap-1 lg:flex">
         <a class="nav-link bg-ink-800 text-ink-100" href="/projects">Workspace</a>
-        <a class="nav-link" href="/runs">Runs</a><a class="nav-link" href="/model-settings">Models</a><a class="nav-link" href="/audit">Audit</a>
+        <a class="nav-link" href="/runs">Runs</a><a class="nav-link" href="/git-accounts">Git accounts</a><a th:if="${isInstanceAdmin}" class="nav-link" href="/model-settings">Models</a><a th:if="${isInstanceAdmin}" class="nav-link" href="/audit">Audit</a>
       </nav>
       <div class="flex items-center gap-1">
         <button class="icon-button" type="button" data-toggle-chat title="Toggle chat" aria-label="Toggle chat"><i data-lucide="PanelRight"></i></button>
@@ -74,7 +74,7 @@
         <button class="workspace-git-button" type="button" data-git-fetch><i data-lucide="CloudDownload"></i><span>Fetch</span></button>
         <button class="workspace-git-button" type="button" data-git-pull th:disabled="${selectedWorktree == null || selectedWorktree.detached}"><i data-lucide="GitPullRequestArrow"></i><span>Pull</span></button>
         <button class="workspace-git-button" type="button" data-git-rebase-action th:disabled="${selectedWorktree == null || selectedWorktree.detached}"><i data-lucide="GitCompare"></i><span>Rebase</span></button>
-        <button class="workspace-git-button" type="button" data-git-push th:disabled="${selectedWorktree == null || selectedWorktree.detached}"><i data-lucide="CloudUpload"></i><span>Push</span></button>
+        <button class="workspace-git-button" type="button" data-git-push th:disabled="${selectedWorktree == null || selectedWorktree.detached || (providerSource != null && providerSource.credentialMode.name() == 'CONNECTION' && !providerSource.canWrite)}" th:title="${providerSource != null && providerSource.credentialMode.name() == 'CONNECTION' && !providerSource.canWrite ? 'Repository is read-only' : 'Push'}"><i data-lucide="CloudUpload"></i><span>Push</span></button>
         <button class="workspace-git-button" type="button" data-git-commit th:disabled="${selectedWorktree == null}"><i data-lucide="GitCommitHorizontal"></i><span>Commit</span></button>
         <button class="workspace-git-button" type="button" data-git-more title="More Git actions" aria-label="More Git actions"><i data-lucide="MoreHorizontal"></i><span>More</span></button>
       </div>
@@ -85,9 +85,9 @@
       </div>
     </div>
     <div class="workspace-git-menu" data-git-menu hidden>
-      <button type="button" data-git-force-push th:disabled="${selectedWorktree == null || selectedWorktree.detached}"><i data-lucide="CloudUpload"></i>Force with lease…</button>
+      <button type="button" data-git-force-push th:disabled="${selectedWorktree == null || selectedWorktree.detached || (providerSource != null && providerSource.credentialMode.name() == 'CONNECTION' && !providerSource.canWrite)}"><i data-lucide="CloudUpload"></i>Force with lease…</button>
       <button type="button" data-git-delete-branch th:disabled="${selectedWorktree == null || selectedWorktree.detached}"><i data-lucide="Trash2"></i>Delete branch…</button>
-      <button type="button" data-git-delete-remote><i data-lucide="Trash2"></i>Delete remote branch…</button>
+      <button type="button" data-git-delete-remote th:disabled="${providerSource != null && providerSource.credentialMode.name() == 'CONNECTION' && !providerSource.canWrite}"><i data-lucide="Trash2"></i>Delete remote branch…</button>
     </div>
     <details class="workspace-git-output" data-git-output hidden><summary>Git details</summary><pre data-git-output-text></pre></details>
   </section>

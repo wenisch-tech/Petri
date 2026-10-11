@@ -15,6 +15,7 @@ import tech.wenisch.petri.agent.orchestration.AgentRunService;
 import tech.wenisch.petri.agent.orchestration.AgentRunView;
 import tech.wenisch.petri.agent.run.TestRunService;
 import tech.wenisch.petri.agent.run.TestRunView;
+import tech.wenisch.petri.security.AppUserRepository;
 
 @Controller
 @RequestMapping("/runs")
@@ -22,23 +23,29 @@ public class AgentRunAdminController {
   private final AgentRunService runs;
   private final ChangeProposalService changes;
   private final TestRunService testRuns;
+  private final AppUserRepository users;
 
   public AgentRunAdminController(
-      AgentRunService runs, ChangeProposalService changes, TestRunService testRuns) {
+      AgentRunService runs,
+      ChangeProposalService changes,
+      TestRunService testRuns,
+      AppUserRepository users) {
     this.runs = runs;
     this.changes = changes;
     this.testRuns = testRuns;
+    this.users = users;
   }
 
   @GetMapping
-  String runs(Model model) {
-    model.addAttribute("runs", runs.listAll());
+  String runs(Model model, Principal principal) {
+    model.addAttribute("runs", runs.listAll(actorId(principal)));
     return "runs";
   }
 
   @GetMapping("/{runId}")
-  String run(@PathVariable UUID runId, Model model) {
+  String run(@PathVariable UUID runId, Principal principal, Model model) {
     AgentRunView run = runs.get(runId);
+    runs.chat(run.chatId(), actorId(principal));
     model.addAttribute("run", run);
     model.addAttribute("changeProposals", changes.listForAgentRun(runId));
     model.addAttribute("testRuns", testRuns.listForAgentRun(runId));
@@ -51,7 +58,7 @@ public class AgentRunAdminController {
       @PathVariable UUID proposalId,
       Principal principal,
       RedirectAttributes redirect) {
-    return operation(runId, redirect, () -> {
+    return operation(runId, principal, redirect, () -> {
       requireChange(runId, proposalId);
       changes.approve(proposalId, principal.getName());
     }, "Change proposal approved.");
@@ -63,7 +70,7 @@ public class AgentRunAdminController {
       @PathVariable UUID proposalId,
       Principal principal,
       RedirectAttributes redirect) {
-    return operation(runId, redirect, () -> {
+    return operation(runId, principal, redirect, () -> {
       requireChange(runId, proposalId);
       changes.reject(proposalId, principal.getName());
     }, "Change proposal rejected.");
@@ -73,8 +80,9 @@ public class AgentRunAdminController {
   String applyChange(
       @PathVariable UUID runId,
       @PathVariable UUID proposalId,
+      Principal principal,
       RedirectAttributes redirect) {
-    return operation(runId, redirect, () -> {
+    return operation(runId, principal, redirect, () -> {
       requireChange(runId, proposalId);
       changes.apply(proposalId);
     }, "Approved change proposal applied.");
@@ -86,7 +94,7 @@ public class AgentRunAdminController {
       @PathVariable UUID testRunId,
       Principal principal,
       RedirectAttributes redirect) {
-    return operation(runId, redirect, () -> {
+    return operation(runId, principal, redirect, () -> {
       requireTestRun(runId, testRunId);
       testRuns.approve(testRunId, principal.getName());
     }, "Test run approved.");
@@ -98,7 +106,7 @@ public class AgentRunAdminController {
       @PathVariable UUID testRunId,
       Principal principal,
       RedirectAttributes redirect) {
-    return operation(runId, redirect, () -> {
+    return operation(runId, principal, redirect, () -> {
       requireTestRun(runId, testRunId);
       testRuns.reject(testRunId, principal.getName());
     }, "Test run rejected.");
@@ -108,8 +116,9 @@ public class AgentRunAdminController {
   String executeTest(
       @PathVariable UUID runId,
       @PathVariable UUID testRunId,
+      Principal principal,
       RedirectAttributes redirect) {
-    return operation(runId, redirect, () -> {
+    return operation(runId, principal, redirect, () -> {
       requireTestRun(runId, testRunId);
       testRuns.execute(testRunId);
     }, "Approved test run executed.");
@@ -131,9 +140,11 @@ public class AgentRunAdminController {
     }
   }
 
-  private static String operation(
-      UUID runId, RedirectAttributes redirect, Runnable action, String successMessage) {
+  private String operation(
+      UUID runId, Principal principal, RedirectAttributes redirect,
+      Runnable action, String successMessage) {
     try {
+      runs.chat(runs.get(runId).chatId(), actorId(principal));
       action.run();
       redirect.addFlashAttribute("operationMessage", successMessage);
     } catch (IllegalArgumentException | IllegalStateException exception) {
@@ -141,5 +152,10 @@ public class AgentRunAdminController {
     }
     return "redirect:/runs/" + runId;
   }
-}
 
+  private UUID actorId(Principal principal) {
+    return users.findByEmailIgnoreCase(principal.getName())
+        .orElseThrow(() -> new IllegalArgumentException("Unknown user"))
+        .getId();
+  }
+}

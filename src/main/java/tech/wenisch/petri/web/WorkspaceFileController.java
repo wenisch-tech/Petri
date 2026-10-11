@@ -18,29 +18,36 @@ import tech.wenisch.petri.agent.tool.ListFilesResult;
 import tech.wenisch.petri.agent.tool.ReadFileResult;
 import tech.wenisch.petri.agent.tool.WorkspaceEntryMutation;
 import tech.wenisch.petri.workspace.WorkspaceEditorService;
+import tech.wenisch.petri.project.ProjectAccessService;
 
 @RestController
 @RequestMapping("/workspace/api/worktrees/{worktreeId}")
 public class WorkspaceFileController {
   private final WorkspaceEditorService editor;
+  private final ProjectAccessService access;
 
-  public WorkspaceFileController(WorkspaceEditorService editor) {
+  public WorkspaceFileController(WorkspaceEditorService editor, ProjectAccessService access) {
     this.editor = editor;
+    this.access = access;
   }
 
   @GetMapping("/tree")
-  public ResponseEntity<?> tree(@PathVariable UUID worktreeId, @RequestParam(required = false) String path) {
+  public ResponseEntity<?> tree(@PathVariable UUID worktreeId, @RequestParam(required = false) String path,
+      Principal principal) {
+    access.requireWorktree(worktreeId, principal.getName());
     return invoke(() -> editor.tree(worktreeId, path));
   }
 
   @GetMapping("/files")
-  public ResponseEntity<?> read(@PathVariable UUID worktreeId, @RequestParam String path) {
+  public ResponseEntity<?> read(@PathVariable UUID worktreeId, @RequestParam String path, Principal principal) {
+    access.requireWorktree(worktreeId, principal.getName());
     return invoke(() -> editor.read(worktreeId, path));
   }
 
   @PutMapping("/files")
   public ResponseEntity<?> save(
       @PathVariable UUID worktreeId, @RequestBody SaveWorkspaceFileRequest request, Principal principal) {
+    access.requireWorktree(worktreeId, principal.getName());
     return invoke(() -> editor.save(
         worktreeId, request.path(), request.content(), request.expectedSha256(), principal.getName()));
   }
@@ -48,6 +55,7 @@ public class WorkspaceFileController {
   @PostMapping("/entries")
   public ResponseEntity<?> create(
       @PathVariable UUID worktreeId, @RequestBody CreateWorkspaceEntryRequest request, Principal principal) {
+    access.requireWorktree(worktreeId, principal.getName());
     return invoke(HttpStatus.CREATED, () -> editor.create(worktreeId, request.path(),
         "DIRECTORY".equals(request.type()), request.content(), principal.getName()));
   }
@@ -55,6 +63,7 @@ public class WorkspaceFileController {
   @PostMapping("/entries/move")
   public ResponseEntity<?> move(
       @PathVariable UUID worktreeId, @RequestBody MoveWorkspaceEntryRequest request, Principal principal) {
+    access.requireWorktree(worktreeId, principal.getName());
     return invoke(() -> editor.move(worktreeId, request.sourcePath(), request.targetPath(),
         request.expectedSha256(), principal.getName()));
   }
@@ -62,6 +71,7 @@ public class WorkspaceFileController {
   @PostMapping("/entries/delete")
   public ResponseEntity<?> delete(
       @PathVariable UUID worktreeId, @RequestBody DeleteWorkspaceEntryRequest request, Principal principal) {
+    access.requireWorktree(worktreeId, principal.getName());
     if (request.recursive() && !request.path().equals(request.confirmationPath())) {
       return problem(HttpStatus.BAD_REQUEST, "Recursive deletion requires the exact path confirmation");
     }

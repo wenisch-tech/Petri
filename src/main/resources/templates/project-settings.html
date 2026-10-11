@@ -27,6 +27,13 @@
 
       <div th:if="${credentialSaved}" class="mt-6 rounded-xl border border-good-500/30 bg-good-500/10 p-4 text-sm text-good-500">Git credentials were encrypted and saved.</div>
       <div th:if="${credentialRemoved}" class="mt-6 rounded-xl border border-good-500/30 bg-good-500/10 p-4 text-sm text-good-500">Git credentials were removed.</div>
+
+      <div th:if="${providerSource != null}" class="mt-6 rounded-xl border border-brand-500/30 bg-brand-500/10 p-4 text-sm">
+        <strong>Connected account source:</strong> <span th:text="${providerSource.fullName}">owner/repository</span>
+        <span class="ml-2 badge" th:text="${providerSource.credentialMode}">CONNECTION</span>
+        <p class="mt-2 text-ink-500">A disconnected or expired account blocks remote Git operations. Petri never falls back silently.</p>
+        <form th:if="${providerSource.credentialMode.name() == 'CONNECTION'}" class="mt-3" method="post" th:action="@{/projects/{id}/credential/use-simple(id=${project.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-secondary" type="submit"><i data-lucide="KeyRound"></i> Explicitly use Simple Git credentials</button></form>
+      </div>
       <div class="mt-8 rounded-xl border border-ink-700 p-5">
         <div class="flex flex-wrap items-center justify-between gap-4">
           <div>

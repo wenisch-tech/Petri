@@ -20,9 +20,10 @@
         <a class="nav-link" href="/chat">Chat</a>
         <a class="nav-link" href="/projects">Projects</a>
         <a class="nav-link" href="/runs">Runs</a>
-        <a class="nav-link" href="/model-settings">Models</a>
-        <a class="nav-link" href="/audit">Audit</a>
+        <a th:if="${isInstanceAdmin}" class="nav-link" href="/model-settings">Models</a>
+        <a th:if="${isInstanceAdmin}" class="nav-link" href="/audit">Audit</a>
         <a class="nav-link" href="/api-keys">API keys</a>
+        <a class="nav-link" href="/git-accounts">Git accounts</a>
       </nav>
       <div class="flex items-center gap-2">
         <button class="btn-secondary" type="button" x-data @click="$store.theme.toggle()" aria-label="Toggle theme">
@@ -73,7 +74,7 @@
           No projects yet. Add the first repository to continue.
         </p>
         <div th:unless="${#lists.isEmpty(recentProjects)}" class="mt-6 grid gap-3 sm:grid-cols-2">
-          <a th:each="project : ${recentProjects}" href="/projects" class="metric transition hover:border-brand-400/60">
+          <a th:each="project : ${recentProjects}" th:href="@{/workspace/projects/{id}(id=${project.id})}" class="metric transition hover:border-brand-400/60">
             <span class="font-semibold text-ink-100" th:text="${project.name}">Project</span>
             <span class="mt-1 block truncate text-sm text-ink-500" th:text="${project.repositoryUri}">repository</span>
           </a>

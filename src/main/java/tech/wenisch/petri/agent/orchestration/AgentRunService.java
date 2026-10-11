@@ -252,6 +252,13 @@ public class AgentRunService {
   }
 
   @Transactional(readOnly = true)
+  public List<AgentRunView> listAll(UUID actorId) {
+    return runs.findByCreatedByOrderByCreatedAtDesc(actorId).stream()
+        .map(run -> view(run, List.of()))
+        .toList();
+  }
+
+  @Transactional(readOnly = true)
   public boolean hasActiveForWorktree(UUID worktreeId) {
     return runs.existsByWorktreeIdAndStatusIn(worktreeId, java.util.EnumSet.of(
         AgentRunStatus.PENDING, AgentRunStatus.RUNNING,

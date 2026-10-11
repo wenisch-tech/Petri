@@ -22,6 +22,8 @@ import tech.wenisch.petri.apikey.ApiKeyService;
 import tech.wenisch.petri.apikey.CreateApiKeyCommand;
 import tech.wenisch.petri.apikey.IssuedApiKey;
 import tech.wenisch.petri.audit.AuditEventRepository;
+import tech.wenisch.petri.security.AppUser;
+import tech.wenisch.petri.security.AppUserRepository;
 
 @SpringBootTest
 @AutoConfigureMockMvc
@@ -33,6 +35,7 @@ class ApiKeyFlowTest {
   @Autowired ApiKeyService apiKeys;
   @Autowired ApiKeyRepository keys;
   @Autowired AuditEventRepository auditEvents;
+  @Autowired AppUserRepository users;
 
   @Test
   void issuedKeyAuthenticatesThenStopsWorkingAfterRevocation() throws Exception {
@@ -63,7 +66,7 @@ class ApiKeyFlowTest {
   }
 
   @Test
-  void administratorCanCreateKeyFromUiAndUsersCannotManageKeys() throws Exception {
+  void usersCanManageOnlyTheirOwnApiKeys() throws Exception {
     mockMvc.perform(post("/api-keys")
             .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN"))
             .with(csrf())
@@ -73,7 +76,24 @@ class ApiKeyFlowTest {
         .andExpect(content().string(org.hamcrest.Matchers.containsString("Save this API key now")))
         .andExpect(content().string(org.hamcrest.Matchers.containsString("petri_pk_")));
 
-    mockMvc.perform(get("/api-keys").with(user("member@petri.local").roles("USER")))
-        .andExpect(status().isForbidden());
+    String memberEmail = "member@petri.local";
+    users.save(new AppUser(java.util.UUID.randomUUID(), memberEmail, "unused", "USER"));
+
+    mockMvc.perform(get("/api-keys").with(user(memberEmail).roles("USER")))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.not(
+            org.hamcrest.Matchers.containsString("Build runner"))));
+
+    mockMvc.perform(post("/api-keys")
+            .with(user(memberEmail).roles("USER"))
+            .with(csrf())
+            .param("name", "Member integration"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("petri_pk_")));
+
+    assertThat(keys.findByCreatedByOrderByCreatedAtDesc(
+        users.findByEmailIgnoreCase(memberEmail).orElseThrow().getId()))
+        .extracting(ApiKey::getName)
+        .containsExactly("Member integration");
   }
 }

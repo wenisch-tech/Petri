@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import tech.wenisch.petri.workspace.WorktreeLocator;
+import tech.wenisch.petri.git.ProjectWorktreeService;
 
 @Service
 public class TestRunService {
@@ -16,16 +17,22 @@ public class TestRunService {
   private final TestCommandPolicy policy;
   private final TestCommandRunner runner;
   private final TestRunStateService state;
+  private final ProjectWorktreeService projectWorktrees;
+  private final TestSandboxProfileService sandboxProfiles;
 
   TestRunService(
       WorktreeLocator worktrees,
       TestCommandPolicy policy,
       TestCommandRunner runner,
-      TestRunStateService state) {
+      TestRunStateService state,
+      ProjectWorktreeService projectWorktrees,
+      TestSandboxProfileService sandboxProfiles) {
     this.worktrees = worktrees;
     this.policy = policy;
     this.runner = runner;
     this.state = state;
+    this.projectWorktrees = projectWorktrees;
+    this.sandboxProfiles = sandboxProfiles;
   }
 
   public TestRunView request(UUID worktreeId) {
@@ -39,6 +46,10 @@ public class TestRunService {
 
   public TestRunView get(UUID testRunId, UUID expectedWorktreeId) {
     return state.get(testRunId, expectedWorktreeId);
+  }
+
+  public TestRunView get(UUID testRunId) {
+    return state.get(testRunId);
   }
 
   public java.util.List<TestRunView> listForAgentRun(UUID agentRunId) {
@@ -72,11 +83,21 @@ public class TestRunService {
       if (!command.display().equals(claim.commandDisplay())) {
         throw new IllegalStateException("Approved test command no longer matches policy");
       }
-      result = runner.run(worktree, command);
+      UUID projectId = projectWorktrees.get(claim.worktreeId()).projectId();
+      TestSandboxProfileView profile = sandboxProfiles.resolve(projectId, claim.buildSystem());
+      state.snapshot(testRunId, profile);
+      result = runner.run(projectId, worktree, command, profile);
     } catch (IOException | RuntimeException exception) {
       log.warn("Approved test run {} could not be executed", testRunId, exception);
-      return state.error(testRunId, claim.approverEmail());
+      return state.error(testRunId, claim.approverEmail(), safeFailure(exception));
     }
     return state.complete(testRunId, result, claim.approverEmail());
+  }
+
+  private static String safeFailure(Exception exception) {
+    String message = exception.getMessage();
+    if (message == null || message.isBlank()) return "Test execution could not be started.";
+    message = message.replaceAll("[\\r\\n]+", " ").strip();
+    return message.substring(0, Math.min(1000, message.length()));
   }
 }

@@ -1,55 +1,63 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Add project · Petri</title>
-  <link rel="stylesheet" href="/css/petri.css">
-  <script defer src="/js/petri.js"></script>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="_csrf" th:content="${_csrf.token}"><meta name="_csrf_header" th:content="${_csrf.headerName}">
+  <title>Add project · Petri</title><link rel="stylesheet" href="/css/petri.css"><script defer src="/js/petri.js"></script>
 </head>
 <body>
-  <header class="topbar">
-    <div class="page flex items-center justify-between py-4">
-      <a href="/" class="flex items-center gap-3 font-semibold">
-        <span class="grid size-9 place-items-center rounded-xl bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span>
-        <span>Petri</span>
-      </a>
-      <button class="btn-secondary" type="button" x-data @click="$store.theme.toggle()" aria-label="Toggle theme"><i data-lucide="Sun"></i></button>
-    </div>
-  </header>
-
-  <main class="page max-w-3xl">
+  <header class="topbar"><div class="page flex items-center justify-between py-4">
+    <a href="/" class="flex items-center gap-3 font-semibold"><span class="grid size-9 place-items-center rounded-xl bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span><span>Petri</span></a>
+    <div class="flex gap-2"><a class="btn-secondary" href="/git-accounts"><i data-lucide="PlugZap"></i> Connections</a><button class="btn-secondary" type="button" x-data @click="$store.theme.toggle()" aria-label="Toggle theme"><i data-lucide="Sun"></i></button></div>
+  </div></header>
+  <main class="page max-w-5xl">
     <a class="mb-5 inline-flex items-center gap-2 text-sm text-ink-500 hover:text-ink-100" href="/projects"><i data-lucide="ArrowLeft"></i> Back to projects</a>
     <section class="panel p-6 sm:p-8">
-      <p class="text-xs font-bold uppercase tracking-[.2em] text-brand-400">Workspace registry</p>
-      <h1 class="mt-2 text-3xl font-semibold tracking-tight">Add project</h1>
-      <p class="mt-2 text-ink-500">Store the repository identity now. Cloning and credential checks arrive in the Git integration slice.</p>
-
-      <form class="mt-8 space-y-6" method="post" action="/projects" th:object="${projectForm}">
-        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-        <p th:if="${formError}" class="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300" th:text="${formError}">Unable to create project.</p>
-        <label class="block">
-          <span class="mb-2 block text-sm font-medium">Name</span>
-          <input class="field" type="text" th:field="*{name}" maxlength="120" placeholder="Payments service" required autofocus>
-          <span class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}">Invalid name</span>
-        </label>
-        <label class="block">
-          <span class="mb-2 block text-sm font-medium">Repository URI</span>
-          <input class="field" type="text" th:field="*{repositoryUri}" maxlength="2048" placeholder="https://git.example.com/team/payments.git" required>
-          <span class="mt-1.5 block text-xs text-ink-500">HTTPS, SSH and local repository paths are accepted as identities.</span>
-          <span class="field-error" th:if="${#fields.hasErrors('repositoryUri')}" th:errors="*{repositoryUri}">Invalid URI</span>
-        </label>
-        <label class="block">
-          <span class="mb-2 block text-sm font-medium">Default branch</span>
-          <input class="field" type="text" th:field="*{defaultBranch}" maxlength="255" placeholder="main">
-          <span class="field-error" th:if="${#fields.hasErrors('defaultBranch')}" th:errors="*{defaultBranch}">Invalid branch</span>
-        </label>
-        <div class="flex flex-wrap justify-end gap-3 border-t border-ink-700 pt-6">
-          <a class="btn-secondary" href="/projects">Cancel</a>
-          <button class="btn-primary" type="submit"><i data-lucide="Plus"></i> Add project</button>
+      <p class="text-xs font-bold uppercase tracking-[.2em] text-brand-400">Workspace registry</p><h1 class="mt-2 text-3xl font-semibold tracking-tight">Add project</h1>
+      <p class="mt-2 text-ink-500">Import repositories from a connected account or register one URL directly.</p>
+      <div class="mt-7 flex gap-2 border-b border-ink-700" role="tablist">
+        <button id="connected-tab" class="nav-link bg-ink-800 text-ink-100" type="button">From connected account</button>
+        <button id="simple-tab" class="nav-link" type="button">Simple Git</button>
+      </div>
+      <section id="connected-panel" class="mt-6">
+        <div th:if="${#lists.isEmpty(connections)}" class="rounded-xl border border-dashed border-ink-700 p-8 text-center">
+          <i class="mx-auto text-ink-500" data-lucide="Unplug"></i><h2 class="mt-3 font-semibold">No active Git account</h2>
+          <p class="mt-2 text-sm text-ink-500">Connect GitHub, GitLab or Forgejo first.</p><a class="btn-primary mt-4" href="/git-accounts"><i data-lucide="PlugZap"></i> Connect account</a>
         </div>
-      </form>
+        <div th:unless="${#lists.isEmpty(connections)}" id="repository-importer" class="space-y-5">
+          <div class="grid gap-4 sm:grid-cols-2">
+            <label class="block"><span class="mb-2 block text-sm font-medium">Account</span><select id="connection-select" class="field"><option th:each="connection : ${connections}" th:value="${connection.id}" th:text="${connection.providerName + ' · ' + connection.login}">Provider · login</option></select></label>
+            <label class="block"><span class="mb-2 block text-sm font-medium">Search repositories</span><div class="flex gap-2"><input id="repository-query" class="field" type="search" maxlength="200" placeholder="owner/repository"><button id="repository-search" class="btn-secondary" type="button"><i data-lucide="Search"></i> Search</button></div></label>
+          </div>
+          <p id="repository-status" class="text-sm text-ink-500" aria-live="polite">Loading repositories…</p><div id="repository-list" class="table-shell"></div>
+          <div class="flex items-center justify-between gap-3"><button id="repository-more" class="btn-secondary" type="button" hidden>Load more</button><button id="repository-import" class="btn-primary" type="button" disabled><i data-lucide="Download"></i> Import selected</button></div>
+        </div>
+      </section>
+      <section id="simple-panel" class="mt-6" hidden>
+        <div class="mb-5 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-sm text-amber-200">Simple Git accepts HTTPS, SSH and local paths. Only use unrestricted targets when every Petri user is trusted.</div>
+        <form class="space-y-6" method="post" action="/projects" th:object="${projectForm}">
+          <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><p th:if="${formError}" class="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300" th:text="${formError}">Unable to create project.</p>
+          <label class="block"><span class="mb-2 block text-sm font-medium">Name</span><input class="field" type="text" th:field="*{name}" maxlength="120" placeholder="Payments service" required><span class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}">Invalid name</span></label>
+          <label class="block"><span class="mb-2 block text-sm font-medium">Repository URI</span><input class="field" type="text" th:field="*{repositoryUri}" maxlength="2048" placeholder="https://git.example.com/team/payments.git" required><span class="field-error" th:if="${#fields.hasErrors('repositoryUri')}" th:errors="*{repositoryUri}">Invalid URI</span></label>
+          <label class="block"><span class="mb-2 block text-sm font-medium">Default branch</span><input class="field" type="text" th:field="*{defaultBranch}" maxlength="255" placeholder="main"></label>
+          <div class="flex justify-end gap-3 border-t border-ink-700 pt-6"><a class="btn-secondary" href="/projects">Cancel</a><button class="btn-primary" type="submit"><i data-lucide="Plus"></i> Add Simple Git project</button></div>
+        </form>
+      </section>
     </section>
   </main>
-</body>
-</html>
+  <script>
+    (() => {
+      const connectedTab=document.getElementById('connected-tab'), simpleTab=document.getElementById('simple-tab'), connected=document.getElementById('connected-panel'), simple=document.getElementById('simple-panel');
+      const tab=value=>{connected.hidden=!value;simple.hidden=value;connectedTab.classList.toggle('bg-ink-800',value);simpleTab.classList.toggle('bg-ink-800',!value)};
+      connectedTab?.addEventListener('click',()=>tab(true));simpleTab?.addEventListener('click',()=>tab(false));
+      if(document.querySelector('#simple-panel .field-error, #simple-panel .text-red-300'))tab(false);
+      const root=document.getElementById('repository-importer');if(!root)return;
+      const account=document.getElementById('connection-select'),query=document.getElementById('repository-query'),list=document.getElementById('repository-list'),status=document.getElementById('repository-status'),more=document.getElementById('repository-more'),importButton=document.getElementById('repository-import');
+      const csrf=document.querySelector('meta[name="_csrf"]')?.content,csrfHeader=document.querySelector('meta[name="_csrf_header"]')?.content;let page=1,loading=false,selected=new Set();
+      const row=repo=>{const label=document.createElement('label');label.className='flex items-center gap-3 border-b border-ink-700 p-4';const box=document.createElement('input');box.type='checkbox';box.disabled=repo.alreadyImported;box.addEventListener('change',()=>{box.checked?selected.add(repo.id):selected.delete(repo.id);importButton.disabled=!selected.size});const text=document.createElement('span');text.className='min-w-0 flex-1';const name=document.createElement('strong');name.className='block truncate';name.textContent=repo.fullName;const meta=document.createElement('span');meta.className='mt-1 block text-xs text-ink-500';meta.textContent=`${repo.visibility||'unknown'} · ${repo.canWrite?'read/write':'read only'}${repo.archived?' · archived':''}${repo.alreadyImported?' · already imported':''}`;text.append(name,meta);label.append(box,text);list.append(label)};
+      const load=async append=>{if(loading)return;loading=true;status.textContent='Loading repositories…';if(!append){page=1;selected.clear();list.replaceChildren();importButton.disabled=true}try{const params=new URLSearchParams({page:String(page),pageSize:'50'});if(query.value.trim())params.set('query',query.value.trim());const response=await fetch(`/git-connections/${encodeURIComponent(account.value)}/repositories?${params}`,{headers:{Accept:'application/json'}});const data=await response.json();if(!response.ok)throw new Error(data.detail||`HTTP ${response.status}`);data.repositories.forEach(row);more.hidden=!data.hasNext;status.textContent=data.repositories.length?`${list.children.length} repositories loaded${data.truncated?' · search may be incomplete':''}`:'No matching repositories.';page++}catch(error){status.textContent=`Could not load repositories: ${error.message}`;more.hidden=true}finally{loading=false}};
+      account.addEventListener('change',()=>load(false));document.getElementById('repository-search').addEventListener('click',()=>load(false));query.addEventListener('keydown',event=>{if(event.key==='Enter'){event.preventDefault();load(false)}});more.addEventListener('click',()=>load(true));
+      importButton.addEventListener('click',async()=>{importButton.disabled=true;status.textContent=`Importing ${selected.size} repositories…`;try{const response=await fetch('/projects/import',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json',[csrfHeader]:csrf},body:JSON.stringify({connectionId:account.value,repositoryIds:[...selected]})});const data=await response.json();if(!response.ok)throw new Error(data.detail||`HTTP ${response.status}`);status.textContent=`${data.filter(i=>i.status==='CREATED').length} queued, ${data.filter(i=>i.status==='FAILED').length} failed. Opening projects…`;setTimeout(()=>location.assign('/projects'),500)}catch(error){status.textContent=`Import failed: ${error.message}`;importButton.disabled=false}});load(false);
+    })();
+  </script>
+</body></html>

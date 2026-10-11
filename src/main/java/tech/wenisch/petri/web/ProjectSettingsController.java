@@ -19,29 +19,34 @@ import tech.wenisch.petri.git.ProjectGitCredentialService;
 import tech.wenisch.petri.git.ProjectMirrorService;
 import tech.wenisch.petri.git.SaveGitCredentialCommand;
 import tech.wenisch.petri.project.Project;
-import tech.wenisch.petri.project.ProjectRepository;
+import tech.wenisch.petri.project.ProjectAccessService;
+import tech.wenisch.petri.git.provider.ProjectProviderSourceService;
 
 @Controller
 public class ProjectSettingsController {
-  private final ProjectRepository projects;
   private final ProjectGitCredentialService credentials;
   private final ProjectMirrorService mirrors;
+  private final ProjectAccessService access;
+  private final ProjectProviderSourceService providerSources;
 
   public ProjectSettingsController(
-      ProjectRepository projects,
       ProjectGitCredentialService credentials,
-      ProjectMirrorService mirrors) {
-    this.projects = projects;
+      ProjectMirrorService mirrors,
+      ProjectAccessService access,
+      ProjectProviderSourceService providerSources) {
     this.credentials = credentials;
     this.mirrors = mirrors;
+    this.access = access;
+    this.providerSources = providerSources;
   }
 
   @GetMapping("/projects/{projectId}/settings")
-  String settings(@PathVariable UUID projectId, Model model) {
+  String settings(@PathVariable UUID projectId, Principal principal, Model model) {
+    access.requireProject(projectId, principal.getName());
     if (!model.containsAttribute("gitCredentialForm")) {
       model.addAttribute("gitCredentialForm", new GitCredentialForm());
     }
-    populate(model, projectId);
+    populate(model, projectId, principal.getName());
     return "project-settings";
   }
 
@@ -54,10 +59,12 @@ public class ProjectSettingsController {
       Model model,
       RedirectAttributes redirectAttributes) {
     if (bindingResult.hasErrors()) {
-      populate(model, projectId);
+      access.requireProject(projectId, principal.getName());
+      populate(model, projectId, principal.getName());
       return "project-settings";
     }
     try {
+      access.requireProject(projectId, principal.getName());
       credentials.save(
           projectId,
           new SaveGitCredentialCommand(
@@ -69,7 +76,7 @@ public class ProjectSettingsController {
       return "redirect:/projects/" + projectId + "/settings";
     } catch (IllegalArgumentException | IllegalStateException exception) {
       model.addAttribute("formError", exception.getMessage());
-      populate(model, projectId);
+      populate(model, projectId, principal.getName());
       return "project-settings";
     }
   }
@@ -80,6 +87,7 @@ public class ProjectSettingsController {
       Principal principal,
       RedirectAttributes redirectAttributes) {
     try {
+      access.requireProject(projectId, principal.getName());
       credentials.remove(projectId, principal.getName());
       redirectAttributes.addFlashAttribute("credentialRemoved", true);
       return "redirect:/projects/" + projectId + "/settings";
@@ -94,6 +102,7 @@ public class ProjectSettingsController {
       Principal principal,
       RedirectAttributes redirectAttributes) {
     try {
+      access.requireProject(projectId, principal.getName());
       mirrors.synchronize(projectId, principal);
       redirectAttributes.addFlashAttribute("mirrorSynchronized", true);
     } catch (GitOperationException exception) {
@@ -102,12 +111,20 @@ public class ProjectSettingsController {
     return "redirect:/projects/" + projectId + "/settings";
   }
 
-  private void populate(Model model, UUID projectId) {
-    Project project = projects.findById(projectId)
-        .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Project not found"));
+  @PostMapping("/projects/{projectId}/credential/use-simple")
+  String useSimpleCredentials(
+      @PathVariable UUID projectId, Principal principal, RedirectAttributes redirectAttributes) {
+    providerSources.useSimpleGitCredentials(projectId, principal.getName());
+    redirectAttributes.addFlashAttribute("credentialSaved", true);
+    return "redirect:/projects/" + projectId + "/settings";
+  }
+
+  private void populate(Model model, UUID projectId, String actorEmail) {
+    Project project = access.requireProject(projectId, actorEmail);
     model.addAttribute("project", project);
     model.addAttribute("credential", credentials.status(projectId));
     model.addAttribute("authenticationTypes", GitAuthenticationType.values());
     model.addAttribute("mirror", mirrors.status(projectId));
+    model.addAttribute("providerSource", providerSources.find(projectId));
   }
 }

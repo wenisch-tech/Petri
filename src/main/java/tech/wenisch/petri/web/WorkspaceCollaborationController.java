@@ -35,6 +35,7 @@ import tech.wenisch.petri.security.AppUser;
 import tech.wenisch.petri.security.AppUserRepository;
 import tech.wenisch.petri.workspace.WorkspaceModelPreferenceService;
 import tech.wenisch.petri.workspace.WorkspaceModelPreferenceView;
+import tech.wenisch.petri.project.ProjectAccessService;
 
 /** JSON collaboration endpoints; unlike legacy /chat posts these never navigate the workspace. */
 @RestController
@@ -51,6 +52,7 @@ public class WorkspaceCollaborationController {
   private final TestRunService tests;
   private final AppUserRepository users;
   private final AgentChatAutomationService automation;
+  private final ProjectAccessService access;
 
   public WorkspaceCollaborationController(
       ProjectWorktreeService worktrees,
@@ -63,7 +65,8 @@ public class WorkspaceCollaborationController {
       ChangeProposalService changes,
       TestRunService tests,
       AppUserRepository users,
-      AgentChatAutomationService automation) {
+      AgentChatAutomationService automation,
+      ProjectAccessService access) {
     this.worktrees = worktrees;
     this.gitDiffs = gitDiffs;
     this.preferences = preferences;
@@ -75,27 +78,34 @@ public class WorkspaceCollaborationController {
     this.tests = tests;
     this.users = users;
     this.automation = automation;
+    this.access = access;
   }
 
   @GetMapping("/worktrees/{worktreeId}/changes")
-  public List<tech.wenisch.petri.git.WorkspaceChangeView> changes(@PathVariable UUID worktreeId) {
+  public List<tech.wenisch.petri.git.WorkspaceChangeView> changes(
+      @PathVariable UUID worktreeId, Principal principal) {
+    access.requireWorktree(worktreeId, principal.getName());
     return gitDiffs.changes(worktreeId);
   }
 
   @GetMapping("/worktrees/{worktreeId}/diff")
-  public WorkspaceDiffView diff(@PathVariable UUID worktreeId, @RequestParam String path) {
+  public WorkspaceDiffView diff(
+      @PathVariable UUID worktreeId, @RequestParam String path, Principal principal) {
+    access.requireWorktree(worktreeId, principal.getName());
     return gitDiffs.diff(worktreeId, path);
   }
 
   @GetMapping("/worktrees/{worktreeId}/proposals/{proposalId}/diff")
   public ChangeProposalDiffView proposalDiff(
-      @PathVariable UUID worktreeId, @PathVariable UUID proposalId) {
+      @PathVariable UUID worktreeId, @PathVariable UUID proposalId, Principal principal) {
+    access.requireWorktree(worktreeId, principal.getName());
     return changes.diff(proposalId, worktreeId);
   }
 
   @PutMapping("/projects/{projectId}/model-preference")
   public WorkspaceModelPreferenceView saveModelPreference(
       @PathVariable UUID projectId, @RequestBody ModelPreferenceRequest request, Principal principal) {
+    access.requireProject(projectId, principal.getName());
     AppUser actor = actor(principal);
     if (!credentials.status(request.provider()).configured()) {
       throw new IllegalStateException(request.provider() + " credentials are not configured");
@@ -111,6 +121,7 @@ public class WorkspaceCollaborationController {
   @PostMapping("/worktrees/{worktreeId}/chats")
   public WorkspaceChatSnapshot createChat(
       @PathVariable UUID worktreeId, @RequestBody WorkspaceMessageRequest request, Principal principal) {
+    access.requireWorktree(worktreeId, principal.getName());
     AppUser actor = actor(principal);
     AgentRunView run = runs.create(worktreeId,
         command(request, worktrees.get(worktreeId).projectId(), actor), actor.getId(), "web:" + actor.getEmail());

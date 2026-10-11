@@ -23,6 +23,7 @@ import tech.wenisch.petri.agent.orchestration.AgentRunLauncher;
 import tech.wenisch.petri.agent.orchestration.AgentRunView;
 import tech.wenisch.petri.agent.orchestration.CreateAgentRunCommand;
 import tech.wenisch.petri.apikey.ApiKeyPrincipal;
+import tech.wenisch.petri.project.ProjectAccessService;
 
 @RestController
 @RequestMapping("/api/v1/agent/worktrees/{worktreeId}/runs")
@@ -32,18 +33,21 @@ public class AgentRunApiController {
   private final AgentRunLauncher launcher;
   private final AgentRunEventService events;
   private final AgentRunEventStream eventStream;
+  private final ProjectAccessService access;
 
   public AgentRunApiController(
       AgentRunService runs,
       AgentRunExecutor executor,
       AgentRunLauncher launcher,
       AgentRunEventService events,
-      AgentRunEventStream eventStream) {
+      AgentRunEventStream eventStream,
+      ProjectAccessService access) {
     this.runs = runs;
     this.executor = executor;
     this.launcher = launcher;
     this.events = events;
     this.eventStream = eventStream;
+    this.access = access;
   }
 
   @PostMapping("/start")
@@ -53,6 +57,7 @@ public class AgentRunApiController {
       Authentication authentication) {
     ApiKeyPrincipal principal = principal(authentication);
     try {
+      access.requireWorktree(worktreeId, principal.createdBy());
       AgentRunView run = runs.create(
           worktreeId, command, principal.createdBy(), "api-key:" + principal.id());
       launcher.launch(
@@ -72,6 +77,7 @@ public class AgentRunApiController {
       Authentication authentication) {
     ApiKeyPrincipal principal = principal(authentication);
     try {
+      access.requireWorktree(worktreeId, principal.createdBy());
       AgentRunView run = runs.create(
           worktreeId, command, principal.createdBy(), "api-key:" + principal.id());
       return ResponseEntity.status(HttpStatus.CREATED).body(run);
@@ -83,12 +89,15 @@ public class AgentRunApiController {
   }
 
   @GetMapping
-  public List<AgentRunView> list(@PathVariable UUID worktreeId) {
+  public List<AgentRunView> list(@PathVariable UUID worktreeId, Authentication authentication) {
+    access.requireWorktree(worktreeId, principal(authentication).createdBy());
     return runs.list(worktreeId);
   }
 
   @GetMapping("/{runId}")
-  public AgentRunView get(@PathVariable UUID worktreeId, @PathVariable UUID runId) {
+  public AgentRunView get(
+      @PathVariable UUID worktreeId, @PathVariable UUID runId, Authentication authentication) {
+    access.requireWorktree(worktreeId, principal(authentication).createdBy());
     return runs.get(runId, worktreeId);
   }
 
@@ -99,6 +108,7 @@ public class AgentRunApiController {
       Authentication authentication) {
     ApiKeyPrincipal principal = principal(authentication);
     try {
+      access.requireWorktree(worktreeId, principal.createdBy());
       runs.get(runId, worktreeId);
       return ResponseEntity.ok(runs.requestCancellation(
           runId, principal.createdBy(), "api-key:" + principal.id()));
@@ -116,6 +126,7 @@ public class AgentRunApiController {
       Authentication authentication) {
     ApiKeyPrincipal principal = principal(authentication);
     try {
+      access.requireWorktree(worktreeId, principal.createdBy());
       return ResponseEntity.ok(executor.execute(
           runId, worktreeId, principal.createdBy(), "api-key:" + principal.id()));
     } catch (IllegalArgumentException exception) {
@@ -132,6 +143,7 @@ public class AgentRunApiController {
       Authentication authentication) {
     ApiKeyPrincipal principal = principal(authentication);
     try {
+      access.requireWorktree(worktreeId, principal.createdBy());
       AgentRunView run = runs.get(runId, worktreeId);
       if (!run.createdBy().equals(principal.createdBy())) {
         return problem(HttpStatus.BAD_REQUEST, "Agent run belongs to another creator");
@@ -148,13 +160,16 @@ public class AgentRunApiController {
 
   @GetMapping("/{runId}/events")
   public List<AgentRunEventView> events(
-      @PathVariable UUID worktreeId, @PathVariable UUID runId) {
+      @PathVariable UUID worktreeId, @PathVariable UUID runId, Authentication authentication) {
+    access.requireWorktree(worktreeId, principal(authentication).createdBy());
     runs.get(runId, worktreeId);
     return events.recentForRun(runId);
   }
 
   @GetMapping(value = "/{runId}/events/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-  public SseEmitter stream(@PathVariable UUID worktreeId, @PathVariable UUID runId) {
+  public SseEmitter stream(
+      @PathVariable UUID worktreeId, @PathVariable UUID runId, Authentication authentication) {
+    access.requireWorktree(worktreeId, principal(authentication).createdBy());
     runs.get(runId, worktreeId);
     return eventStream.subscribeToRun(runId, events.recentForRun(runId));
   }

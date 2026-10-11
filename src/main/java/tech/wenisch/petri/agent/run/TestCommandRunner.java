@@ -5,63 +5,143 @@ import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
-import java.time.Duration;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import org.springframework.stereotype.Component;
-import tech.wenisch.petri.config.PetriProperties;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
+import tech.wenisch.petri.workspace.WorkspacePaths;
 
+/** Executes approved repository code exclusively in a rootless Podman sandbox. */
 @Component
 class TestCommandRunner {
-  private static final String[] ALLOWED_ENVIRONMENT = {
-      "PATH", "JAVA_HOME", "HOME", "USER", "TMPDIR", "SystemRoot", "ComSpec"
-  };
+  private final WorkspacePaths paths;
+  private final String podmanExecutable;
 
-  private final Duration timeout;
-  private final int outputLimit;
-
-  TestCommandRunner(PetriProperties properties) {
-    this.timeout = properties.workspace().testCommandTimeout();
-    this.outputLimit = properties.workspace().maxTestOutputBytes();
+  @Autowired
+  TestCommandRunner(
+      WorkspacePaths paths,
+      @Value("${petri.tests.podman-executable:podman}") String podmanExecutable) {
+    this.paths = paths;
+    this.podmanExecutable = podmanExecutable;
   }
 
-  TestCommandResult run(Path worktree, TestCommand command) throws IOException {
-    ProcessBuilder builder = new ProcessBuilder(command.arguments())
-        .directory(worktree.toFile())
-        .redirectErrorStream(true);
+  TestCommandResult run(
+      UUID projectId, Path worktree, TestCommand command, TestSandboxProfileView profile)
+      throws IOException {
+    Path safeWorktree = paths.requireExistingPath(worktree);
+    Path cache = paths.directory("test-caches", projectId.toString());
+    String containerName = "petri-test-" + UUID.randomUUID();
+    List<String> arguments = containerArguments(containerName, safeWorktree, cache, command, profile);
+    ProcessBuilder builder = new ProcessBuilder(arguments).redirectErrorStream(true);
     sanitizeEnvironment(builder.environment());
 
-    Process process = builder.start();
+    Process process;
+    try {
+      process = builder.start();
+    } catch (IOException exception) {
+      throw new IOException("Podman is unavailable; approved tests require rootless Podman", exception);
+    }
     try (var executor = Executors.newVirtualThreadPerTaskExecutor()) {
-      Future<CapturedOutput> output = executor.submit(() -> capture(process.getInputStream()));
+      Future<CapturedOutput> output = executor.submit(
+          () -> capture(process.getInputStream(), profile.outputLimitBytes()));
       boolean finished;
       try {
-        finished = process.waitFor(timeout.toMillis(), TimeUnit.MILLISECONDS);
+        finished = process.waitFor(profile.timeout().toMillis(), TimeUnit.MILLISECONDS);
       } catch (InterruptedException exception) {
         Thread.currentThread().interrupt();
-        terminate(process);
-        throw new IOException("Interrupted while waiting for test command", exception);
+        cleanup(containerName, process);
+        throw new IOException("Interrupted while waiting for sandboxed test command", exception);
       }
-      if (!finished) terminate(process);
+      if (!finished) cleanup(containerName, process);
       CapturedOutput captured = readOutput(output);
-      return new TestCommandResult(
-          finished ? process.exitValue() : -1,
-          captured.value(),
-          !finished,
-          captured.truncated());
+      String digest = inspectDigest(profile.image());
+      return new TestCommandResult(finished ? process.exitValue() : -1, captured.value(),
+          !finished, captured.truncated(), digest);
     }
   }
 
-  private CapturedOutput capture(InputStream input) throws IOException {
+  List<String> containerArguments(
+      String name, Path worktree, Path cache, TestCommand command, TestSandboxProfileView profile) {
+    if (!profile.buildSystems().contains(command.buildSystem())) {
+      throw new IllegalArgumentException("Build system is not allowed by the sandbox profile");
+    }
+    List<String> result = new ArrayList<>();
+    result.addAll(List.of(podmanExecutable, "run", "--rm", "--name", name,
+        "--pull=missing", "--userns=keep-id", "--read-only", "--cap-drop=all",
+        "--security-opt=no-new-privileges", "--pids-limit=" + profile.pidsLimit(),
+        "--cpus=" + profile.cpuLimit(), "--memory=" + profile.memoryLimit(),
+        "--network=" + (profile.networkEnabled() ? "slirp4netns" : "none"),
+        "--tmpfs", "/tmp:rw,nosuid,nodev,size=512m",
+        "--volume", worktree + ":/workspace:rw,Z",
+        "--volume", cache + ":/cache:rw,Z",
+        "--workdir", "/workspace", "--env", "CI=true", "--env", "LC_ALL=C",
+        "--env", "HOME=/tmp/petri-home"));
+    if (command.buildSystem() == TestBuildSystem.MAVEN) {
+      result.addAll(List.of("--env", "MAVEN_OPTS=-Dmaven.repo.local=/cache/maven"));
+    } else {
+      result.addAll(List.of("--env", "GRADLE_USER_HOME=/cache/gradle"));
+    }
+    result.add(profile.image());
+    result.addAll(command.arguments());
+    return List.copyOf(result);
+  }
+
+  private String inspectDigest(String image) {
+    Process process = null;
+    try {
+      ProcessBuilder builder = new ProcessBuilder(
+          podmanExecutable, "image", "inspect", "--format", "{{.Digest}}", image)
+          .redirectErrorStream(true);
+      sanitizeEnvironment(builder.environment());
+      process = builder.start();
+      byte[] output = process.getInputStream().readNBytes(512);
+      if (!process.waitFor(10, TimeUnit.SECONDS) || process.exitValue() != 0) return null;
+      String value = new String(output, StandardCharsets.UTF_8).strip();
+      return value.isBlank() ? null : value;
+    } catch (IOException | InterruptedException exception) {
+      if (exception instanceof InterruptedException) Thread.currentThread().interrupt();
+      return null;
+    } finally {
+      if (process != null && process.isAlive()) process.destroyForcibly();
+    }
+  }
+
+  private void cleanup(String name, Process process) {
+    runCleanup("kill", name);
+    runCleanup("rm", "--force", name);
+    process.destroy();
+    try {
+      if (!process.waitFor(2, TimeUnit.SECONDS)) process.destroyForcibly();
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      process.destroyForcibly();
+    }
+  }
+
+  private void runCleanup(String... arguments) {
+    List<String> command = new ArrayList<>(); command.add(podmanExecutable); command.addAll(List.of(arguments));
+    try {
+      ProcessBuilder builder = new ProcessBuilder(command).redirectErrorStream(true);
+      sanitizeEnvironment(builder.environment());
+      Process cleanup = builder.start();
+      cleanup.getInputStream().transferTo(java.io.OutputStream.nullOutputStream());
+      if (!cleanup.waitFor(10, TimeUnit.SECONDS)) cleanup.destroyForcibly();
+    } catch (IOException | InterruptedException exception) {
+      if (exception instanceof InterruptedException) Thread.currentThread().interrupt();
+    }
+  }
+
+  private static CapturedOutput capture(InputStream input, int outputLimit) throws IOException {
     ByteArrayOutputStream retained = new ByteArrayOutputStream(Math.min(outputLimit, 8192));
-    byte[] buffer = new byte[8192];
-    long total = 0;
-    int read;
+    byte[] buffer = new byte[8192]; long total = 0; int read;
     while ((read = input.read(buffer)) >= 0) {
       int writable = Math.min(read, Math.max(0, outputLimit - retained.size()));
       if (writable > 0) retained.write(buffer, 0, writable);
@@ -72,39 +152,30 @@ class TestCommandRunner {
 
   private static CapturedOutput readOutput(Future<CapturedOutput> output) throws IOException {
     try {
-      return output.get(5, TimeUnit.SECONDS);
+      return output.get(10, TimeUnit.SECONDS);
     } catch (InterruptedException exception) {
       Thread.currentThread().interrupt();
-      throw new IOException("Interrupted while reading test output", exception);
+      throw new IOException("Interrupted while reading sandbox output", exception);
     } catch (ExecutionException exception) {
-      throw new IOException("Could not read test output", exception.getCause());
+      throw new IOException("Could not read sandbox output", exception.getCause());
     } catch (TimeoutException exception) {
-      throw new IOException("Test output stream did not close", exception);
+      throw new IOException("Sandbox output stream did not close", exception);
     }
   }
 
   private static void sanitizeEnvironment(Map<String, String> environment) {
-    Map<String, String> inherited = Map.copyOf(environment);
+    Map<String, String> retained = new java.util.HashMap<>();
+    // These variables are needed by the rootless Podman client itself. They are not passed
+    // into the container; the container receives only the explicit --env values above.
+    for (String name : List.of(
+        "PATH", "HOME", "USER", "LOGNAME", "XDG_RUNTIME_DIR",
+        "DBUS_SESSION_BUS_ADDRESS", "TMPDIR")) {
+      String value = environment.get(name);
+      if (value != null) retained.put(name, value);
+    }
     environment.clear();
-    for (String name : ALLOWED_ENVIRONMENT) {
-      String value = inherited.get(name);
-      if (value != null) environment.put(name, value);
-    }
-    environment.put("CI", "true");
+    environment.putAll(retained);
     environment.put("LC_ALL", "C");
-  }
-
-  private static void terminate(Process process) {
-    List<ProcessHandle> descendants = process.descendants().toList();
-    descendants.forEach(ProcessHandle::destroy);
-    process.destroy();
-    try {
-      process.waitFor(1, TimeUnit.SECONDS);
-    } catch (InterruptedException exception) {
-      Thread.currentThread().interrupt();
-    }
-    descendants.stream().filter(ProcessHandle::isAlive).forEach(ProcessHandle::destroyForcibly);
-    if (process.isAlive()) process.destroyForcibly();
   }
 
   private record CapturedOutput(String value, boolean truncated) {}

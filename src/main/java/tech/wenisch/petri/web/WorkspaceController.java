@@ -29,11 +29,13 @@ import tech.wenisch.petri.git.WorkspaceGitService;
 import tech.wenisch.petri.git.WorkspaceGitStatusView;
 import tech.wenisch.petri.project.Project;
 import tech.wenisch.petri.project.ProjectRepository;
+import tech.wenisch.petri.project.ProjectAccessService;
 import tech.wenisch.petri.security.AppUser;
 import tech.wenisch.petri.security.AppUserRepository;
 import tech.wenisch.petri.workspace.WorkspaceModelPreferenceService;
 import tech.wenisch.petri.workspace.WorkspaceModelPreferenceView;
 import tech.wenisch.petri.workspace.WorkspaceEditorService;
+import tech.wenisch.petri.git.provider.ProjectProviderSourceService;
 
 /** The project-centric shell. Chat endpoints stay separate so their SSE contract remains stable. */
 @Controller
@@ -49,6 +51,8 @@ public class WorkspaceController {
   private final WorkspaceModelPreferenceService preferences;
   private final WorkspaceEditorService workspaceEditor;
   private final WorkspaceGitService git;
+  private final ProjectAccessService access;
+  private final ProjectProviderSourceService providerSources;
 
   public WorkspaceController(
       ProjectRepository projects,
@@ -60,7 +64,9 @@ public class WorkspaceController {
       TestRunService testRuns,
       WorkspaceModelPreferenceService preferences,
       WorkspaceEditorService workspaceEditor,
-      WorkspaceGitService git) {
+      WorkspaceGitService git,
+      ProjectAccessService access,
+      ProjectProviderSourceService providerSources) {
     this.projects = projects;
     this.worktrees = worktrees;
     this.runs = runs;
@@ -71,6 +77,8 @@ public class WorkspaceController {
     this.preferences = preferences;
     this.workspaceEditor = workspaceEditor;
     this.git = git;
+    this.access = access;
+    this.providerSources = providerSources;
   }
 
   @GetMapping("/projects/{projectId}")
@@ -81,8 +89,7 @@ public class WorkspaceController {
       @RequestParam(required = false) String file,
       Principal principal,
       Model model) {
-    Project project = projects.findById(projectId)
-        .orElseThrow(() -> new IllegalArgumentException("Unknown project"));
+    Project project = access.requireProject(projectId, principal.getName());
     AppUser actor = actor(principal);
     List<ProjectWorktreeView> activeWorktrees = worktrees.list(projectId).stream()
         .filter(value -> value.status() == ProjectWorktreeStatus.ACTIVE)
@@ -128,6 +135,7 @@ public class WorkspaceController {
         : gitData(() -> git.status(selectedWorktree.id()), null);
 
     model.addAttribute("project", project);
+    model.addAttribute("providerSource", providerSources.find(projectId));
     model.addAttribute("worktrees", activeWorktrees);
     model.addAttribute("selectedWorktree", selectedWorktree);
     model.addAttribute("branches", branches);

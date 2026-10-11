@@ -17,20 +17,25 @@ import tech.wenisch.petri.apikey.ApiKeyPrincipal;
 import tech.wenisch.petri.git.ProjectWorktreeService;
 import tech.wenisch.petri.git.ProjectWorktreeView;
 import tech.wenisch.petri.security.AppUserRepository;
+import tech.wenisch.petri.project.ProjectAccessService;
 
 @RestController
 @RequestMapping("/api/v1/projects/{projectId}/worktrees")
 public class WorktreeApiController {
   private final ProjectWorktreeService worktrees;
   private final AppUserRepository users;
+  private final ProjectAccessService access;
 
-  public WorktreeApiController(ProjectWorktreeService worktrees, AppUserRepository users) {
+  public WorktreeApiController(
+      ProjectWorktreeService worktrees, AppUserRepository users, ProjectAccessService access) {
     this.worktrees = worktrees;
     this.users = users;
+    this.access = access;
   }
 
   @GetMapping
-  public List<ProjectWorktreeView> list(@PathVariable UUID projectId) {
+  public List<ProjectWorktreeView> list(@PathVariable UUID projectId, Authentication authentication) {
+    access.requireProject(projectId, principal(authentication).createdBy());
     return worktrees.list(projectId);
   }
 
@@ -41,6 +46,7 @@ public class WorktreeApiController {
       Authentication authentication) {
     try {
       String actor = actorEmail(authentication);
+      access.requireProject(projectId, principal(authentication).createdBy());
       String revision = command == null ? null : command.revision();
       return ResponseEntity.status(HttpStatus.CREATED).body(worktrees.create(projectId, revision, actor));
     } catch (IllegalArgumentException exception) {
@@ -56,6 +62,8 @@ public class WorktreeApiController {
       @PathVariable UUID worktreeId,
       Authentication authentication) {
     try {
+      access.requireProject(projectId, principal(authentication).createdBy());
+      access.requireWorktree(worktreeId, principal(authentication).createdBy());
       return ResponseEntity.ok(worktrees.remove(worktreeId, projectId, actorEmail(authentication)));
     } catch (IllegalArgumentException exception) {
       return problem(HttpStatus.BAD_REQUEST, exception.getMessage());
@@ -65,16 +73,18 @@ public class WorktreeApiController {
   }
 
   private String actorEmail(Authentication authentication) {
-    if (!(authentication.getPrincipal() instanceof ApiKeyPrincipal principal)) {
-      throw new IllegalStateException("API key authentication is required");
-    }
+    ApiKeyPrincipal principal = principal(authentication);
     return users.findById(principal.createdBy())
         .orElseThrow(() -> new IllegalStateException("API key owner no longer exists"))
         .getEmail();
+  }
+
+  private static ApiKeyPrincipal principal(Authentication authentication) {
+    if (authentication.getPrincipal() instanceof ApiKeyPrincipal principal) return principal;
+    throw new IllegalStateException("API key authentication is required");
   }
 
   private static ResponseEntity<ProblemDetail> problem(HttpStatus status, String detail) {
     return ResponseEntity.status(status).body(ProblemDetail.forStatusAndDetail(status, detail));
   }
 }
-

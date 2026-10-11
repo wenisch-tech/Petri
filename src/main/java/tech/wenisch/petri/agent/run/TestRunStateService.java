@@ -83,6 +83,11 @@ class TestRunStateService {
     return view(testRun);
   }
 
+  @Transactional(readOnly = true)
+  public TestRunView get(UUID testRunId) {
+    return view(testRun(testRunId));
+  }
+
   @Transactional
   public TestRunView approve(UUID testRunId, String actorEmail) {
     TestRun testRun = locked(testRunId);
@@ -130,9 +135,19 @@ class TestRunStateService {
   }
 
   @Transactional
+  public void snapshot(UUID testRunId, TestSandboxProfileView profile) {
+    locked(testRunId).snapshot(profile);
+  }
+
+  @Transactional
   public TestRunView error(UUID testRunId, String actorEmail) {
+    return error(testRunId, actorEmail, "Test execution could not be started.");
+  }
+
+  @Transactional
+  public TestRunView error(UUID testRunId, String actorEmail, String safeMessage) {
     TestRun testRun = locked(testRunId);
-    testRun.error("Test execution could not be started.", Instant.now(clock));
+    testRun.error(safeMessage, Instant.now(clock));
     auditLog.record(
         actorEmail, "TEST_RUN_ERROR", "TEST_RUN", testRun.id(),
         "Could not execute " + testRun.commandDisplay());
@@ -165,6 +180,8 @@ class TestRunStateService {
         testRun.id(), testRun.worktreeId(), testRun.agentRunId(), testRun.buildSystem(),
         testRun.commandDisplay(), testRun.status(), testRun.exitCode(), testRun.output(),
         testRun.outputTruncated(), testRun.requestedAt(), testRun.approvedAt(),
-        testRun.startedAt(), testRun.completedAt());
+        testRun.startedAt(), testRun.completedAt(), testRun.sandboxProfileId(),
+        testRun.sandboxProfileName(), testRun.sandboxImage(), testRun.sandboxImageDigest(),
+        testRun.sandboxNetworkEnabled());
   }
 }

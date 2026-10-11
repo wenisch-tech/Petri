@@ -25,8 +25,8 @@ public class ApiKeyController {
   }
 
   @GetMapping("/api-keys")
-  String apiKeys(Model model) {
-    model.addAttribute("apiKeys", apiKeys.findAll());
+  String apiKeys(Model model, Principal principal) {
+    model.addAttribute("apiKeys", apiKeys.findAll(principal.getName()));
     return "api-keys";
   }
 

@@ -16,4 +16,9 @@ public record TestRunView(
     Instant requestedAt,
     Instant approvedAt,
     Instant startedAt,
-    Instant completedAt) {}
+    Instant completedAt,
+    UUID sandboxProfileId,
+    String sandboxProfileName,
+    String sandboxImage,
+    String sandboxImageDigest,
+    Boolean sandboxNetworkEnabled) {}

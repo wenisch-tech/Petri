@@ -12,6 +12,8 @@ import org.springframework.data.repository.query.Param;
 interface AgentRunRepository extends JpaRepository<AgentRun, UUID> {
   List<AgentRun> findAllByOrderByCreatedAtDesc();
 
+  List<AgentRun> findByCreatedByOrderByCreatedAtDesc(UUID createdBy);
+
   List<AgentRun> findByWorktreeIdOrderByCreatedAtDesc(UUID worktreeId);
 
   List<AgentRun> findByChatIdOrderByChatMessageIndexAsc(UUID chatId);

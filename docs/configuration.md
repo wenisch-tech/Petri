@@ -47,8 +47,10 @@ Flyway applies schema migrations during startup. Hibernate validates the resulti
 | `PETRI_MAX_TOOL_FILE_BYTES` | `1000000` | Maximum file read size. |
 | `PETRI_MAX_TOOL_OUTPUT_BYTES` | `1000000` | Maximum tool result size. |
 | `PETRI_MAX_SEARCH_RESULTS` | `200` | Search-result count limit. |
-| `PETRI_TEST_COMMAND_TIMEOUT` | `10m` | Approved test process timeout. |
-| `PETRI_MAX_TEST_OUTPUT_BYTES` | `2000000` | Captured test output limit. |
+| `PETRI_IMPORT_MAX_PARALLEL` | `4` | Maximum concurrent mirror-initialization jobs. |
+| `PETRI_PODMAN_EXECUTABLE` | `podman` | Rootless Podman CLI path/name. |
+
+Test timeout, output, CPU, memory, PIDs, image and network settings are managed through administrator sandbox profiles. The seeded defaults remain 10 minutes and 2 MB.
 
 ## Model runtime
 

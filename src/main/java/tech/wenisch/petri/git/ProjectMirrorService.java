@@ -21,7 +21,7 @@ import tech.wenisch.petri.workspace.WorkspacePaths;
 @Service
 public class ProjectMirrorService {
   private final ProjectRepository projects;
-  private final ProjectGitCredentialService credentials;
+  private final ProjectGitCredentialResolver credentials;
   private final GitCommandRunner git;
   private final WorkspacePaths paths;
   private final AuditLogService auditLog;
@@ -29,7 +29,7 @@ public class ProjectMirrorService {
 
   public ProjectMirrorService(
       ProjectRepository projects,
-      ProjectGitCredentialService credentials,
+      ProjectGitCredentialResolver credentials,
       GitCommandRunner git,
       WorkspacePaths paths,
       AuditLogService auditLog,
@@ -79,7 +79,7 @@ public class ProjectMirrorService {
         String details = result.output().isBlank() ? "" : ": " + result.output().strip();
         throw new GitOperationException(reason + details);
       }
-      configureBranchRefs(project, mirror);
+      configureBranchRefs(project, mirror, initialized);
       auditLog.record(
           actor.getEmail(),
           initialized ? "PROJECT_MIRROR_FETCHED" : "PROJECT_MIRROR_CLONED",
@@ -131,7 +131,10 @@ public class ProjectMirrorService {
       List<String> secrets) throws IOException {
     if (!initialized) {
       return git.run(paths.root(), List.of(
-          "clone", "--mirror", "--", project.getRepositoryUri(), mirror.toString()),
+          "clone", "--bare",
+          "--config", "remote.origin.mirror=false",
+          "--config", "remote.origin.fetch=+refs/heads/*:refs/remotes/origin/*",
+          "--", project.getRepositoryUri(), mirror.toString()),
           environment, secrets);
     }
     String branch = project.getDefaultBranch();
@@ -151,7 +154,8 @@ public class ProjectMirrorService {
     return result;
   }
 
-  private void configureBranchRefs(Project project, Path mirror) throws IOException {
+  private void configureBranchRefs(
+      Project project, Path mirror, boolean previouslyInitialized) throws IOException {
     GitCommandResult mirrorMode = git.run(
         paths.root(), List.of("--git-dir=" + mirror, "config", "--get", "remote.origin.mirror"));
     if (mirrorMode.succeeded() && "true".equalsIgnoreCase(mirrorMode.output().strip())) {
@@ -187,6 +191,20 @@ public class ProjectMirrorService {
         "--git-dir=" + mirror, "config", "--add", "remote.origin.fetch",
         "+refs/heads/*:refs/remotes/origin/*")), "configure remote branch fetch");
     ensureDefaultLocalBranch(project, mirror);
+    if (!previouslyInitialized) separateInitialLocalBranches(project, mirror);
+  }
+
+  private void separateInitialLocalBranches(Project project, Path mirror) throws IOException {
+    if (objectId(mirror, "refs/heads/" + project.getDefaultBranch()) == null) return;
+    GitCommandResult heads = git.run(paths.root(), List.of(
+        "--git-dir=" + mirror, "for-each-ref", "--format=%(refname:short)", "refs/heads"));
+    requireSuccess(heads, "inspect initial local branches");
+    for (String branch : heads.output().lines().map(String::strip).toList()) {
+      if (branch.isBlank() || branch.equals(project.getDefaultBranch())) continue;
+      requireSuccess(git.run(paths.root(), List.of(
+          "--git-dir=" + mirror, "update-ref", "-d", "refs/heads/" + branch)),
+          "separate initial branch " + branch);
+    }
   }
 
   private String symbolicHeadBranch(Path mirror) throws IOException {

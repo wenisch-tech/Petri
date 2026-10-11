@@ -39,6 +39,7 @@ import tech.wenisch.petri.git.ProjectWorktreeView;
 import tech.wenisch.petri.git.GitOperationException;
 import tech.wenisch.petri.project.Project;
 import tech.wenisch.petri.project.ProjectRepository;
+import tech.wenisch.petri.project.ProjectAccessService;
 import tech.wenisch.petri.security.AppUser;
 import tech.wenisch.petri.security.AppUserRepository;
 
@@ -55,6 +56,7 @@ public class ChatController {
   private final AppUserRepository users;
   private final ChangeProposalService changes;
   private final TestRunService testRuns;
+  private final ProjectAccessService access;
 
   public ChatController(
       ProjectRepository projects,
@@ -66,7 +68,8 @@ public class ChatController {
       ModelCredentialService modelCredentials,
       AppUserRepository users,
       ChangeProposalService changes,
-      TestRunService testRuns) {
+      TestRunService testRuns,
+      ProjectAccessService access) {
     this.projects = projects;
     this.worktrees = worktrees;
     this.runs = runs;
@@ -77,6 +80,7 @@ public class ChatController {
     this.users = users;
     this.changes = changes;
     this.testRuns = testRuns;
+    this.access = access;
   }
 
   @GetMapping
@@ -90,15 +94,17 @@ public class ChatController {
     if (chat == null && run != null) {
       AgentRunView selectedRun = runs.get(run);
       chat = selectedRun.chatId();
+      runs.chat(chat, viewer.getId());
     }
     AgentChatView selectedChat = chat == null ? null : runs.chat(chat, viewer.getId());
     if (selectedChat != null) {
       project = worktrees.get(selectedChat.worktreeId()).projectId();
     }
-    List<Project> availableProjects = projects.findAllByOrderByCreatedAtDesc();
+    List<Project> availableProjects = access.projects(principal.getName());
     if (project == null && !availableProjects.isEmpty()) project = availableProjects.getFirst().getId();
 
     if (project == null) return "redirect:/projects";
+    access.requireProject(project, principal.getName());
 
     List<ProjectWorktreeView> activeWorktrees = project == null
         ? List.of()
@@ -167,6 +173,7 @@ public class ChatController {
       Principal principal,
       RedirectAttributes redirect) {
     try {
+      access.requireProject(projectId, principal.getName());
       worktrees.create(projectId, revision, principal.getName());
       redirect.addFlashAttribute("chatMessage", "Workspace prepared.");
     } catch (IllegalArgumentException | IllegalStateException | GitOperationException exception) {
@@ -190,6 +197,7 @@ public class ChatController {
       RedirectAttributes redirect) {
     try {
       AppUser actor = actor(principal);
+      access.requireWorktree(worktreeId, principal.getName());
       AgentRunView run = runs.create(
           worktreeId,
           new CreateAgentRunCommand(
@@ -259,6 +267,7 @@ public class ChatController {
     try {
       AppUser actor = actor(principal);
       AgentRunView run = runs.get(runId);
+      runs.chat(run.chatId(), actor.getId());
       launcher.launch(
           run.id(), run.worktreeId(), actor.getId(), "web:" + actor.getEmail());
       redirect.addFlashAttribute("chatMessage", "Run queued for execution.");
@@ -273,6 +282,7 @@ public class ChatController {
       @PathVariable UUID runId, Principal principal, RedirectAttributes redirect) {
     try {
       AppUser actor = actor(principal);
+      runs.chat(runs.get(runId).chatId(), actor.getId());
       runs.requestCancellation(runId, actor.getId(), actor.getEmail());
       redirect.addFlashAttribute("chatMessage", "Cancellation requested.");
     } catch (IllegalArgumentException | IllegalStateException exception) {
@@ -283,8 +293,10 @@ public class ChatController {
 
   @GetMapping("/runs/{runId}/state")
   @ResponseBody
-  ResponseEntity<AgentRunView> state(@PathVariable UUID runId) {
-    return ResponseEntity.ok(runs.get(runId));
+  ResponseEntity<AgentRunView> state(@PathVariable UUID runId, Principal principal) {
+    AgentRunView run = runs.get(runId);
+    runs.chat(run.chatId(), actor(principal).getId());
+    return ResponseEntity.ok(run);
   }
 
   @GetMapping("/{chatId}/state")
@@ -304,7 +316,7 @@ public class ChatController {
       @PathVariable UUID proposalId,
       Principal principal,
       RedirectAttributes redirect) {
-    return operation(runId, redirect, () -> {
+    return operation(runId, principal, redirect, () -> {
       requireChange(runId, proposalId);
       changes.approve(proposalId, principal.getName());
     }, "Change proposal approved.");
@@ -316,7 +328,7 @@ public class ChatController {
       @PathVariable UUID proposalId,
       Principal principal,
       RedirectAttributes redirect) {
-    return operation(runId, redirect, () -> {
+    return operation(runId, principal, redirect, () -> {
       requireChange(runId, proposalId);
       changes.reject(proposalId, principal.getName());
     }, "Change proposal rejected.");
@@ -326,8 +338,9 @@ public class ChatController {
   String applyChange(
       @PathVariable UUID runId,
       @PathVariable UUID proposalId,
+      Principal principal,
       RedirectAttributes redirect) {
-    return operation(runId, redirect, () -> {
+    return operation(runId, principal, redirect, () -> {
       requireChange(runId, proposalId);
       changes.apply(proposalId);
     }, "Approved change applied.");
@@ -339,7 +352,7 @@ public class ChatController {
       @PathVariable UUID testRunId,
       Principal principal,
       RedirectAttributes redirect) {
-    return operation(runId, redirect, () -> {
+    return operation(runId, principal, redirect, () -> {
       requireTestRun(runId, testRunId);
       testRuns.approve(testRunId, principal.getName());
     }, "Test run approved.");
@@ -351,7 +364,7 @@ public class ChatController {
       @PathVariable UUID testRunId,
       Principal principal,
       RedirectAttributes redirect) {
-    return operation(runId, redirect, () -> {
+    return operation(runId, principal, redirect, () -> {
       requireTestRun(runId, testRunId);
       testRuns.reject(testRunId, principal.getName());
     }, "Test run rejected.");
@@ -361,8 +374,9 @@ public class ChatController {
   String executeTest(
       @PathVariable UUID runId,
       @PathVariable UUID testRunId,
+      Principal principal,
       RedirectAttributes redirect) {
-    return operation(runId, redirect, () -> {
+    return operation(runId, principal, redirect, () -> {
       requireTestRun(runId, testRunId);
       testRuns.execute(testRunId);
     }, "Approved test run executed.");
@@ -390,9 +404,11 @@ public class ChatController {
   }
 
   private String operation(
-      UUID runId, RedirectAttributes redirect, Runnable action, String successMessage) {
+      UUID runId, Principal principal, RedirectAttributes redirect,
+      Runnable action, String successMessage) {
     UUID chatId = runs.get(runId).chatId();
     try {
+      runs.chat(chatId, actor(principal).getId());
       action.run();
       queue.approvalsChanged(chatId);
       redirect.addFlashAttribute("chatMessage", successMessage);

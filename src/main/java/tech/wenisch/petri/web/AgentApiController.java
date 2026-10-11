@@ -25,6 +25,7 @@ import tech.wenisch.petri.agent.tool.ToolExecutionContext;
 import tech.wenisch.petri.agent.tool.ToolExecutionResult;
 import tech.wenisch.petri.apikey.ApiKeyPrincipal;
 import tech.wenisch.petri.workspace.WorktreeLocator;
+import tech.wenisch.petri.project.ProjectAccessService;
 
 @RestController
 @RequestMapping("/api/v1/agent")
@@ -33,16 +34,19 @@ public class AgentApiController {
   private final WorktreeLocator worktrees;
   private final AgentRunEventService events;
   private final AgentRunEventStream eventStream;
+  private final ProjectAccessService access;
 
   public AgentApiController(
       AgentToolRegistry tools,
       WorktreeLocator worktrees,
       AgentRunEventService events,
-      AgentRunEventStream eventStream) {
+      AgentRunEventStream eventStream,
+      ProjectAccessService access) {
     this.tools = tools;
     this.worktrees = worktrees;
     this.events = events;
     this.eventStream = eventStream;
+    this.access = access;
   }
 
   @GetMapping("/tools")
@@ -61,6 +65,7 @@ public class AgentApiController {
       return problem(HttpStatus.BAD_REQUEST, "Invalid tool name");
     }
     try {
+      access.requireWorktree(worktreeId, principal(authentication).createdBy());
       worktrees.requireActiveWorktree(worktreeId);
     } catch (IllegalArgumentException exception) {
       return problem(HttpStatus.BAD_REQUEST, exception.getMessage());
@@ -97,7 +102,9 @@ public class AgentApiController {
   }
 
   @GetMapping("/worktrees/{worktreeId}/events")
-  public List<AgentRunEventView> events(@PathVariable UUID worktreeId) {
+  public List<AgentRunEventView> events(
+      @PathVariable UUID worktreeId, Authentication authentication) {
+    access.requireWorktree(worktreeId, principal(authentication).createdBy());
     worktrees.requireActiveWorktree(worktreeId);
     return events.recent(worktreeId);
   }
@@ -105,7 +112,8 @@ public class AgentApiController {
   @GetMapping(
       value = "/worktrees/{worktreeId}/events/stream",
       produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-  public SseEmitter stream(@PathVariable UUID worktreeId) {
+  public SseEmitter stream(@PathVariable UUID worktreeId, Authentication authentication) {
+    access.requireWorktree(worktreeId, principal(authentication).createdBy());
     worktrees.requireActiveWorktree(worktreeId);
     return eventStream.subscribe(worktreeId);
   }
@@ -115,6 +123,11 @@ public class AgentApiController {
       return "api-key:" + principal.id();
     }
     return authentication.getName();
+  }
+
+  private static ApiKeyPrincipal principal(Authentication authentication) {
+    if (authentication.getPrincipal() instanceof ApiKeyPrincipal principal) return principal;
+    throw new IllegalStateException("API key authentication is required");
   }
 
   private static String safeToolName(String toolName) {
