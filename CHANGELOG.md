@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.2.0 - 2026-10-11
+
+## [0.2.0](https://github.com/wenisch-tech/Petri/compare/v0.1.0...v0.2.0) (2026-10-11)
+
+
+### Features
+
+* improved terminal run commands and anyuid with custom landlock ([83edbb7](https://github.com/wenisch-tech/Petri/commit/83edbb70d15ffd8d742dc739df53637605005343))
+* switched to alpine based image and ensured agent activities wait for approval ([1972857](https://github.com/wenisch-tech/Petri/commit/1972857c9090d367278246987aa76e4d97f27022))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.2.0
+
+
 ## v0.1.0 - 2026-10-11
 
 ## 0.1.0 (2026-10-11)

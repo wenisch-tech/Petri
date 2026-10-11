@@ -19,6 +19,9 @@
                 "PETRI_ADMIN_EMAIL": {
                     "type": "string"
                 },
+                "PETRI_TESTS_EXECUTOR": {
+                    "type": "string"
+                },
                 "SERVER_FORWARD_HEADERS_STRATEGY": {
                     "type": "string"
                 },
