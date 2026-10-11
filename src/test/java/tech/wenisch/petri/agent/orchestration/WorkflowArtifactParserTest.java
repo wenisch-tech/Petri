@@ -42,4 +42,43 @@ class WorkflowArtifactParserTest {
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("options");
   }
+
+  @Test
+  void extractsACompleteObjectFromFencesAndModelCommentary() {
+    var fenced = parser.parse(AgentWorkflowStage.ORCHESTRATOR_PLAN_REVIEW, """
+        I checked the evidence. Here is the result:
+        ```json
+        {"decision":"PASS","reason":"Plan is complete","feedback":[],"warnings":[],"hardBlock":false}
+        ```
+        """);
+
+    assertThat(fenced.kind()).isEqualTo(WorkflowArtifactKind.PLAN_VERDICT);
+    assertThat(fenced.json()).isEqualTo(
+        "{\"decision\":\"PASS\",\"reason\":\"Plan is complete\",\"feedback\":[],"
+            + "\"warnings\":[],\"hardBlock\":false}");
+  }
+
+  @Test
+  void ignoresBracesInsideJsonStringsWhenExtracting() {
+    var report = parser.parse(AgentWorkflowStage.IMPLEMENTING,
+        "Result: {\"summary\":\"Handled {nested} text\",\"changedPaths\":[]} done");
+
+    assertThat(report.value().path("summary").asText()).isEqualTo("Handled {nested} text");
+  }
+
+  @Test
+  void acceptsPlanWarningsButRequiresHardBlocksToBeExplicit() {
+    var warning = parser.parse(AgentWorkflowStage.ORCHESTRATOR_PLAN_REVIEW, """
+        {"decision":"PASS_WITH_WARNINGS","reason":"Defaults need confirmation",\
+        "feedback":[],"warnings":["Java version is a default"],"hardBlock":false}
+        """);
+
+    assertThat(warning.value().path("decision").asText()).isEqualTo("PASS_WITH_WARNINGS");
+    assertThatThrownBy(() -> parser.parse(AgentWorkflowStage.ORCHESTRATOR_PLAN_REVIEW, """
+        {"decision":"HOLD","reason":"Unverified assumption","feedback":[],"warnings":[],\
+        "hardBlock":false}
+        """))
+        .isInstanceOf(IllegalArgumentException.class)
+        .hasMessageContaining("HOLD");
+  }
 }

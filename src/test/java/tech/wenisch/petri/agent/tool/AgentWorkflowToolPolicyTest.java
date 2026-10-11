@@ -7,8 +7,10 @@ import tech.wenisch.petri.agent.orchestration.AgentWorkflowRole;
 
 class AgentWorkflowToolPolicyTest {
   @Test
-  void orchestratorHasNoToolsAndReadOnlyRolesCannotMutate() {
-    assertThat(AgentWorkflowToolPolicy.allowed(AgentWorkflowRole.ORCHESTRATOR)).isEmpty();
+  void qualityRolesCanInspectButCannotMutate() {
+    assertThat(AgentWorkflowToolPolicy.allowed(AgentWorkflowRole.ORCHESTRATOR))
+        .contains("list_files", "read_file", "search_files", "show_diff")
+        .doesNotContain("create_patch", "create_file", "run_tests");
     assertThat(AgentWorkflowToolPolicy.allowed(AgentWorkflowRole.PLANNER))
         .contains("read_file", "search_files", "load_skill")
         .doesNotContain("create_patch", "create_file", "run_tests");

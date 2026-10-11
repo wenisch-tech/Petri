@@ -722,9 +722,17 @@ function applyGitStatus(state, status) {
   for (const value of values) if (!state.changes.has(value.path) || value.status === 'CONFLICT') state.changes.set(value.path, value);
   const count = state.root.querySelector('[data-change-count]');
   if (count) count.textContent = state.changes.size;
+  const lineChanges = [...(status.staged || []), ...(status.unstaged || []), ...(status.untracked || [])];
+  const additions = lineChanges.reduce((total, value) => total + finiteCount(value.additions), 0);
+  const deletions = lineChanges.reduce((total, value) => total + finiteCount(value.deletions), 0);
+  const added = state.root.querySelector('[data-change-additions]');
+  const deleted = state.root.querySelector('[data-change-deletions]');
+  if (added) { added.textContent = `+${additions}`; added.title = `${additions} added line${additions === 1 ? '' : 's'}`; }
+  if (deleted) { deleted.textContent = `−${deletions}`; deleted.title = `${deletions} removed line${deletions === 1 ? '' : 's'}`; }
   renderGitIndicators(state, status);
   if (state.mode === 'changes' && state.tree) renderChanges(state);
 }
+function finiteCount(value) { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : 0; }
 function renderChanges(state) {
   state.tree.replaceChildren();
   const status = state.gitStatus;
@@ -938,6 +946,7 @@ function renderSnapshot(state, data, preservePosition = false) {
   if (!data) {
     if (empty) { timeline.append(empty); empty.hidden = false; }
     chat.querySelector('[data-review-tray]').hidden = true;
+    renderActiveWorkflowPanel(null, timeline);
     chat.querySelector('[data-chat-mode]').disabled = false;
     return;
   }
@@ -949,13 +958,19 @@ function renderSnapshot(state, data, preservePosition = false) {
   chat.querySelector('[data-auto-tests]').checked = data.chat.autoApproveTests;
   chat.querySelector('[data-automation-menu]').hidden = !direct;
   if (!direct) chat.querySelector('[data-automation-panel]').hidden = true;
-  const activeWorkflow = (data.workflows || []).some(value => value.status === 'RUNNING' || value.status === 'PENDING');
-  chat.querySelector('[data-chat-status]').textContent = activeWorkflow || data.chat.active
-    ? 'Petri is working…' : data.chat.queuePaused ? 'Queue paused' : 'Ready';
+  const workingWorkflow = (data.workflows || []).some(value =>
+    ['RUNNING', 'PENDING', 'CANCELLING'].includes(value.status));
+  const waitingWorkflow = (data.workflows || []).some(value => value.status === 'WAITING_FOR_USER');
+  chat.querySelector('[data-chat-status]').textContent = waitingWorkflow
+    ? 'Workflow needs your input' : workingWorkflow || data.chat.active
+      ? 'Petri is working…' : data.chat.queuePaused ? 'Queue paused' : 'Ready';
   const entries = [
     ...(data.runs || []).map(value => ({ index: value.run.chatMessageIndex, kind: 'run', value })),
     ...(data.workflows || []).map(value => ({ index: value.chatMessageIndex, kind: 'workflow', value }))
   ].sort((a, b) => a.index - b.index);
+  const pinnedWorkflow = [...(data.workflows || [])].reverse().find(value =>
+    ['RUNNING', 'PENDING', 'WAITING_FOR_USER', 'HUMAN_HOLD', 'CANCELLING'].includes(value.status));
+  renderActiveWorkflowPanel(pinnedWorkflow, timeline);
   for (const entry of entries) {
     if (entry.kind === 'run') renderRun(state, entry.value, timeline);
     else renderWorkflow(state, entry.value, timeline);
@@ -979,19 +994,21 @@ function renderWorkflow(state, workflow, timeline) {
   user.append(el('div', 'workspace-message-meta', `Task ${workflow.chatMessageIndex + 1} · gated workflow`));
   timeline.append(user);
   const card = el('article', 'workspace-workflow');
+  card.dataset.workflowCard = workflow.id;
   const header = el('header', 'workspace-workflow-header');
   const title = el('div');
   title.append(renderIcon('Workflow'), el('strong', '', workflowLabel(workflow.currentStage)));
   header.append(title, el('span', `workspace-workflow-status is-${workflow.status.toLowerCase()}`, workflow.status.replaceAll('_', ' ')));
-  card.append(header, workflowStageRail(workflow));
+  card.append(header);
 
   const artifacts = workflow.artifacts || [];
   const questions = latestArtifact(artifacts, 'QUESTIONS');
   const plan = latestArtifact(artifacts, 'PLAN');
+  const planVerdict = latestArtifact(artifacts, 'PLAN_VERDICT');
   const taskDiff = latestArtifact(artifacts, 'TASK_DIFF');
   const review = latestArtifact(artifacts, 'REVIEW');
   if (workflow.currentStage === 'WAITING_FOR_CLARIFICATION' && questions) card.append(questionForm(state, workflow, questions));
-  if (plan) card.append(planPanel(state, workflow, plan));
+  if (plan) card.append(planPanel(state, workflow, plan, planVerdict));
   if (taskDiff) card.append(diffArtifactPanel(taskDiff));
   if (review) card.append(reviewPanel(review));
   if (workflow.holdReason) card.append(el('div', 'workspace-workflow-hold', workflow.holdReason));
@@ -1005,6 +1022,112 @@ function renderWorkflow(state, workflow, timeline) {
   card.append(workflowControls(state, workflow));
   timeline.append(card);
 }
+
+function workflowPin(workflow, timeline) {
+  const pin = el('aside', 'workspace-workflow-pin');
+  const heading = el('div', 'workspace-workflow-pin-heading');
+  const title = el('div');
+  title.append(renderIcon('Workflow'));
+  const copy = el('span');
+  copy.append(el('small', '', workflow.status === 'WAITING_FOR_USER' ? 'Action required' : 'Active workflow'));
+  copy.append(el('strong', '', workflowLabel(workflow.currentStage)));
+  title.append(copy);
+  const status = el('span', `workspace-workflow-status is-${workflow.status.toLowerCase()}`,
+    workflow.status.replaceAll('_', ' '));
+  heading.append(title, status);
+  pin.append(heading, workflowStageRail(workflow), workflowActivity(workflow));
+  pin.addEventListener('click', () => {
+    const card = timeline.querySelector(`[data-workflow-card="${workflow.id}"]`);
+    card?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  });
+  pin.title = 'Open the active workflow details';
+  return pin;
+}
+
+function renderActiveWorkflowPanel(workflow, timeline) {
+  const panel = document.querySelector('[data-active-workflow-panel]');
+  if (!panel) return;
+  panel.replaceChildren();
+  if (workflow) { panel.append(workflowPin(workflow, timeline)); return; }
+  const empty = el('div', 'workspace-workflow-top-empty');
+  const copy = el('span');
+  copy.append(el('small', '', 'Workflow'), el('strong', '', 'No active workflow'));
+  empty.append(renderIcon('Workflow'), copy);
+  panel.append(empty);
+}
+
+const workflowToolPresentation = {
+  list_files: ['Folder', 'Listing files'],
+  read_file: ['Eye', 'Reading file'],
+  search_files: ['Search', 'Searching files'],
+  show_diff: ['FileDiff', 'Inspecting proposal diff'],
+  create_patch: ['FileDiff', 'Preparing file change'],
+  create_file: ['FilePlus2', 'Preparing new file'],
+  run_tests: ['Play', 'Preparing test run'],
+  list_skills: ['List', 'Listing skills'],
+  load_skill: ['BookOpen', 'Loading skill']
+};
+
+function workflowActivity(workflow) {
+  const activity = el('div', 'workspace-workflow-activity');
+  const actions = workflowToolActivities(workflow.stageRuns || []).slice(-4);
+  if (!actions.length) {
+    const waiting = workflow.status === 'WAITING_FOR_USER' || workflow.status === 'HUMAN_HOLD';
+    const latestRun = (workflow.stageRuns || []).at(-1);
+    const message = waiting ? 'Waiting for your input' : latestRun
+      ? `${roleLabel(latestRun.workflowRole)} is working…` : 'Preparing the next stage…';
+    const empty = el('span', 'workspace-workflow-activity-empty');
+    empty.append(renderIcon(waiting ? 'CircleAlert' : 'LoaderCircle'), el('span', '', message));
+    activity.append(empty);
+    return activity;
+  }
+  for (const action of actions) activity.append(workflowActivityItem(action));
+  return activity;
+}
+
+function workflowToolActivities(runs) {
+  const activities = [];
+  for (const run of runs) {
+    const turns = run.turns || [];
+    const results = new Map(turns.filter(turn => turn.kind === 'TOOL_RESULT').map(turn => [turn.toolCallId, turn]));
+    for (const turn of turns.filter(value => value.kind === 'TOOL_CALL')) {
+      const result = results.get(turn.toolCallId);
+      let state = result ? 'completed' : ['FAILED', 'CANCELLED', 'BUDGET_EXHAUSTED'].includes(run.status) ? 'interrupted' : 'running';
+      if (result && parsedObject(result.content).error) state = 'failed';
+      const [icon, label] = workflowToolPresentation[turn.toolName] || ['Wrench', humanizeToolName(turn.toolName)];
+      activities.push({ icon, label, detail: workflowToolDetail(turn), state, role: roleLabel(run.workflowRole), createdAt: turn.createdAt, index: turn.index });
+    }
+  }
+  return activities.sort((left, right) => String(left.createdAt || '').localeCompare(String(right.createdAt || '')) || left.index - right.index);
+}
+
+function workflowActivityItem(action) {
+  const item = el('span', 'workspace-workflow-activity-item');
+  item.title = `${action.role} · ${action.label}${action.detail ? ` · ${action.detail}` : ''} · ${action.state}`;
+  item.append(renderIcon(action.icon));
+  item.append(el('span', '', action.detail ? `${action.label}: ${action.detail}` : action.label));
+  item.append(el('small', '', action.role));
+  item.append(el('i', `workspace-workflow-activity-state is-${action.state}`));
+  return item;
+}
+
+function workflowToolDetail(turn) {
+  const input = parsedObject(turn.content);
+  const path = stringValue(input.path);
+  if (turn.toolName === 'search_files') {
+    const query = stringValue(input.query);
+    return truncate([query ? `“${query}”` : '', path && path !== '.' ? `in ${path}` : ''].filter(Boolean).join(' '));
+  }
+  if (turn.toolName === 'load_skill') return truncate(stringValue(input.name));
+  if (turn.toolName === 'show_diff') return truncate(stringValue(input.proposalId));
+  return truncate(path && path !== '.' ? path : '');
+}
+
+function parsedObject(value) { try { const parsed = JSON.parse(value || '{}'); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; } }
+function stringValue(value) { return typeof value === 'string' ? value : ''; }
+function truncate(value, length = 72) { return value.length > length ? `${value.slice(0, length - 1)}…` : value; }
+function roleLabel(role) { return humanizeToolName(role || 'agent'); }
+function humanizeToolName(value) { return String(value || 'tool').replaceAll('_', ' ').toLowerCase().replace(/^./, letter => letter.toUpperCase()); }
 
 function workflowLabel(stage) {
   return workflowStages.find(value => value[0] === stage)?.[1]
@@ -1068,8 +1191,9 @@ function questionForm(state, workflow, artifact) {
   return form;
 }
 
-function planPanel(state, workflow, artifact) {
+function planPanel(state, workflow, artifact, verdictArtifact) {
   const plan = artifactJson(artifact);
+  const verdict = verdictArtifact ? artifactJson(verdictArtifact) : null;
   const panel = el('section', 'workspace-workflow-panel');
   panel.append(el('h3', '', plan.title || `Plan revision ${artifact.revision}`));
   if (plan.objective) panel.append(el('p', '', plan.objective));
@@ -1077,8 +1201,21 @@ function planPanel(state, workflow, artifact) {
   appendArtifactList(panel, 'Acceptance criteria', plan.acceptanceCriteria);
   appendArtifactList(panel, 'Risks', plan.risks);
   if (workflow.currentStage === 'WAITING_FOR_PLAN_APPROVAL' && workflow.currentPlanRevision === artifact.revision) {
+    if (verdict && verdict.decision === 'PASS_WITH_WARNINGS') {
+      const warning = el('section', 'workspace-plan-warning');
+      warning.append(renderIcon('TriangleAlert'), el('strong', '', 'Review before approving'));
+      if (verdict.reason) warning.append(el('p', '', verdict.reason));
+      const messages = [...(verdict.warnings || []), ...(verdict.feedback || [])];
+      if (messages.length) {
+        const list = el('ul');
+        for (const message of messages) list.append(el('li', '', message));
+        warning.append(list);
+      }
+      panel.append(warning);
+    }
     const actions = el('div', 'workspace-workflow-actions');
-    const approve = el('button', 'btn-primary !min-h-8 !px-3 text-xs', 'Approve plan'); approve.type = 'button';
+    const approve = el('button', 'btn-primary !min-h-8 !px-3 text-xs',
+      verdict?.decision === 'PASS_WITH_WARNINGS' ? 'Approve despite warnings' : 'Approve plan'); approve.type = 'button';
     approve.addEventListener('click', () => workflowAction(state, approve, workflow.id, 'plan/approve', { revision: artifact.revision }));
     const feedback = el('textarea', 'field'); feedback.rows = 2; feedback.placeholder = 'What should the planner revise?';
     const revise = el('button', 'btn-secondary !min-h-8 !px-3 text-xs', 'Request revision'); revise.type = 'button';
@@ -1117,6 +1254,12 @@ function reviewPanel(artifact) {
 function workflowRun(run) {
   const item = el('details', 'workspace-workflow-run');
   item.append(el('summary', '', `${workflowLabel(run.workflowPhase)} · ${run.workflowRole} · attempt ${run.workflowAttempt} · ${run.status}`));
+  const actions = workflowToolActivities([run]);
+  if (actions.length) {
+    const list = el('div', 'workspace-workflow-run-actions');
+    for (const action of actions) list.append(workflowActivityItem(action));
+    item.append(list);
+  }
   if (run.finalOutput) item.append(el('pre', '', run.finalOutput));
   else if (run.errorMessage) item.append(el('pre', '', run.errorMessage));
   if (run.partialOutput) { const partial = el('pre', '', run.partialOutput); partial.dataset.runOutput = run.id; partial.dataset.raw = run.partialOutput; item.append(partial); }

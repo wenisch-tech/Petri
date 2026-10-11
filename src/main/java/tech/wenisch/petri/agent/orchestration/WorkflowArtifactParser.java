@@ -1,6 +1,7 @@
 package tech.wenisch.petri.agent.orchestration;
 
-import java.util.Iterator;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import org.springframework.stereotype.Component;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -12,25 +13,39 @@ class WorkflowArtifactParser {
   WorkflowArtifactParser(ObjectMapper mapper) { this.mapper = mapper; }
 
   Parsed parse(AgentWorkflowStage phase, String output) {
-    JsonNode root;
-    String json = stripFence(output);
-    try {
-      root = mapper.readTree(json);
-    } catch (JacksonException exception) {
-      throw new IllegalArgumentException("Agent did not return valid JSON", exception);
+    if (output == null || output.isBlank()) {
+      throw new IllegalArgumentException("Model returned no structured workflow response");
     }
-    if (root == null || !root.isObject()) throw new IllegalArgumentException("Agent response must be a JSON object");
-    WorkflowArtifactKind kind = switch (phase) {
+    IllegalArgumentException validationFailure = null;
+    for (String candidate : jsonCandidates(output)) {
+      try {
+        JsonNode root = mapper.readTree(candidate);
+        if (root == null || !root.isObject()) continue;
+        WorkflowArtifactKind kind = validate(phase, root);
+        String canonical = mapper.writeValueAsString(root);
+        return new Parsed(kind, canonical, markdown(kind, root), root);
+      } catch (JacksonException ignored) {
+        // Local models occasionally surround the JSON with prose. Try the next balanced object.
+      } catch (IllegalArgumentException exception) {
+        validationFailure = exception;
+      }
+    }
+    if (validationFailure != null) throw validationFailure;
+    throw new IllegalArgumentException(
+        "Model response did not contain one complete JSON object; Petri will retry the stage");
+  }
+
+  private WorkflowArtifactKind validate(AgentWorkflowStage phase, JsonNode root) {
+    return switch (phase) {
       case ORCHESTRATOR_INTAKE -> validateBrief(root);
       case PLANNING -> validatePlanner(root);
-      case ORCHESTRATOR_PLAN_REVIEW -> validateVerdict(root, WorkflowArtifactKind.PLAN_VERDICT);
+      case ORCHESTRATOR_PLAN_REVIEW -> validatePlanVerdict(root);
       case IMPLEMENTING -> validateImplementation(root);
       case ORCHESTRATOR_IMPLEMENTATION_REVIEW -> validateVerdict(root, WorkflowArtifactKind.IMPLEMENTATION_VERDICT);
       case REVIEWING -> validateReview(root);
       case ORCHESTRATOR_FINAL_REVIEW -> validateVerdict(root, WorkflowArtifactKind.FINAL_VERDICT);
       default -> throw new IllegalArgumentException("Stage does not produce a model artifact");
     };
-    return new Parsed(kind, json, markdown(kind, root), root);
   }
 
   private WorkflowArtifactKind validateBrief(JsonNode root) {
@@ -65,6 +80,30 @@ class WorkflowArtifactParser {
     }
     text(root, "reason");
     return kind;
+  }
+
+  private WorkflowArtifactKind validatePlanVerdict(JsonNode root) {
+    String decision = text(root, "decision");
+    if (!java.util.Set.of("PASS", "PASS_WITH_WARNINGS", "REVISION_REQUIRED", "HOLD")
+        .contains(decision)) {
+      throw new IllegalArgumentException(
+          "Plan gate decision must be PASS, PASS_WITH_WARNINGS, REVISION_REQUIRED, or HOLD");
+    }
+    text(root, "reason");
+    array(root, "feedback", 0, 100);
+    JsonNode warnings = array(root, "warnings", 0, 100);
+    JsonNode hardBlockNode = root.get("hardBlock");
+    if (hardBlockNode == null || !hardBlockNode.isBoolean()) {
+      throw new IllegalArgumentException("Plan gate hardBlock must be true or false");
+    }
+    boolean hardBlock = hardBlockNode.asBoolean();
+    if ("HOLD".equals(decision) != hardBlock) {
+      throw new IllegalArgumentException("Only HOLD may set hardBlock=true, and HOLD requires it");
+    }
+    if ("PASS_WITH_WARNINGS".equals(decision) && warnings.isEmpty()) {
+      throw new IllegalArgumentException("PASS_WITH_WARNINGS requires at least one warning");
+    }
+    return WorkflowArtifactKind.PLAN_VERDICT;
   }
 
   private WorkflowArtifactKind validateImplementation(JsonNode root) {
@@ -108,15 +147,32 @@ class WorkflowArtifactParser {
     return value;
   }
 
-  private static String stripFence(String value) {
-    if (value == null || value.isBlank()) throw new IllegalArgumentException("Agent returned no output");
-    String result = value.strip();
-    if (result.startsWith("```")) {
-      int newline = result.indexOf('\n');
-      int end = result.lastIndexOf("```");
-      if (newline > 0 && end > newline) result = result.substring(newline + 1, end).strip();
+  private static Set<String> jsonCandidates(String value) {
+    String input = value.replace("\uFEFF", "").strip();
+    Set<String> candidates = new LinkedHashSet<>();
+    candidates.add(input);
+    int depth = 0;
+    int start = -1;
+    boolean quoted = false;
+    boolean escaped = false;
+    for (int index = 0; index < input.length(); index++) {
+      char current = input.charAt(index);
+      if (quoted) {
+        if (escaped) escaped = false;
+        else if (current == '\\') escaped = true;
+        else if (current == '"') quoted = false;
+        continue;
+      }
+      if (current == '"') {
+        quoted = true;
+      } else if (current == '{') {
+        if (depth++ == 0) start = index;
+      } else if (current == '}' && depth > 0 && --depth == 0 && start >= 0) {
+        candidates.add(input.substring(start, index + 1));
+        start = -1;
+      }
     }
-    return result;
+    return candidates;
   }
 
   record Parsed(WorkflowArtifactKind kind, String json, String markdown, JsonNode value) {}

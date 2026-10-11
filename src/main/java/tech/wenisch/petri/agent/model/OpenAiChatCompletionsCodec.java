@@ -28,6 +28,9 @@ final class OpenAiChatCompletionsCodec {
     if (includeReasoningEffort && request.reasoningEffort() != null) {
       body.put("reasoning_effort", request.reasoningEffort().apiValue());
     }
+    if (request.jsonObjectOutput()) {
+      body.putObject("response_format").put("type", "json_object");
+    }
     ArrayNode messages = body.putArray("messages");
     messages.addObject().put("role", "system").put("content", request.instructions());
     if (request.conversation().isEmpty()) {

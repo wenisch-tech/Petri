@@ -32,7 +32,8 @@
   </header>
 
   <section class="workspace-gitbar" data-git-bar>
-    <div class="workspace-gitbar-primary">
+    <div class="workspace-git-pane">
+      <div class="workspace-gitbar-primary">
       <div class="workspace-gitbar-group">
         <i data-lucide="GitBranch"></i>
         <select class="workspace-select workspace-branch-select" data-branch-selector aria-label="Active branch">
@@ -68,8 +69,8 @@
         <span class="workspace-rebase-badge" data-git-rebase
               th:hidden="${gitStatus == null || gitStatus.operation.name() != 'REBASE_IN_PROGRESS'}">Rebase in progress</span>
       </div>
-    </div>
-    <div class="workspace-gitbar-secondary">
+      </div>
+      <div class="workspace-gitbar-secondary">
       <div class="workspace-git-actions">
         <button class="workspace-git-button" type="button" data-git-fetch><i data-lucide="CloudDownload"></i><span>Fetch</span></button>
         <button class="workspace-git-button" type="button" data-git-pull th:disabled="${selectedWorktree == null || selectedWorktree.detached}"><i data-lucide="GitPullRequestArrow"></i><span>Pull</span></button>
@@ -83,13 +84,17 @@
         <button class="btn-primary !min-h-8 !px-3 text-xs" type="button" data-git-rebase-continue>Continue</button>
         <button class="btn-secondary !min-h-8 !px-3 text-xs" type="button" data-git-rebase-abort>Abort</button>
       </div>
+      </div>
+      <div class="workspace-git-menu" data-git-menu hidden>
+        <button type="button" data-git-force-push th:disabled="${selectedWorktree == null || selectedWorktree.detached || (providerSource != null && providerSource.credentialMode.name() == 'CONNECTION' && !providerSource.canWrite)}"><i data-lucide="CloudUpload"></i>Force with lease…</button>
+        <button type="button" data-git-delete-branch th:disabled="${selectedWorktree == null || selectedWorktree.detached}"><i data-lucide="Trash2"></i>Delete branch…</button>
+        <button type="button" data-git-delete-remote th:disabled="${providerSource != null && providerSource.credentialMode.name() == 'CONNECTION' && !providerSource.canWrite}"><i data-lucide="Trash2"></i>Delete remote branch…</button>
+      </div>
+      <details class="workspace-git-output" data-git-output hidden><summary>Git details</summary><pre data-git-output-text></pre></details>
     </div>
-    <div class="workspace-git-menu" data-git-menu hidden>
-      <button type="button" data-git-force-push th:disabled="${selectedWorktree == null || selectedWorktree.detached || (providerSource != null && providerSource.credentialMode.name() == 'CONNECTION' && !providerSource.canWrite)}"><i data-lucide="CloudUpload"></i>Force with lease…</button>
-      <button type="button" data-git-delete-branch th:disabled="${selectedWorktree == null || selectedWorktree.detached}"><i data-lucide="Trash2"></i>Delete branch…</button>
-      <button type="button" data-git-delete-remote th:disabled="${providerSource != null && providerSource.credentialMode.name() == 'CONNECTION' && !providerSource.canWrite}"><i data-lucide="Trash2"></i>Delete remote branch…</button>
-    </div>
-    <details class="workspace-git-output" data-git-output hidden><summary>Git details</summary><pre data-git-output-text></pre></details>
+    <aside class="workspace-workflow-top" data-active-workflow-panel aria-live="polite">
+      <div class="workspace-workflow-top-empty"><i data-lucide="Workflow"></i><span><small>Workflow</small><strong>No active workflow</strong></span></div>
+    </aside>
   </section>
 
   <main class="workspace-shell" data-workspace
@@ -98,7 +103,7 @@
       <div class="workspace-panel-header">
         <div class="workspace-switcher">
           <button type="button" data-explorer-mode="files" class="is-active">Files</button>
-          <button type="button" data-explorer-mode="changes">Changes <span class="workspace-count" data-change-count>0</span></button>
+          <button type="button" data-explorer-mode="changes">Changes <span class="workspace-count" data-change-count>0</span><span class="workspace-change-total is-added" data-change-additions>+0</span><span class="workspace-change-total is-deleted" data-change-deletions>−0</span></button>
         </div>
         <div class="flex gap-1">
           <button class="icon-button" type="button" data-refresh-explorer title="Refresh files" aria-label="Refresh files"><i data-lucide="RefreshCw"></i></button>
@@ -133,20 +138,6 @@
         <div class="flex min-w-0 items-center gap-2"><i data-lucide="MessageSquare"></i><select class="workspace-chat-selector" data-chat-selector><option value="" data-mode="ORCHESTRATED">New chat</option><option th:each="item : ${chats}" th:value="${item.id}" th:selected="${selectedChat != null && item.id == selectedChat.id}" th:text="${item.title}" th:attr="data-mode=${item.executionMode}">Chat</option></select></div>
         <button class="icon-button" type="button" data-new-chat title="New chat" aria-label="New chat"><i data-lucide="Plus"></i></button>
       </div>
-      <div class="workspace-chat-tools">
-        <select class="workspace-mode-selector" data-chat-mode aria-label="Agent mode" title="Agent mode">
-          <option value="ORCHESTRATED">Workflow</option><option value="DIRECT">Direct</option>
-        </select>
-        <select class="workspace-model-selector" data-model-selector th:disabled="${!modelConfigured}" aria-label="Workspace model">
-          <option th:each="item : ${configuredModels}" th:value="${item.provider}" th:selected="${item.provider == selectedModelCredential.provider}"
-                  th:attr="data-model=${item.model},data-tokens=${item.maxOutputTokens},data-context=${item.contextWindowTokens},data-reasoning=${item.reasoningEffort},data-verbosity=${item.textVerbosity}"
-                  th:text="|${item.provider.displayName()} · ${item.model}|">Model</option>
-        </select>
-        <span class="workspace-model-unavailable" data-model-unavailable th:hidden="${!savedModelUnavailable}">Saved model unavailable</span>
-        <button class="icon-button" type="button" data-orchestration-settings title="Configure workflow roles" aria-label="Configure workflow roles"><i data-lucide="Workflow"></i></button>
-        <button class="icon-button" type="button" data-automation-menu title="Automation" aria-label="Automation"><i data-lucide="Settings2"></i></button>
-      </div>
-      <div class="workspace-automation" data-automation-panel hidden><label><input type="checkbox" data-auto-changes> Auto-apply file changes</label><label><input type="checkbox" data-auto-tests> Auto-run approved tests</label></div>
       <div class="workspace-review-tray" data-review-tray hidden><div><i data-lucide="CircleAlert"></i><span data-review-count>0 reviews waiting</span></div><div data-review-items></div></div>
       <div class="workspace-chat-timeline" data-chat-scroll>
         <div th:if="${selectedChat == null}" class="workspace-chat-empty" data-chat-empty><i data-lucide="MessageSquare" data-icon-size="28"></i><p>Start a durable coding chat for this worktree.</p></div>
@@ -160,7 +151,21 @@
         </th:block>
       </div>
       <button class="workspace-new-response" data-new-response hidden>New response ↓</button>
+      <div class="workspace-automation" data-automation-panel hidden><label><input type="checkbox" data-auto-changes> Auto-apply file changes</label><label><input type="checkbox" data-auto-tests> Auto-run approved tests</label></div>
       <form class="workspace-composer" data-chat-form><textarea class="field" data-chat-input required maxlength="200000" placeholder="Ask Petri to work in this project…" th:disabled="${!modelConfigured}"></textarea><div><span class="text-xs text-ink-500" data-chat-status>Ready</span><button class="btn-primary !min-h-9 !px-3" type="button" data-chat-send th:disabled="${!modelConfigured}" aria-label="Send message"><i data-lucide="Send"></i><span>Send</span></button></div></form>
+      <div class="workspace-chat-tools" aria-label="Chat configuration">
+        <label><span>Mode</span><select class="workspace-mode-selector" data-chat-mode aria-label="Agent mode" title="Agent mode">
+          <option value="ORCHESTRATED">Workflow</option><option value="DIRECT">Direct</option>
+        </select></label>
+        <label class="workspace-model-field"><span>Model</span><select class="workspace-model-selector" data-model-selector th:disabled="${!modelConfigured}" aria-label="Workspace model">
+          <option th:each="item : ${configuredModels}" th:value="${item.provider}" th:selected="${item.provider == selectedModelCredential.provider}"
+                  th:attr="data-model=${item.model},data-tokens=${item.maxOutputTokens},data-context=${item.contextWindowTokens},data-reasoning=${item.reasoningEffort},data-verbosity=${item.textVerbosity}"
+                  th:text="|${item.provider.displayName()} · ${item.model}|">Model</option>
+        </select></label>
+        <span class="workspace-model-unavailable" data-model-unavailable th:hidden="${!savedModelUnavailable}">Saved model unavailable</span>
+        <button class="icon-button" type="button" data-orchestration-settings title="Configure workflow roles" aria-label="Configure workflow roles"><i data-lucide="Workflow"></i></button>
+        <button class="icon-button" type="button" data-automation-menu title="Automation" aria-label="Automation"><i data-lucide="Settings2"></i></button>
+      </div>
     </aside>
 
     <dialog class="workspace-dialog" data-workspace-dialog><form method="dialog" data-dialog-form><h2 data-dialog-title>Workspace action</h2><p data-dialog-description></p><label data-dialog-path-label>Path<input class="field" data-dialog-path required></label><label data-dialog-confirmation-label hidden>Type the exact path to confirm<input class="field" data-dialog-confirmation></label><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm" data-dialog-confirm>Continue</button></div></form></dialog>

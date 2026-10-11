@@ -115,4 +115,14 @@ class OpenAiChatCompletionsClientTest {
     assertThat(request.has("verbosity")).isFalse();
     assertThat(request.path("messages").get(1).path("content").asText()).isEqualTo("Hello");
   }
+
+  @Test
+  void encodesJsonObjectOutputForWorkflowStages() throws Exception {
+    OpenAiChatCompletionsCodec codec = new OpenAiChatCompletionsCodec(objectMapper, true);
+    JsonNode request = objectMapper.readTree(codec.encode(new ModelRequest(
+        "local-model", "Return JSON.", "Create the artifact", null, List.of(), List.of(),
+        512, null, null, List.of(), true)));
+
+    assertThat(request.path("response_format").path("type").asText()).isEqualTo("json_object");
+  }
 }

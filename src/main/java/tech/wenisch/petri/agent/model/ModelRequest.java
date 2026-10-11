@@ -13,7 +13,24 @@ public record ModelRequest(
     int maxOutputTokens,
     ReasoningEffort reasoningEffort,
     TextVerbosity textVerbosity,
-    List<ModelConversationMessage> conversation) {
+    List<ModelConversationMessage> conversation,
+    boolean jsonObjectOutput) {
+
+  public ModelRequest(
+      String model,
+      String instructions,
+      String prompt,
+      String previousResponseId,
+      List<ModelToolOutput> toolOutputs,
+      List<ToolDefinition> tools,
+      int maxOutputTokens,
+      ReasoningEffort reasoningEffort,
+      TextVerbosity textVerbosity,
+      List<ModelConversationMessage> conversation) {
+    this(
+        model, instructions, prompt, previousResponseId, toolOutputs, tools, maxOutputTokens,
+        reasoningEffort, textVerbosity, conversation, false);
+  }
 
   public ModelRequest(
       String model,
@@ -27,7 +44,7 @@ public record ModelRequest(
       TextVerbosity textVerbosity) {
     this(
         model, instructions, prompt, previousResponseId, toolOutputs, tools, maxOutputTokens,
-        reasoningEffort, textVerbosity, List.of());
+        reasoningEffort, textVerbosity, List.of(), false);
   }
 
   public ModelRequest(
@@ -48,7 +65,8 @@ public record ModelRequest(
         maxOutputTokens,
         null,
         null,
-        List.of());
+        List.of(),
+        false);
   }
 
   public ModelRequest {
@@ -70,5 +88,11 @@ public record ModelRequest(
     if (maxOutputTokens < 1) {
       throw new IllegalArgumentException("Maximum output tokens must be positive");
     }
+  }
+
+  public ModelRequest withJsonObjectOutput(boolean enabled) {
+    return new ModelRequest(
+        model, instructions, prompt, previousResponseId, toolOutputs, tools, maxOutputTokens,
+        reasoningEffort, textVerbosity, conversation, enabled);
   }
 }

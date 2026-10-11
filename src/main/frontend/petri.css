@@ -59,7 +59,8 @@
   .icon-button { @apply inline-grid size-8 place-items-center rounded-md text-ink-500 transition hover:bg-ink-800 hover:text-ink-100; }
   .workspace-body { @apply h-dvh overflow-hidden; }
   .workspace-topbar { @apply h-14; }
-  .workspace-gitbar { @apply relative flex h-20 min-w-0 flex-col items-stretch justify-center gap-1 border-b border-ink-700/70 bg-ink-900 px-3 py-1 text-xs text-ink-300; }
+  .workspace-gitbar { @apply relative grid h-28 min-w-0 grid-cols-2 border-b border-ink-700/70 bg-ink-900 text-xs text-ink-300; }
+  .workspace-git-pane { @apply relative flex min-w-0 flex-col justify-center gap-1 overflow-hidden border-r border-ink-700/70 px-3 py-2; }
   .workspace-gitbar-primary, .workspace-gitbar-secondary { @apply flex min-w-0 shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden; }
   .workspace-gitbar-group { @apply flex shrink-0 items-center gap-1.5; }
   .workspace-gitbar-group > svg { @apply size-4 text-ink-500; }
@@ -71,11 +72,11 @@
   .workspace-git-button { @apply inline-flex h-8 items-center gap-1.5 rounded-md px-2 text-xs font-medium text-ink-300 hover:bg-ink-800 hover:text-ink-100 disabled:cursor-not-allowed disabled:opacity-40; }
   .workspace-git-button svg { @apply size-4; }
   .workspace-git-new-branch { @apply shrink-0 border border-brand-500/30 bg-brand-500/10 text-brand-400 hover:border-brand-500/60 hover:bg-brand-500/20 hover:text-white; }
-  .workspace-git-menu { @apply absolute left-64 top-[4.5rem] z-40 min-w-52 rounded-lg border border-ink-700 bg-ink-900 p-1 shadow-2xl; }
+  .workspace-git-menu { @apply absolute left-64 top-[4.75rem] z-40 min-w-52 rounded-lg border border-ink-700 bg-ink-900 p-1 shadow-2xl; }
   .workspace-git-menu button { @apply flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs text-ink-300 hover:bg-ink-800 disabled:opacity-40; }
   .workspace-git-menu svg { @apply size-4; }
   .workspace-git-rebase-actions { @apply flex shrink-0 items-center gap-1; }
-  .workspace-git-output { @apply absolute left-3 right-3 top-[4.5rem] z-30 rounded-lg border border-red-400/30 bg-ink-950 p-3 text-red-200 shadow-2xl; }
+  .workspace-git-output { @apply absolute left-3 right-3 top-[4.75rem] z-30 rounded-lg border border-red-400/30 bg-ink-950 p-3 text-red-200 shadow-2xl; }
   .workspace-git-output summary { @apply cursor-pointer font-semibold; }
   .workspace-git-output pre { @apply mt-2 max-h-52 overflow-auto whitespace-pre-wrap text-xs; }
   .workspace-shell {
@@ -83,7 +84,7 @@
     --chat-width: 25rem;
     display: grid;
     grid-template-columns: var(--explorer-width) 5px minmax(0, 1fr) 5px var(--chat-width);
-    height: calc(100dvh - 8.5rem);
+    height: calc(100dvh - 10.5rem);
     min-height: 0;
   }
   .workspace-explorer, .workspace-chat { @apply min-h-0 bg-ink-900; }
@@ -111,6 +112,9 @@
   .workspace-switcher button { @apply rounded-md px-2 py-1.5 text-ink-500 hover:text-ink-100; }
   .workspace-switcher button.is-active { @apply bg-ink-800 text-ink-100; }
   .workspace-count { @apply ml-1 rounded-full bg-ink-700 px-1.5 py-0.5 text-[10px]; }
+  .workspace-change-total { @apply ml-1 font-mono text-[10px] font-semibold; }
+  .workspace-change-total.is-added { @apply text-good-500; }
+  .workspace-change-total.is-deleted { @apply text-red-300; }
   .workspace-loading, .workspace-empty, .workspace-error { @apply flex w-full items-center gap-2 rounded-lg px-3 py-3 text-left text-sm text-ink-500; }
   .workspace-error { @apply border border-red-400/30 bg-red-400/10 text-red-300; }
   .workspace-tree-name, .workspace-change-path { @apply min-w-0 flex-1 truncate; }
@@ -152,7 +156,10 @@
   .workspace-dirty-dot { @apply text-brand-400; }
   .workspace-chat-header { @apply flex min-h-12 items-center justify-between gap-2 border-b border-ink-700/70 px-3; }
   .workspace-chat-selector { @apply max-w-64 min-w-0 flex-1 bg-transparent; }
-  .workspace-chat-tools { @apply flex items-center gap-2 border-b border-ink-700/70 px-3 py-2; }
+  .workspace-chat-tools { @apply flex items-end gap-2 border-t border-ink-700/70 bg-ink-950/60 px-3 py-2; }
+  .workspace-chat-tools label { @apply grid min-w-0 gap-1 text-[9px] font-bold uppercase tracking-wider text-ink-500; }
+  .workspace-chat-tools label > span { @apply px-1; }
+  .workspace-model-field { @apply flex-1; }
   .workspace-model-selector { @apply min-w-0 flex-1; }
   .workspace-mode-selector { @apply w-24 shrink-0; }
   .workspace-model-unavailable { @apply text-[11px] text-amber-300; }
@@ -175,6 +182,31 @@
   .workspace-review-card strong { @apply min-w-0 flex-1 truncate; }
   .workspace-review-state { @apply rounded bg-ink-800 px-1.5 py-0.5 text-[10px] text-ink-500; }
   .workspace-workflow { @apply mb-4 overflow-hidden rounded-xl border border-brand-500/25 bg-ink-900 shadow-sm; }
+  .workspace-workflow-top { @apply min-w-0 overflow-hidden bg-ink-950/45 p-2; }
+  .workspace-workflow-top-empty { @apply flex h-full items-center justify-center gap-2 text-ink-500; }
+  .workspace-workflow-top-empty > svg { @apply size-5; }
+  .workspace-workflow-top-empty > span { @apply grid; }
+  .workspace-workflow-top-empty small { @apply text-[9px] font-bold uppercase tracking-wider; }
+  .workspace-workflow-top-empty strong { @apply text-xs font-medium text-ink-300; }
+  .workspace-workflow-pin { @apply flex h-full cursor-pointer flex-col overflow-hidden rounded-lg border border-brand-400/40 bg-ink-900/80 shadow-lg; }
+  .workspace-workflow-pin-heading { @apply flex items-center justify-between gap-3 px-3 py-1.5; }
+  .workspace-workflow-pin-heading > div { @apply flex min-w-0 items-center gap-2 text-ink-100; }
+  .workspace-workflow-pin-heading svg { @apply size-5 shrink-0 text-brand-400; }
+  .workspace-workflow-pin-heading span:not(.workspace-workflow-status) { @apply grid min-w-0; }
+  .workspace-workflow-pin-heading small { @apply text-[9px] font-bold uppercase tracking-wider text-brand-400; }
+  .workspace-workflow-pin-heading strong { @apply truncate text-sm; }
+  .workspace-workflow-pin .workspace-stage-rail { @apply bg-ink-950/50 px-2 py-1; }
+  .workspace-workflow-activity { @apply flex min-h-0 flex-1 items-center gap-1.5 overflow-x-auto border-t border-ink-700/60 px-2 py-1; }
+  .workspace-workflow-activity-empty { @apply flex items-center gap-1.5 px-1 text-[10px] text-ink-500; }
+  .workspace-workflow-activity-empty svg { @apply size-3.5; }
+  .workspace-workflow-activity-item { @apply flex min-w-0 shrink-0 items-center gap-1.5 rounded-md bg-ink-950/70 px-2 py-1 text-[10px] text-ink-300; }
+  .workspace-workflow-activity-item > svg { @apply size-3.5 shrink-0 text-brand-400; }
+  .workspace-workflow-activity-item > span { @apply max-w-44 truncate; }
+  .workspace-workflow-activity-item > small { @apply font-bold uppercase tracking-wide text-ink-500; }
+  .workspace-workflow-activity-state { @apply size-1.5 shrink-0 rounded-full bg-brand-400; }
+  .workspace-workflow-activity-state:not(.is-completed):not(.is-failed):not(.is-interrupted) { @apply animate-pulse; }
+  .workspace-workflow-activity-state.is-completed { @apply bg-good-500; }
+  .workspace-workflow-activity-state.is-failed, .workspace-workflow-activity-state.is-interrupted { @apply bg-red-300; }
   .workspace-workflow-header { @apply flex items-center justify-between gap-3 border-b border-ink-700/70 px-3 py-2.5; }
   .workspace-workflow-header > div { @apply flex min-w-0 items-center gap-2 text-sm text-ink-100; }
   .workspace-workflow-status { @apply rounded-full bg-ink-800 px-2 py-0.5 text-[10px] font-bold uppercase tracking-wide text-ink-500; }
@@ -198,10 +230,17 @@
   .workspace-question-form fieldset { @apply mb-3 space-y-2; }
   .workspace-question-form legend { @apply mb-1 font-medium text-ink-100; }
   .workspace-workflow-actions { @apply mt-3 grid gap-2 border-t border-ink-700/60 pt-3; }
+  .workspace-plan-warning { @apply mt-3 rounded-lg border border-amber-400/30 bg-amber-400/10 p-3 text-amber-100; }
+  .workspace-plan-warning > svg { @apply mr-2 inline size-4 align-text-bottom; }
+  .workspace-plan-warning > strong { @apply text-xs; }
+  .workspace-plan-warning p { @apply mt-2 text-xs text-amber-100/90; }
+  .workspace-plan-warning ul { @apply ml-5 mt-2 list-disc space-y-1 text-xs; }
   .workspace-workflow-hold { @apply mx-3 my-2 rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs text-red-200; }
   .workspace-workflow-runs { @apply mx-3 my-2 rounded-lg border border-ink-700/60 px-3 py-2 text-[11px] text-ink-500; }
   .workspace-workflow-runs > summary, .workspace-workflow-run > summary { @apply cursor-pointer; }
   .workspace-workflow-run { @apply border-t border-ink-700/50 py-2; }
+  .workspace-workflow-run-actions { @apply mt-2 flex flex-wrap gap-1.5; }
+  .workspace-workflow-run-actions .workspace-workflow-activity-item { @apply border border-ink-700/60; }
   .workspace-workflow-run pre { @apply mt-2 max-h-48 overflow-auto whitespace-pre-wrap text-[10px]; }
   .workspace-workflow-action { @apply mx-3 my-2 flex min-w-0 items-center gap-2 rounded-lg border border-ink-700/60 px-2.5 py-2 text-xs; }
   .workspace-workflow-action span { @apply min-w-0 flex-1 truncate; }
@@ -236,10 +275,15 @@
   @media (max-width: 900px) {
     .workspace-shell { grid-template-columns: minmax(0, 1fr); }
     .workspace-resizer { @apply hidden; }
-    .workspace-explorer, .workspace-chat { @apply fixed bottom-0 top-[8.5rem] z-20 w-[min(88vw,24rem)] shadow-2xl; }
+    .workspace-explorer, .workspace-chat { @apply fixed bottom-0 top-[10.5rem] z-20 w-[min(88vw,24rem)] shadow-2xl; }
     .workspace-explorer { @apply left-0 -translate-x-full; }
     .workspace-chat { @apply right-0; }
     .chat-collapsed .workspace-chat { @apply hidden; }
+    .workspace-gitbar { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .workspace-git-button span { @apply hidden; }
+    .workspace-workflow-pin-heading strong { @apply max-w-32; }
+    .workspace-stage { @apply min-w-10; }
+    .workspace-stage small { @apply hidden; }
   }
 }
 @layer base {

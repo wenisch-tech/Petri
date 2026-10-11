@@ -117,6 +117,18 @@ class OpenAiResponsesClientTest {
   }
 
   @Test
+  void encodesJsonObjectOutputWithoutDroppingVerbosity() throws Exception {
+    OpenAiResponsesCodec codec = new OpenAiResponsesCodec(objectMapper);
+    JsonNode request = objectMapper.readTree(codec.encode(new ModelRequest(
+        "test-model", "Return JSON.", "Create the artifact", null, List.of(), List.of(),
+        512, null, TextVerbosity.LOW, List.of(), true)));
+
+    assertThat(request.path("text").path("format").path("type").asText())
+        .isEqualTo("json_object");
+    assertThat(request.path("text").path("verbosity").asText()).isEqualTo("low");
+  }
+
+  @Test
   void liteLlmUsesConfiguredResponsesEndpointAndVirtualKey() throws Exception {
     AtomicReference<String> authorization = new AtomicReference<>();
     AtomicReference<String> path = new AtomicReference<>();

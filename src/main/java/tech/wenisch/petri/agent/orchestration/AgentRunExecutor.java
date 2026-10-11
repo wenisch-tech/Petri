@@ -10,6 +10,7 @@ import tech.wenisch.petri.agent.model.ModelClientException;
 import tech.wenisch.petri.agent.model.ModelClientRegistry;
 import tech.wenisch.petri.agent.model.ModelRequest;
 import tech.wenisch.petri.agent.model.ModelResponse;
+import tech.wenisch.petri.agent.model.ModelStreamListener;
 import tech.wenisch.petri.agent.tool.AgentToolRegistry;
 import tech.wenisch.petri.agent.tool.AgentWorkflowToolPolicy;
 
@@ -122,7 +123,7 @@ public class AgentRunExecutor {
         AgentWorkflowRole workflowRole = state.workflowRole();
         StringBuilder partial = new StringBuilder();
         long[] checkpoint = {System.nanoTime()};
-        ModelResponse response = client.respondStreaming(request, delta -> {
+        ModelStreamListener listener = delta -> {
           partial.append(delta);
           chatStream.textDelta(chatId, runId, workflowId, workflowRole, delta);
           long elapsedMillis = (System.nanoTime() - checkpoint[0]) / 1_000_000;
@@ -130,7 +131,14 @@ public class AgentRunExecutor {
             stateService.recordPartialOutput(runId, claimId, partial.toString());
             checkpoint[0] = System.nanoTime();
           }
-        });
+        };
+        ModelResponse response;
+        try {
+          response = client.respondStreaming(request, listener);
+        } catch (ModelClientException exception) {
+          if (!canRetryWithoutNativeJson(request, partial, exception)) throw exception;
+          response = client.respondStreaming(request.withJsonObjectOutput(false), listener);
+        }
         if (!partial.isEmpty()) stateService.recordPartialOutput(runId, claimId, partial.toString());
         state = stateService.recordModelResponse(runId, claimId, response, actor);
       }
@@ -158,7 +166,7 @@ public class AgentRunExecutor {
       return new ModelRequest(
           state.model(), instructions, state.prompt(), null, null, definitions,
           state.maxOutputTokens(), state.reasoningEffort(), state.textVerbosity(),
-          state.conversation());
+          state.conversation(), role != null);
     }
     if (state.previousResponseId() == null || state.toolOutputs().isEmpty()) {
       throw new IllegalStateException("Agent run has no resumable model input");
@@ -166,7 +174,7 @@ public class AgentRunExecutor {
     return new ModelRequest(
         state.model(), instructions, null, state.previousResponseId(), state.toolOutputs(),
         definitions, state.maxOutputTokens(), state.reasoningEffort(),
-        state.textVerbosity(), state.conversation());
+        state.textVerbosity(), state.conversation(), role != null);
   }
 
   private static String safeToolMessage(RuntimeException exception) {
@@ -177,6 +185,15 @@ public class AgentRunExecutor {
       return exception.getMessage();
     }
     return "Tool execution failed";
+  }
+
+  static boolean canRetryWithoutNativeJson(
+      ModelRequest request, StringBuilder partial, ModelClientException exception) {
+    if (!request.jsonObjectOutput() || !partial.isEmpty() || exception.getMessage() == null) {
+      return false;
+    }
+    String message = exception.getMessage();
+    return message.contains("HTTP 400") || message.contains("HTTP 422");
   }
 
   private static String safeExecutionMessage(RuntimeException exception) {

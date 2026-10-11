@@ -188,10 +188,13 @@ public class WorkflowCoordinator {
     }
     if (run.status() != AgentRunStatus.COMPLETED) {
       if (ledger.artifactForRun(run.id()) != null) return;
+      String reason = run.errorMessage() == null || run.errorMessage().isBlank()
+          ? "Stage run ended with " + run.status()
+          : "Stage model request failed: " + run.errorMessage();
       workflow = ledger.recordStageFailure(workflow.id(), run.id(),
-          "Stage run ended with " + run.status(), "workflow:" + workflow.id());
+          reason, "workflow:" + workflow.id());
       retryOrHold(workflow, run.workflowPhase(), run.workflowRole(),
-          "Stage run ended with " + run.status(), "workflow:" + workflow.id());
+          reason, "workflow:" + workflow.id());
       return;
     }
     WorkflowArtifactParser.Parsed parsed;
@@ -202,7 +205,7 @@ public class WorkflowCoordinator {
       workflow = ledger.recordStageFailure(workflow.id(), run.id(), exception.getMessage(),
           "workflow:" + workflow.id());
       retryOrHold(workflow, run.workflowPhase(), run.workflowRole(), exception.getMessage(),
-          "workflow:" + workflow.id());
+          "workflow:" + workflow.id(), true);
       return;
     }
     AgentWorkflowArtifact artifact = ledger.store(workflow.id(), run.id(), parsed);
@@ -224,9 +227,7 @@ public class WorkflowCoordinator {
               AgentWorkflowRole.ORCHESTRATOR, planReviewPrompt(workflow), "planner");
         }
       }
-      case ORCHESTRATOR_PLAN_REVIEW -> verdict(workflow, parsed.value(),
-          AgentWorkflowStage.WAITING_FOR_PLAN_APPROVAL, AgentWorkflowStage.PLANNING,
-          AgentWorkflowRole.PLANNER, "Plan passed orchestration review");
+      case ORCHESTRATOR_PLAN_REVIEW -> planVerdict(workflow, parsed.value());
       case IMPLEMENTING -> implementationFinished(workflow);
       case ORCHESTRATOR_IMPLEMENTATION_REVIEW -> verdict(workflow, parsed.value(),
           AgentWorkflowStage.REVIEWING, AgentWorkflowStage.IMPLEMENTING,
@@ -271,6 +272,25 @@ public class WorkflowCoordinator {
     }
   }
 
+  private void planVerdict(AgentWorkflow workflow, JsonNode verdict) {
+    String decision = verdict.path("decision").asText();
+    String reason = verdict.path("reason").asText();
+    if ("PASS".equals(decision) || "PASS_WITH_WARNINGS".equals(decision)) {
+      waitForUser(workflow, AgentWorkflowStage.WAITING_FOR_PLAN_APPROVAL,
+          "PASS_WITH_WARNINGS".equals(decision)
+              ? "Plan is ready for user review with warnings: " + reason
+              : "Plan passed orchestration review");
+    } else if ("REVISION_REQUIRED".equals(decision)) {
+      launch(workflow.id(), AgentWorkflowStage.PLANNING, AgentWorkflowRole.PLANNER,
+          promptFor(workflow, AgentWorkflowStage.PLANNING), "orchestrator:" + reason);
+    } else if (verdict.path("hardBlock").asBoolean(false)) {
+      hold(workflow, reason, "orchestrator");
+    } else {
+      waitForUser(workflow, AgentWorkflowStage.WAITING_FOR_PLAN_APPROVAL,
+          "Plan is ready for user review with warnings: " + reason);
+    }
+  }
+
   private void finalVerdict(AgentWorkflow workflow, JsonNode verdict) {
     JsonNode review = read(ledger.latest(workflow.id(), WorkflowArtifactKind.REVIEW).contentJson());
     String decision = verdict.path("decision").asText();
@@ -309,9 +329,27 @@ public class WorkflowCoordinator {
 
   private void retryOrHold(AgentWorkflow workflow, AgentWorkflowStage phase, AgentWorkflowRole role,
       String reason, String actor) {
+    retryOrHold(workflow, phase, role, reason, actor, false);
+  }
+
+  private void retryOrHold(AgentWorkflow workflow, AgentWorkflowStage phase, AgentWorkflowRole role,
+      String reason, String actor, boolean structuredResponseFailure) {
     AgentWorkflowRoleSnapshot snapshot = ledger.snapshot(workflow.id(), role);
-    if (ledger.attempts(workflow.id(), phase) >= snapshot.maxAttempts()) hold(workflow, reason, actor);
-    else launch(workflow.id(), phase, role, promptFor(workflow, phase), actor);
+    if (ledger.attempts(workflow.id(), phase) >= snapshot.maxAttempts()) {
+      String finalReason = structuredResponseFailure
+          ? "The configured model could not produce the required structured response after "
+              + snapshot.maxAttempts() + " attempts. Try another model or retry the workflow."
+          : reason;
+      hold(workflow, finalReason, actor);
+    } else {
+      String prompt = promptFor(workflow, phase);
+      if (structuredResponseFailure) {
+        prompt += "\n\nFORMAT REPAIR REQUIRED: The previous response was rejected because: "
+            + reason + ". Return exactly one complete JSON object matching the contract. Do not use "
+            + "Markdown fences and do not include any explanation before or after the object.";
+      }
+      launch(workflow.id(), phase, role, prompt, actor);
+    }
   }
 
   private void hold(AgentWorkflow workflow, String reason, String actor) {
@@ -358,9 +396,14 @@ public class WorkflowCoordinator {
   }
 
   private String planReviewPrompt(AgentWorkflow workflow) {
-    return "Validate this plan against the original request.\nREQUEST:\n" + workflow.prompt()
+    return "Validate this plan against the original request. Use read-only tools to verify claims "
+        + "about the current repository before judging them. Reasonable technology defaults or "
+        + "non-destructive uncertainty must be PASS_WITH_WARNINGS so the user can decide. "
+        + "Use REVISION_REQUIRED only for an actionable defect the planner should fix. Use HOLD with "
+        + "hardBlock=true only for irreversible/destructive, credential-exposing, permission-bypassing, "
+        + "or otherwise unauthorized work.\nREQUEST:\n" + workflow.prompt()
         + "\nPLAN:\n" + ledger.latest(workflow.id(), WorkflowArtifactKind.PLAN).contentJson()
-        + verdictContract();
+        + planVerdictContract();
   }
 
   private String implementationPrompt(AgentWorkflow workflow, String feedback) {
@@ -441,6 +484,12 @@ public class WorkflowCoordinator {
   private static String verdictContract() {
     return "\nReturn JSON: {\"decision\":\"PASS|REVISION_REQUIRED|HOLD\","
         + "\"reason\":\"...\",\"feedback\":[\"...\"]}.";
+  }
+  private static String planVerdictContract() {
+    return "\nReturn JSON: {\"decision\":\"PASS|PASS_WITH_WARNINGS|REVISION_REQUIRED|HOLD\","
+        + "\"reason\":\"...\",\"feedback\":[\"...\"],\"warnings\":[\"...\"],"
+        + "\"hardBlock\":false}. HOLD is valid only with hardBlock=true; PASS_WITH_WARNINGS "
+        + "requires at least one warning.";
   }
   private String latestOptional(UUID workflowId, WorkflowArtifactKind kind) {
     return ledger.artifacts(workflowId).stream().filter(value -> value.kind() == kind)

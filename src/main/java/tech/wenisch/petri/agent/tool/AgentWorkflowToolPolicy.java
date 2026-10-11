@@ -15,8 +15,7 @@ public final class AgentWorkflowToolPolicy {
   public static Set<String> allowed(AgentWorkflowRole role) {
     if (role == null) return IMPLEMENT;
     return switch (role) {
-      case ORCHESTRATOR -> Set.of();
-      case PLANNER, REVIEWER -> READ_ONLY;
+      case ORCHESTRATOR, PLANNER, REVIEWER -> READ_ONLY;
       case IMPLEMENTER -> IMPLEMENT;
     };
   }

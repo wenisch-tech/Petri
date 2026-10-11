@@ -13,7 +13,8 @@ Orchestrator intake → Planner → Orchestrator plan gate → User plan approva
 
 The coordinator is a deterministic state machine. Model output is validated evidence and cannot
 change workflow state directly. A malformed verdict, exhausted attempt budget, unresolved patch
-conflict or missing evidence fails closed into `HUMAN_HOLD`.
+conflict or a deterministic safety violation fails closed into `HUMAN_HOLD`. Repository uncertainty
+and reasonable non-destructive defaults are surfaced as plan warnings for the user to decide.
 
 The planner may ask up to five single-select, multi-select or free-text questions. Approval is
 recorded against the exact plan revision; feedback or later task guidance invalidates it and returns
@@ -30,7 +31,7 @@ attempt limit and a prompt addendum. Petri snapshots those values when the task 
 
 | Role | Server-enforced tools |
 | --- | --- |
-| Orchestrator | none |
+| Orchestrator | read, search, diff and skills |
 | Planner | repository reads, search and skills |
 | Implementer | reads, search, skills, patch/file proposals and test proposals |
 | Reviewer | repository reads, search and skills |

@@ -27,8 +27,14 @@ final class OpenAiResponsesCodec {
     if (request.reasoningEffort() != null) {
       body.putObject("reasoning").put("effort", request.reasoningEffort().apiValue());
     }
-    if (request.textVerbosity() != null) {
-      body.putObject("text").put("verbosity", request.textVerbosity().apiValue());
+    if (request.textVerbosity() != null || request.jsonObjectOutput()) {
+      ObjectNode text = body.putObject("text");
+      if (request.textVerbosity() != null) {
+        text.put("verbosity", request.textVerbosity().apiValue());
+      }
+      if (request.jsonObjectOutput()) {
+        text.putObject("format").put("type", "json_object");
+      }
     }
     if (request.previousResponseId() != null) {
       body.put("previous_response_id", request.previousResponseId());
