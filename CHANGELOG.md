@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.8.0 - 2026-10-12
+
+## [0.8.0](https://github.com/wenisch-tech/Petri/compare/v0.7.0...v0.8.0) (2026-10-12)
+
+
+### Features
+
+* Introduction of automations and code-review skill ([f299875](https://github.com/wenisch-tech/Petri/commit/f299875e4d322612049d4ea0849c4c773f6de07f))
+
+
+### Bug Fixes
+
+* ensure symlinks for package installs are properly installed ([f6eebbb](https://github.com/wenisch-tech/Petri/commit/f6eebbbaf797e6428aadc6516ef3698f91f30135))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.8.0
+
+
 ## v0.7.0 - 2026-10-12
 
 ## [0.7.0](https://github.com/wenisch-tech/Petri/compare/v0.6.0...v0.7.0) (2026-10-12)
