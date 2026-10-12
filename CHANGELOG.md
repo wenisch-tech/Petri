@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.3.0 - 2026-10-12
+
+## [0.3.0](https://github.com/wenisch-tech/Petri/compare/v0.2.0...v0.3.0) (2026-10-12)
+
+
+### Features
+
+* approval section in workspace ([ef359d4](https://github.com/wenisch-tech/Petri/commit/ef359d4d7d6e5deb18fe3f2079df84065d904614))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.3.0
+
+
 ## v0.2.0 - 2026-10-11
 
 ## [0.2.0](https://github.com/wenisch-tech/Petri/compare/v0.1.0...v0.2.0) (2026-10-11)
