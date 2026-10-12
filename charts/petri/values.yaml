@@ -87,6 +87,11 @@ env:
   # PETRI_OPENAI_BASE_URL: ""
   # PETRI_MODEL_REQUEST_TIMEOUT: "2m"
   # PETRI_SKILLS_ROOT: "/app/skills"
+  # Restricted network: standard proxy variables are forwarded to terminal commands, tests and
+  # package installs (they are scrubbed otherwise). Extra variables: PETRI_COMMAND_ENV_<NAME>.
+  # HTTPS_PROXY: "http://proxy.internal:3128"
+  # NO_PROXY: "localhost,.cluster.local"
+  # PETRI_COMMAND_ENV_PIP_INDEX_URL: "https://mirror.internal/simple"
   # Skip TLS certificate/hostname verification for all outbound HTTPS (self-hosted, private CA).
   IGNORE_TLS: "false"
   # OIDC, one or more providers (repeat with _1_, _2_, ...); put client secrets under `secrets`:

@@ -27,7 +27,11 @@ public class TestSandboxProfileController {
 
   @GetMapping("/sandbox-profiles")
   String profiles(Model model) {
-    model.addAttribute("profiles", profiles.all());
+    var all = profiles.all();
+    model.addAttribute("profiles", all);
+    var environments = new java.util.HashMap<UUID, String>();
+    all.forEach(profile -> environments.put(profile.getId(), profiles.maskedEnvironment(profile)));
+    model.addAttribute("environments", environments);
     model.addAttribute("buildSystems", TestBuildSystem.values());
     model.addAttribute("projects", projects.findAllByOrderByCreatedAtDesc());
     return "sandbox-profiles";
@@ -46,11 +50,13 @@ public class TestSandboxProfileController {
       @RequestParam int outputLimitBytes,
       @RequestParam(defaultValue = "false") boolean networkEnabled,
       @RequestParam(defaultValue = "false") boolean enabled,
+      @RequestParam(required = false) String environment,
       Principal principal,
       RedirectAttributes redirect) {
     try {
       profiles.save(id, name, image, Set.copyOf(buildSystems), cpuLimit, memoryLimit,
-          pidsLimit, timeoutSeconds, outputLimitBytes, networkEnabled, enabled, principal.getName());
+          pidsLimit, timeoutSeconds, outputLimitBytes, networkEnabled, enabled, environment,
+          principal.getName());
       redirect.addFlashAttribute("notice", "Sandbox profile saved");
     } catch (RuntimeException exception) {
       redirect.addFlashAttribute("error", exception.getMessage());

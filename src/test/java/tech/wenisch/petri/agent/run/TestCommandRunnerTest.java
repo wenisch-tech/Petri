@@ -37,6 +37,27 @@ class TestCommandRunnerTest {
   }
 
   @Test
+  void passesConfiguredEnvironmentIntoTheContainer() throws Exception {
+    WorkspacePaths paths = paths();
+    Path worktree = paths.directory("runs", "worktree");
+    Path cache = paths.directory("test-caches", "project");
+    CommandEnvironment instance = new CommandEnvironment(java.util.Map.of(
+        "HTTPS_PROXY", "http://proxy.test:3128", "SECRET_TOKEN", "must-not-leak"));
+    TestCommandRunner runner = new TestCommandRunner(paths, "podman", instance);
+    TestSandboxProfileView withVariables = new TestSandboxProfileView(UUID.randomUUID(), "Java 25",
+        "example/java:25", Set.of(TestBuildSystem.MAVEN), "2", "2g", 256, Duration.ofSeconds(5),
+        1024, true, true, true, java.util.Map.of("NO_PROXY", "internal"));
+
+    List<String> command = runner.containerArguments("petri-test-id", worktree, cache,
+        new TestCommand(TestBuildSystem.MAVEN, List.of("./mvnw", "test")), withVariables);
+
+    assertThat(command).contains("HTTPS_PROXY=http://proxy.test:3128", "NO_PROXY=internal",
+        "https_proxy=http://proxy.test:3128");
+    assertThat(command).noneMatch(value -> value.contains("must-not-leak"));
+    assertThat(command).endsWith("example/java:25", "./mvnw", "test");
+  }
+
+  @Test
   void failsClosedWhenPodmanIsUnavailable() throws Exception {
     WorkspacePaths paths = paths();
     Path worktree = paths.directory("runs", "worktree");
@@ -57,6 +78,6 @@ class TestCommandRunnerTest {
   private static TestSandboxProfileView profile(boolean network) {
     return new TestSandboxProfileView(UUID.randomUUID(), "Java 25", "example/java:25",
         Set.of(TestBuildSystem.MAVEN, TestBuildSystem.GRADLE), "2", "2g", 256,
-        Duration.ofSeconds(5), 1024, network, true, true);
+        Duration.ofSeconds(5), 1024, network, true, true, java.util.Map.of());
   }
 }

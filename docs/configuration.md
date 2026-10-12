@@ -118,6 +118,13 @@ An OIDC identity matching an existing local email keeps that Petri account's rol
 When a proxy terminates TLS, keep `SERVER_FORWARD_HEADERS_STRATEGY=framework` so redirect URIs use
 the public HTTPS origin.
 
+## Command environment
+
+Commands run by Petri get a scrubbed environment. Proxy variables (`HTTP_PROXY`, `HTTPS_PROXY`,
+`NO_PROXY`, ...) are forwarded; `PETRI_COMMAND_ENV_<NAME>=value` adds `<NAME>` for every command and
+sandbox profiles can add more in the UI. See
+[Test sandboxes](test-sandboxes.md#command-environment-and-http-proxies).
+
 ## Ignoring TLS errors
 
 `IGNORE_TLS=true` (default `false`) disables TLS certificate and hostname verification for all

@@ -29,6 +29,7 @@ class TerminalRunner {
   private final LocalToolchain toolchain;
   private final Confinement confinement;
   private final TestSandboxProfileService profiles;
+  private final CommandEnvironment commandEnvironment;
   private final String executor;
   private final String podman;
   private final Duration timeout;
@@ -36,7 +37,7 @@ class TerminalRunner {
 
   TerminalRunner(
       WorkspacePaths paths, LocalToolchain toolchain, Confinement confinement,
-      TestSandboxProfileService profiles,
+      TestSandboxProfileService profiles, CommandEnvironment commandEnvironment,
       @Value("${petri.tests.executor:podman}") String executor,
       @Value("${petri.tests.podman-executable:podman}") String podman,
       @Value("${petri.terminal.timeout:2m}") Duration timeout,
@@ -45,6 +46,7 @@ class TerminalRunner {
     this.toolchain = toolchain;
     this.confinement = confinement;
     this.profiles = profiles;
+    this.commandEnvironment = commandEnvironment;
     this.executor = executor;
     this.podman = podman;
     this.timeout = timeout;
@@ -65,17 +67,17 @@ class TerminalRunner {
       UUID projectId, Path worktree, String command, java.util.function.Consumer<String> progress)
       throws IOException {
     Path safeWorktree = paths.requireExistingPath(worktree);
-    if ("local".equalsIgnoreCase(executor)) return runLocal(safeWorktree, command, progress);
+    if ("local".equalsIgnoreCase(executor)) return runLocal(projectId, safeWorktree, command, progress);
     return runPodman(projectId, safeWorktree, command, progress);
   }
 
   private TestCommandResult runLocal(
-      Path worktree, String command, java.util.function.Consumer<String> progress)
+      UUID projectId, Path worktree, String command, java.util.function.Consumer<String> progress)
       throws IOException {
     if (!confinement.available()) throw new IllegalStateException(unavailableReason());
     Path home = Files.createTempDirectory(paths.temporaryDirectory(), "petri-term-");
     try {
-      Map<String, String> env = toolchain.environment(home, Map.of());
+      Map<String, String> env = toolchain.environment(home, Map.of(), profiles.environmentFor(projectId));
       List<String> argv = confinement.wrap(List.of(worktree, home), List.of("/bin/sh", "-c", command));
       return BoundedProcess.run(argv, worktree, env, timeout, outputLimit, "terminal-landlock", progress);
     } finally {
@@ -105,7 +107,9 @@ class TerminalRunner {
         "--tmpfs", "/tmp:rw,nosuid,nodev,size=512m",
         "--volume", worktree + ":/workspace:rw,Z", "--volume", cache + ":/cache:rw,Z",
         "--workdir", "/workspace", "--env", "CI=true", "--env", "LC_ALL=C",
-        "--env", "HOME=/tmp/petri-home", profile.image(), "sh", "-c", command));
+        "--env", "HOME=/tmp/petri-home"));
+    argv.addAll(commandEnvironment.containerEnvArguments(profile.environment()));
+    argv.addAll(List.of(profile.image(), "sh", "-c", command));
     TestCommandResult result = BoundedProcess.run(argv, worktree,
         Map.of("PATH", System.getenv().getOrDefault("PATH", "/usr/bin:/bin"),
             "HOME", System.getenv().getOrDefault("HOME", "/tmp"),

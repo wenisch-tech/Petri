@@ -1,6 +1,7 @@
 package tech.wenisch.petri.agent.run;
 
 import java.time.Duration;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 
@@ -16,4 +17,9 @@ public record TestSandboxProfileView(
     int outputLimitBytes,
     boolean networkEnabled,
     boolean enabled,
-    boolean defaultProfile) {}
+    boolean defaultProfile,
+    Map<String, String> environment) {
+  public TestSandboxProfileView {
+    environment = environment == null ? Map.of() : Map.copyOf(environment);
+  }
+}

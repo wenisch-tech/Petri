@@ -37,6 +37,28 @@ packages are already present. With the Podman executor the tool is disabled and 
 can read `./data`. Prefer `PETRI_SECRETS_MASTER_KEY` (environment) over the key file, an external
 PostgreSQL, and use the Podman executor for untrusted repositories.
 
+## Command environment and HTTP proxies
+
+Terminal commands, approved tests and package installs run with a freshly built environment, so
+variables of the Petri container are **not** inherited. To let them download packages from a
+restricted network, Petri adds variables in this order (later wins):
+
+1. **Forwarded proxy variables** of the Petri container: `HTTP_PROXY`, `HTTPS_PROXY`, `FTP_PROXY`,
+   `ALL_PROXY`, `NO_PROXY` in either case (the missing case is mirrored, because `apk` and `curl`
+   read lower-case names and Java tooling upper-case). Set `PETRI_COMMAND_ENV_FORWARD_PROXY=false`
+   to turn forwarding off.
+2. **Instance variables**: any `PETRI_COMMAND_ENV_<NAME>=value` becomes `<NAME>=value`, for example
+   `PETRI_COMMAND_ENV_PIP_INDEX_URL`.
+3. **Sandbox profile variables**: *Environment variables* in the profile dialog at
+   `/sandbox-profiles` (`NAME=VALUE` per line). Values are encrypted at rest, shown masked
+   (`********` keeps a stored value), and only variable names are written to the audit log.
+
+`PATH`, `HOME`, `TMPDIR`, `LD_LIBRARY_PATH`, `LD_PRELOAD`, `JAVA_HOME`, `JAVA_TOOL_OPTIONS`,
+`MAVEN_OPTS`, `GRADLE_USER_HOME`, `CI`, `LC_ALL` and names starting with `PETRI_` cannot be set.
+A profile holds at most 50 variables of at most 4096 characters. Variables apply to the Podman
+container (`--env`) and the local executor alike. Repository code run by a command can read them,
+so do not put credentials there that untrusted repositories must not see.
+
 ## Terminal
 
 The workspace has a **Terminal** panel below the editor. It is open by default (toggle it with the

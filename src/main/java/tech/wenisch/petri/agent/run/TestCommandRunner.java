@@ -26,13 +26,20 @@ import tech.wenisch.petri.workspace.WorkspacePaths;
 class TestCommandRunner implements TestExecutor {
   private final WorkspacePaths paths;
   private final String podmanExecutable;
+  private final CommandEnvironment commandEnvironment;
 
   @Autowired
   TestCommandRunner(
       WorkspacePaths paths,
-      @Value("${petri.tests.podman-executable:podman}") String podmanExecutable) {
+      @Value("${petri.tests.podman-executable:podman}") String podmanExecutable,
+      CommandEnvironment commandEnvironment) {
     this.paths = paths;
     this.podmanExecutable = podmanExecutable;
+    this.commandEnvironment = commandEnvironment;
+  }
+
+  TestCommandRunner(WorkspacePaths paths, String podmanExecutable) {
+    this(paths, podmanExecutable, CommandEnvironment.none());
   }
 
   @Override
@@ -92,6 +99,9 @@ class TestCommandRunner implements TestExecutor {
     } else {
       result.addAll(List.of("--env", "GRADLE_USER_HOME=/cache/gradle"));
     }
+    // Reserved names (HOME, MAVEN_OPTS, ...) are rejected by CommandEnvironment, so these cannot
+    // override the settings above.
+    result.addAll(commandEnvironment.containerEnvArguments(profile.environment()));
     result.add(profile.image());
     result.addAll(command.arguments());
     return List.copyOf(result);

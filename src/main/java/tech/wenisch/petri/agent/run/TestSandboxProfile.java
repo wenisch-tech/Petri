@@ -24,6 +24,7 @@ public class TestSandboxProfile {
   @Column(name = "network_enabled", nullable = false) private boolean networkEnabled;
   @Column(nullable = false) private boolean enabled;
   @Column(name = "default_profile", nullable = false) private boolean defaultProfile;
+  @Column(name = "environment_ciphertext") private String environmentCiphertext;
   @Column(name = "created_at", nullable = false) private Instant createdAt;
   @Column(name = "updated_at", nullable = false) private Instant updatedAt;
 
@@ -31,16 +32,18 @@ public class TestSandboxProfile {
 
   public TestSandboxProfile(UUID id, String name, String image, Set<TestBuildSystem> buildSystems,
       String cpuLimit, String memoryLimit, int pidsLimit, int timeoutSeconds,
-      int outputLimitBytes, boolean networkEnabled, boolean enabled, Instant now) {
+      int outputLimitBytes, boolean networkEnabled, boolean enabled,
+      String environmentCiphertext, Instant now) {
     this.id = id;
     this.createdAt = now;
     update(name, image, buildSystems, cpuLimit, memoryLimit, pidsLimit, timeoutSeconds,
-        outputLimitBytes, networkEnabled, enabled, now);
+        outputLimitBytes, networkEnabled, enabled, environmentCiphertext, now);
   }
 
   public void update(String name, String image, Set<TestBuildSystem> buildSystems,
       String cpuLimit, String memoryLimit, int pidsLimit, int timeoutSeconds,
-      int outputLimitBytes, boolean networkEnabled, boolean enabled, Instant now) {
+      int outputLimitBytes, boolean networkEnabled, boolean enabled,
+      String environmentCiphertext, Instant now) {
     this.name = name;
     this.image = image;
     this.allowedBuildSystems = buildSystems.stream().map(Enum::name).sorted()
@@ -52,6 +55,7 @@ public class TestSandboxProfile {
     this.outputLimitBytes = outputLimitBytes;
     this.networkEnabled = networkEnabled;
     this.enabled = enabled;
+    this.environmentCiphertext = environmentCiphertext;
     this.updatedAt = now;
   }
 
@@ -73,6 +77,7 @@ public class TestSandboxProfile {
   public boolean isNetworkEnabled() { return networkEnabled; }
   public boolean isEnabled() { return enabled; }
   public boolean isDefaultProfile() { return defaultProfile; }
+  public String getEnvironmentCiphertext() { return environmentCiphertext; }
   public Instant getCreatedAt() { return createdAt; }
   public Instant getUpdatedAt() { return updatedAt; }
 }

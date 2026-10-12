@@ -69,6 +69,11 @@
                     <div><label class="hint !mt-0 mb-1" th:for="|output-${profile.id}|">Output limit (bytes)</label><input class="field" type="number" th:id="|output-${profile.id}|" name="outputLimitBytes" th:value="${profile.outputLimitBytes}" required></div>
                   </div>
                 </fieldset>
+                <div>
+                  <label class="label" th:for="|env-${profile.id}|">Environment variables</label>
+                  <textarea class="field font-mono text-sm" rows="4" th:id="|env-${profile.id}|" name="environment" spellcheck="false" autocomplete="off" placeholder="HTTPS_PROXY=http://proxy.internal:3128&#10;NO_PROXY=localhost,.internal" th:text="${environments.get(profile.id)}"></textarea>
+                  <p class="hint">One <code>NAME=VALUE</code> per line, passed to terminal commands, tests and package installs. Values are stored encrypted and shown masked; keep <code>********</code> to leave a value unchanged. Standard proxy variables of the Petri container are forwarded automatically.</p>
+                </div>
                 <div class="space-y-2">
                   <label class="check"><input type="checkbox" name="networkEnabled" value="true" th:checked="${profile.networkEnabled}"><span>Allow outbound network</span></label>
                   <label class="check"><input type="checkbox" name="enabled" value="true" th:checked="${profile.enabled}"><span>Enabled</span></label>

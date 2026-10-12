@@ -5,23 +5,29 @@ import java.time.Instant;
 import java.math.BigDecimal;
 import java.util.EnumSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tech.wenisch.petri.audit.AuditLogService;
+import tech.wenisch.petri.secret.SecretCipher;
 
 @Service
 public class TestSandboxProfileService {
+  private static final String MASK = "********";
+
   private final TestSandboxProfileRepository profiles;
   private final ProjectSandboxSettingRepository settings;
   private final AuditLogService audit;
+  private final SecretCipher cipher;
 
   public TestSandboxProfileService(TestSandboxProfileRepository profiles,
-      ProjectSandboxSettingRepository settings, AuditLogService audit) {
+      ProjectSandboxSettingRepository settings, AuditLogService audit, SecretCipher cipher) {
     this.profiles = profiles;
     this.settings = settings;
     this.audit = audit;
+    this.cipher = cipher;
   }
 
   @Transactional(readOnly = true)
@@ -41,27 +47,70 @@ public class TestSandboxProfileService {
     }
     boolean network = setting != null && setting.networkEnabled() != null
         ? setting.networkEnabled() : profile.isNetworkEnabled();
-    return view(profile, network);
+    return view(profile, network, environment(profile));
+  }
+
+  /**
+   * Profile variables for a project's commands (terminal, package installs). Lenient: no build
+   * system check, and empty when no profile can be resolved.
+   */
+  @Transactional(readOnly = true)
+  public Map<String, String> environmentFor(UUID projectId) {
+    ProjectSandboxSetting setting = settings.findById(projectId).orElse(null);
+    TestSandboxProfile profile = setting == null
+        ? profiles.findFirstByDefaultProfileTrueAndEnabledTrue().orElse(null)
+        : profiles.findById(setting.profileId()).filter(TestSandboxProfile::isEnabled).orElse(null);
+    return profile == null ? Map.of() : environment(profile);
+  }
+
+  /** The profile's variables as editable text; values are masked so they never reach the page. */
+  public String maskedEnvironment(TestSandboxProfile profile) {
+    StringBuilder text = new StringBuilder();
+    environment(profile).keySet().forEach(name -> text.append(name).append('=').append(MASK).append('\n'));
+    return text.toString();
+  }
+
+  Map<String, String> environment(TestSandboxProfile profile) {
+    String stored = profile.getEnvironmentCiphertext();
+    if (stored == null || stored.isBlank()) return Map.of();
+    return CommandEnvironment.parse(cipher.decrypt(stored));
   }
 
   @Transactional
   public TestSandboxProfile save(UUID id, String name, String image,
       Set<TestBuildSystem> buildSystems, String cpus, String memory, int pids,
-      int timeoutSeconds, int outputBytes, boolean network, boolean enabled, String actorEmail) {
+      int timeoutSeconds, int outputBytes, boolean network, boolean enabled, String environmentText,
+      String actorEmail) {
     name = required(name, "Name", 120); image = validImage(image);
     cpus = validCpu(cpus); memory = validMemory(memory);
     if (buildSystems == null || buildSystems.isEmpty()) throw new IllegalArgumentException("At least one build system is required");
     if (pids < 16 || timeoutSeconds < 1 || outputBytes < 1024) throw new IllegalArgumentException("Sandbox limits are invalid");
     Instant now = Instant.now();
-    TestSandboxProfile profile = id == null
+    TestSandboxProfile existing = id == null ? null : profiles.findById(id)
+        .orElseThrow(() -> new IllegalArgumentException("Sandbox profile not found"));
+    Map<String, String> variables = CommandEnvironment.parse(environmentText);
+    if (existing != null) {
+      // An unchanged masked value keeps the stored value of the same name.
+      Map<String, String> current = environment(existing);
+      variables.replaceAll((variable, value) ->
+          MASK.equals(value) && current.containsKey(variable) ? current.get(variable) : value);
+    }
+    if (variables.containsValue(MASK)) {
+      throw new IllegalArgumentException("Enter a value for each new environment variable");
+    }
+    String ciphertext = variables.isEmpty() ? null
+        : cipher.encrypt(CommandEnvironment.format(variables));
+    TestSandboxProfile profile = existing == null
         ? new TestSandboxProfile(UUID.randomUUID(), name, image, EnumSet.copyOf(buildSystems), cpus,
-            memory, pids, timeoutSeconds, outputBytes, network, enabled, now)
-        : profiles.findById(id).orElseThrow(() -> new IllegalArgumentException("Sandbox profile not found"));
-    if (id != null) profile.update(name, image, EnumSet.copyOf(buildSystems), cpus, memory,
-        pids, timeoutSeconds, outputBytes, network, enabled, now);
+            memory, pids, timeoutSeconds, outputBytes, network, enabled, ciphertext, now)
+        : existing;
+    if (existing != null) profile.update(name, image, EnumSet.copyOf(buildSystems), cpus, memory,
+        pids, timeoutSeconds, outputBytes, network, enabled, ciphertext, now);
     profiles.save(profile);
+    // Only names are audited; values may contain proxy credentials.
     audit.record(actorEmail, "TEST_SANDBOX_PROFILE_SAVED", "TEST_SANDBOX_PROFILE", profile.getId(),
-        "Saved test sandbox profile " + profile.getName());
+        "Saved test sandbox profile " + profile.getName()
+            + (variables.isEmpty() ? "" : " with environment variables " + variables.keySet()));
     return profile;
   }
 
@@ -109,11 +158,13 @@ public class TestSandboxProfileService {
         "Configured isolated test sandbox for project");
   }
 
-  static TestSandboxProfileView view(TestSandboxProfile profile, boolean network) {
+  static TestSandboxProfileView view(
+      TestSandboxProfile profile, boolean network, Map<String, String> environment) {
     return new TestSandboxProfileView(profile.getId(), profile.getName(), profile.getImage(),
         Set.copyOf(profile.buildSystems()), profile.getCpuLimit(), profile.getMemoryLimit(),
         profile.getPidsLimit(), Duration.ofSeconds(profile.getTimeoutSeconds()),
-        profile.getOutputLimitBytes(), network, profile.isEnabled(), profile.isDefaultProfile());
+        profile.getOutputLimitBytes(), network, profile.isEnabled(), profile.isDefaultProfile(),
+        environment);
   }
 
   private static String required(String value, String label, int max) {

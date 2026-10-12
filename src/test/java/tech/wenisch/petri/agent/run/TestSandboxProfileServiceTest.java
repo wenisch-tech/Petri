@@ -10,7 +10,7 @@ import tech.wenisch.petri.audit.AuditLogService;
 class TestSandboxProfileServiceTest {
   private final TestSandboxProfileService service = new TestSandboxProfileService(
       mock(TestSandboxProfileRepository.class), mock(ProjectSandboxSettingRepository.class),
-      mock(AuditLogService.class));
+      mock(AuditLogService.class), mock(tech.wenisch.petri.secret.SecretCipher.class));
 
   @Test
   void rejectsOptionLikeOrWhitespaceContainingImageReferences() {
@@ -32,6 +32,6 @@ class TestSandboxProfileServiceTest {
 
   private void save(String image, String cpus, String memory) {
     service.save(null, "Profile", image, Set.of(TestBuildSystem.MAVEN), cpus, memory,
-        256, 600, 2_000_000, true, true, "admin@example.test");
+        256, 600, 2_000_000, true, true, null, "admin@example.test");
   }
 }

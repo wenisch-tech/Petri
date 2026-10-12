@@ -44,6 +44,10 @@ Test-container outbound access is enabled in the seeded profile so wrappers can 
 
 Use HTTPS whenever bearer credentials cross an untrusted network. Plain HTTP is intended only for trusted local services such as Ollama.
 
+Variables injected into commands (proxy settings, `PETRI_COMMAND_ENV_*`, sandbox profile variables)
+are visible to the repository code those commands run. Use proxy credentials that are scoped to
+package downloads, and prefer the Podman executor for untrusted repositories.
+
 ## Production checklist
 
 - Replace the default administrator password.

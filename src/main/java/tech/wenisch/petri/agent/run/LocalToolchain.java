@@ -5,6 +5,7 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
@@ -16,12 +17,20 @@ import org.springframework.stereotype.Component;
 public class LocalToolchain {
   private final Path root;
   private final String apkExecutable;
+  private final CommandEnvironment commandEnvironment;
 
+  @Autowired
   LocalToolchain(
       @Value("${petri.tests.toolchain-root:./data/toolchain}") String root,
-      @Value("${petri.tests.apk-executable:apk}") String apkExecutable) {
+      @Value("${petri.tests.apk-executable:apk}") String apkExecutable,
+      CommandEnvironment commandEnvironment) {
     this.root = Path.of(root).toAbsolutePath().normalize();
     this.apkExecutable = apkExecutable;
+    this.commandEnvironment = commandEnvironment;
+  }
+
+  LocalToolchain(String root, String apkExecutable) {
+    this(root, apkExecutable, CommandEnvironment.none());
   }
 
   Path root() { return root; }
@@ -34,6 +43,15 @@ public class LocalToolchain {
 
   /** Clean environment for tests and installs; {@code extra} entries override the defaults. */
   Map<String, String> environment(Path home, Map<String, String> extra) {
+    return environment(home, extra, Map.of());
+  }
+
+  /**
+   * As above, with configured command variables (proxy forwarding, instance and profile variables)
+   * layered between the defaults and {@code extra}. Reserved names never reach this layer.
+   */
+  Map<String, String> environment(
+      Path home, Map<String, String> extra, Map<String, String> profileVariables) {
     String javaHome = System.getProperty("java.home", "");
     Map<String, String> env = new LinkedHashMap<>();
     env.put("PATH", String.join(":",
@@ -46,6 +64,7 @@ public class LocalToolchain {
     env.put("JAVA_TOOL_OPTIONS", "-Djava.io.tmpdir=" + home);
     env.put("CI", "true");
     env.put("LC_ALL", "C");
+    env.putAll(commandEnvironment.extra(profileVariables));
     env.putAll(extra);
     return env;
   }

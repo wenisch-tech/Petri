@@ -26,5 +26,8 @@ helm install petri wenisch-tech/petri -n petri --create-namespace \
   sandboxed test execution needs a node/runtime that provides it and is out of scope for this chart.
 - **OIDC** is configured through `OIDC_ENABLED` and `OIDC_PROVIDERS_<n>_*` environment variables
   (multiple providers supported); see `values.yaml`.
+- **Proxies / command variables:** `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY` and
+  `PETRI_COMMAND_ENV_<NAME>` reach terminal commands, tests and package installs; profiles can add
+  more under `/sandbox-profiles`.
 - **`IGNORE_TLS`** disables TLS certificate/hostname verification for all outbound HTTPS, for
   self-hosted setups with a private CA. `OIDC_INSECURE_SKIP_TLS_VERIFY` limits that to OIDC providers.

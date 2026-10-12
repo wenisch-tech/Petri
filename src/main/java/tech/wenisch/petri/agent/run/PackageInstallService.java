@@ -32,6 +32,7 @@ public class PackageInstallService {
   private final WorkspacePaths paths;
   private final ProjectWorktreeService worktrees;
   private final ProjectSandboxSettingRepository settings;
+  private final TestSandboxProfileService profiles;
   private final Duration timeout;
   private final boolean enabled;
   private final ReentrantLock installLock = new ReentrantLock();
@@ -39,6 +40,7 @@ public class PackageInstallService {
   PackageInstallService(
       PackageInstallStateService state, LocalToolchain toolchain, WorkspacePaths paths,
       ProjectWorktreeService worktrees, ProjectSandboxSettingRepository settings,
+      TestSandboxProfileService profiles,
       @Value("${petri.tests.install-timeout:10m}") Duration timeout,
       @Value("${petri.tests.executor:podman}") String executor) {
     this.state = state;
@@ -46,6 +48,7 @@ public class PackageInstallService {
     this.paths = paths;
     this.worktrees = worktrees;
     this.settings = settings;
+    this.profiles = profiles;
     this.timeout = timeout;
     this.enabled = "local".equalsIgnoreCase(executor);
   }
@@ -89,7 +92,9 @@ public class PackageInstallService {
   public PackageInstallView execute(UUID id) {
     PackageInstallView started = state.start(id);
     try {
-      TestCommandResult result = runApk(started.packages(), text -> state.progress(id, text));
+      Map<String, String> variables = profiles.environmentFor(
+          worktrees.get(started.worktreeId()).projectId());
+      TestCommandResult result = runApk(started.packages(), text -> state.progress(id, text), variables);
       return state.complete(id, result);
     } catch (IOException | RuntimeException exception) {
       log.warn("Approved package install {} could not run", id, exception);
@@ -107,7 +112,7 @@ public class PackageInstallService {
         return;
       }
       log.info("Restoring {} previously approved packages into the toolchain", recorded.size());
-      TestCommandResult result = runApk(new ArrayList<>(recorded), null);
+      TestCommandResult result = runApk(new ArrayList<>(recorded), null, Map.of());
       if (result.exitCode() != 0 || result.timedOut()) {
         log.warn("Toolchain restore failed: {}", result.output());
       }
@@ -117,7 +122,8 @@ public class PackageInstallService {
   }
 
   private TestCommandResult runApk(
-      List<String> requested, java.util.function.Consumer<String> progress) throws IOException {
+      List<String> requested, java.util.function.Consumer<String> progress,
+      Map<String, String> variables) throws IOException {
     toolchain.ensureRoot();
     List<String> packages = new ArrayList<>(requested);
     if (resetLegacyToolchain()) {
@@ -133,7 +139,7 @@ public class PackageInstallService {
     installLock.lock();
     try {
       TestCommandResult result = BoundedProcess.run(command, toolchain.root(),
-          toolchain.environment(home, Map.of()), timeout, MAX_OUTPUT_BYTES, "apk", progress);
+          toolchain.environment(home, Map.of(), variables), timeout, MAX_OUTPUT_BYTES, "apk", progress);
       if (result.exitCode() == 0 && !result.timedOut()) {
         java.nio.file.Files.writeString(toolchain.root().resolve(SCRIPTLESS_MARKER), "1\n");
       }

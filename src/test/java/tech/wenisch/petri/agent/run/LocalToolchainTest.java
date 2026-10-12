@@ -19,4 +19,17 @@ class LocalToolchainTest {
     assertThat(env).containsEntry("HOME", "/tmp/home").containsEntry("MAVEN_OPTS", "-Dx=1");
     assertThat(env.keySet()).noneMatch(name -> name.startsWith("PETRI_") || name.startsWith("SPRING_"));
   }
+
+  @Test
+  void configuredVariablesAreLayeredButNeverReplaceThePath() {
+    LocalToolchain toolchain = new LocalToolchain("/opt/petri/toolchain", "apk",
+        new CommandEnvironment(Map.of("HTTPS_PROXY", "http://proxy:3128")));
+
+    Map<String, String> env = toolchain.environment(Path.of("/tmp/home"), Map.of(),
+        Map.of("NO_PROXY", "internal"));
+
+    assertThat(env).containsEntry("HTTPS_PROXY", "http://proxy:3128")
+        .containsEntry("NO_PROXY", "internal");
+    assertThat(env.get("PATH")).startsWith("/opt/petri/toolchain/usr/local/bin");
+  }
 }
