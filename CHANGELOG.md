@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.5.0 - 2026-10-12
+
+## [0.5.0](https://github.com/wenisch-tech/Petri/compare/v0.4.0...v0.5.0) (2026-10-12)
+
+
+### Features
+
+* update readme with gif ([976126e](https://github.com/wenisch-tech/Petri/commit/976126e4399740d3393e83b71e9ac738e2b62bb1))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.5.0
+
+
 ## v0.3.0 - 2026-10-12
 
 ## [0.3.0](https://github.com/wenisch-tech/Petri/compare/v0.2.0...v0.3.0) (2026-10-12)
