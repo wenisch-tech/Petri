@@ -31,6 +31,27 @@ class WorkspacePathsTest {
   }
 
   @Test
+  void eachWorktreeGetsItsOwnPersistentScratchDirectoryThatIsRemovedWithIt() throws Exception {
+    WorkspacePaths paths = paths(temporaryDirectory.resolve("workspace"));
+    UUID projectId = UUID.randomUUID();
+    Path first = paths.runWorktree(projectId, UUID.randomUUID());
+    Path second = paths.runWorktree(projectId, UUID.randomUUID());
+
+    Path scratch = paths.worktreeTemporaryDirectory(first);
+    Files.writeString(scratch.resolve("note.txt"), "kept");
+
+    assertThat(scratch).isDirectory().startsWith(paths.root());
+    assertThat(paths.worktreeTemporaryDirectory(first)).isEqualTo(scratch);
+    assertThat(scratch.resolve("note.txt")).hasContent("kept");
+    assertThat(paths.worktreeTemporaryDirectory(second)).isNotEqualTo(scratch);
+
+    paths.removeWorktreeTemporaryDirectory(UUID.fromString(first.getFileName().toString()));
+    assertThat(scratch).doesNotExist();
+    assertThatIllegalArgumentException()
+        .isThrownBy(() -> paths.worktreeTemporaryDirectory(Path.of("/tmp/not-a-uuid")));
+  }
+
+  @Test
   void rejectsTraversalOutsideWorkspace() throws Exception {
     WorkspacePaths paths = paths(temporaryDirectory.resolve("workspace"));
     Path outside = Files.createDirectory(temporaryDirectory.resolve("outside"));

@@ -38,6 +38,30 @@ public class WorkspacePaths {
     return directory("tmp");
   }
 
+  /**
+   * Scratch space of one worktree, for the {@code /tmp} role: it survives between commands (unlike
+   * the per-command home), is private to that worktree and is removed with it. Named after the
+   * worktree directory, which is its UUID.
+   */
+  public Path worktreeTemporaryDirectory(Path worktree) throws IOException {
+    String name = worktree.getFileName().toString();
+    UUID.fromString(name);
+    return directory("worktree-tmp", name);
+  }
+
+  /** Best-effort removal of a worktree's scratch space once the worktree is gone. */
+  public void removeWorktreeTemporaryDirectory(UUID worktreeId) {
+    try {
+      Path candidate = root().resolve("worktree-tmp").resolve(worktreeId.toString());
+      if (!Files.isDirectory(candidate, LinkOption.NOFOLLOW_LINKS)) return;
+      try (var walk = Files.walk(candidate)) {
+        walk.sorted(java.util.Comparator.reverseOrder()).forEach(path -> path.toFile().delete());
+      }
+    } catch (IOException | RuntimeException ignored) {
+      // scratch space only; a leftover directory is harmless
+    }
+  }
+
   public Path directory(String... segments) throws IOException {
     Path root = root();
     Path current = root;

@@ -47,11 +47,16 @@ class LocalContainerTestExecutor implements TestExecutor {
     Path cache = paths.directory("test-caches", projectId.toString());
     Path home = Files.createTempDirectory(paths.temporaryDirectory(), "petri-test-");
     try {
-      Map<String, String> extra = command.buildSystem() == TestBuildSystem.MAVEN
-          ? Map.of("MAVEN_OPTS", "-Dmaven.repo.local=" + cache.resolve("maven"))
-          : Map.of("GRADLE_USER_HOME", cache.resolve("gradle").toString());
+      Path scratch = paths.worktreeTemporaryDirectory(safeWorktree);
+      Map<String, String> extra = new java.util.LinkedHashMap<>();
+      if (command.buildSystem() == TestBuildSystem.MAVEN) {
+        extra.put("MAVEN_OPTS", "-Dmaven.repo.local=" + cache.resolve("maven"));
+      } else {
+        extra.put("GRADLE_USER_HOME", cache.resolve("gradle").toString());
+      }
+      extra.putAll(LocalToolchain.temporaryDirectoryEnvironment(scratch));
       List<String> argv = confinement.available()
-          ? confinement.wrap(List.of(safeWorktree, cache, home), command.arguments())
+          ? confinement.wrap(List.of(safeWorktree, cache, home, scratch), command.arguments())
           : command.arguments();
       return BoundedProcess.run(argv, safeWorktree,
           toolchain.environment(home, extra, profile.environment()), profile.timeout(), profile.outputLimitBytes(),

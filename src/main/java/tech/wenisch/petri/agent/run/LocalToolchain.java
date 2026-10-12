@@ -84,6 +84,16 @@ public class LocalToolchain {
     return false;
   }
 
+  /** TMPDIR and friends pointing at a worktree's scratch directory. */
+  static Map<String, String> temporaryDirectoryEnvironment(Path scratch) {
+    Map<String, String> env = new LinkedHashMap<>();
+    env.put("TMPDIR", scratch.toString());
+    env.put("TMP", scratch.toString());
+    env.put("TEMP", scratch.toString());
+    env.put("JAVA_TOOL_OPTIONS", "-Djava.io.tmpdir=" + scratch);
+    return env;
+  }
+
   /** Clean environment for tests and installs; {@code extra} entries override the defaults. */
   Map<String, String> environment(Path home, Map<String, String> extra) {
     return environment(home, extra, Map.of());

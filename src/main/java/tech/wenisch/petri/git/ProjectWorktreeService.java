@@ -184,6 +184,7 @@ public class ProjectWorktreeService {
         requireSuccess(result, "remove worktree");
       }
       record.removed(actor.getId(), Instant.now(clock));
+      paths.removeWorktreeTemporaryDirectory(record.id());
       auditLog.record(
           actor.getEmail(), "PROJECT_WORKTREE_REMOVED", "PROJECT_WORKTREE", record.id(),
           "Removed worktree for project " + project.getName());

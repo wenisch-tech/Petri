@@ -43,6 +43,14 @@ A port conflict is a property of the environment, never a defect of the code und
   whatever port it ran. A test or command that failed only because a port was occupied is
   environmental: ask for a rerun on another port rather than rejecting the work.
 
+## Temporary files
+
+- Commands run confined; the system `/tmp` is not writable. Use `$TMPDIR` (also `TMP`, `TEMP`):
+  a scratch directory private to the current worktree, kept between commands and removed with the
+  worktree. `mktemp`, Maven and the JVM use it automatically.
+- Do not create scratch files, logs or downloaded artifacts inside the repository, and do not
+  rely on `/tmp` paths in scripts you leave behind; use `${TMPDIR:-/tmp}`.
+
 ## Other environment facts
 
 - Dependencies are downloaded from the network; a transient download failure is worth one retry

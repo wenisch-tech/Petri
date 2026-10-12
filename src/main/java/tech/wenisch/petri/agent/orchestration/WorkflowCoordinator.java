@@ -301,11 +301,19 @@ public class WorkflowCoordinator {
   private void finalVerdict(AgentWorkflow workflow, JsonNode verdict) {
     JsonNode review = read(ledger.latest(workflow.id(), WorkflowArtifactKind.REVIEW).contentJson());
     String decision = verdict.path("decision").asText();
-    boolean reviewApproved = "APPROVED".equals(review.path("decision").asText());
+    String reviewDecision = review.path("decision").asText();
+    boolean reviewApproved = "APPROVED".equals(reviewDecision);
     List<GoalVerificationView> goals = ledger.goals(workflow.id());
     if ("PASS".equals(decision) && reviewApproved && WorkflowGoalVerifier.allVerified(goals)) {
       complete(workflow, verdict.path("reason").asText("Workflow reviewed and completed"), "orchestrator",
           WorkflowGateOutcome.PASS);
+    } else if (unclear(decision, reviewDecision)) {
+      // Not clearly met and not clearly failed: the models are unsure (or only failed on missing
+      // evidence). Rework or a hold would be a guess, so the user decides whether the goal is met.
+      waitForUser(workflow, AgentWorkflowStage.ORCHESTRATOR_FINAL_REVIEW,
+          "Petri could not confirm on its own that the goal is met (review: " + reviewDecision
+              + ", final gate: " + decision + "). Decide whether it is: approve to finish, or give "
+              + "guidance to continue. " + verdict.path("reason").asText(""));
     } else if ("PASS".equals(decision) && reviewApproved) {
       // Everything passed, but not every acceptance criterion is backed by evidence Petri confirmed.
       // A model's claim is not enough to finish on its own, so the user decides.
@@ -324,6 +332,19 @@ public class WorkflowCoordinator {
     } else {
       hold(workflow, verdict.path("reason").asText("Final review could not pass"), "orchestrator");
     }
+  }
+
+  /**
+   * The final result is neither a clean pass nor a clear request for changes: the review approved
+   * or held and the gate did not pass, without a concrete defect to fix. Rework would be a guess
+   * and a hold a dead end, so such outcomes go to the user.
+   */
+  static boolean unclear(String gateDecision, String reviewDecision) {
+    boolean changesRequested = "REVISION_REQUIRED".equals(gateDecision)
+        || "CHANGES_REQUIRED".equals(reviewDecision);
+    boolean reviewUsable = "APPROVED".equals(reviewDecision) || "HOLD".equals(reviewDecision);
+    boolean gateUnsure = !"PASS".equals(gateDecision);
+    return !changesRequested && reviewUsable && gateUnsure;
   }
 
   private boolean hasPassedTest(AgentWorkflow workflow) {

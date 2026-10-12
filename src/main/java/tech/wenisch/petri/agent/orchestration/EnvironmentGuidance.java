@@ -31,6 +31,9 @@ class EnvironmentGuidance {
       return """
           Runtime environment: approved tests run in an isolated sandbox container. The
           install_packages tool is disabled in this deployment; do not request package installs.
+          Temporary files: /tmp inside the sandbox is a directory private to this worktree that
+          survives between commands and is deleted with the worktree. Use it (or $TMPDIR) for
+          scratch files, downloads and generated scripts, never the repository.
           """;
     }
     Set<String> installed = installs.installedPackages();
@@ -52,6 +55,10 @@ class EnvironmentGuidance {
         without a wrapper, install maven or gradle and run_tests uses mvn/gradle directly; a
         wrapper in the worktree takes precedence. If a tool reports "not found" after an install,
         look in the toolchain's usr/bin rather than reinstalling it.
+        Temporary files: the system /tmp is not writable for your commands. Use the directory in
+        $TMPDIR (also TMP and TEMP): it is private to this worktree, survives between commands and
+        is deleted with the worktree. mktemp, Maven and the JVM already use it. Put scratch files,
+        downloads and generated scripts there, never inside the repository.
         """.formatted(installed.isEmpty() ? "none" : String.join(", ", installed));
   }
 }

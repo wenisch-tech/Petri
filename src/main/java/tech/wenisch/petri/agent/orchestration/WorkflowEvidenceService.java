@@ -59,9 +59,29 @@ class WorkflowEvidenceService {
             && later.filePath().equals(value.filePath()) && later.createdAt().isAfter(value.createdAt())));
     Map<String, String> hashes = finalHashes(workflow.executionWorktreeId(), proposals);
     conflict = conflict || hashes.containsValue("EXTERNAL_CONFLICT");
-    boolean testsFailed = testRuns.stream().anyMatch(value -> value.status() == TestRunStatus.FAILED
-        || value.status() == TestRunStatus.ERROR || value.status() == TestRunStatus.TIMED_OUT);
+    boolean testsFailed = currentFailure(testRuns);
     return new Evidence(List.copyOf(paths), diff, hashes, proposals, testRuns, open, conflict, testsFailed);
+  }
+
+  /**
+   * Whether a test is failing <em>now</em>. A failed run followed by a passing run of the same
+   * command was fixed (or was an environment hiccup) and is history, not a failure; only the most
+   * recent finished run of each command counts.
+   */
+  static boolean currentFailure(List<TestRunView> testRuns) {
+    Map<String, TestRunView> latest = new LinkedHashMap<>();
+    testRuns.stream()
+        .filter(value -> finished(value.status()))
+        .sorted(java.util.Comparator.comparing(
+            (TestRunView value) -> value.completedAt() != null ? value.completedAt() : value.requestedAt(),
+            java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder())))
+        .forEach(value -> latest.put(String.valueOf(value.command()), value));
+    return latest.values().stream().anyMatch(value -> value.status() != TestRunStatus.PASSED);
+  }
+
+  private static boolean finished(TestRunStatus status) {
+    return status == TestRunStatus.PASSED || status == TestRunStatus.FAILED
+        || status == TestRunStatus.ERROR || status == TestRunStatus.TIMED_OUT;
   }
 
   private Map<String, String> finalHashes(UUID worktreeId, List<ChangeProposalView> proposals) {

@@ -77,4 +77,19 @@ class LocalToolchainTest {
 
     assertThat(toolchain.repairLinks()).isZero();
   }
+
+  @Test
+  void scratchDirectoryOverridesTheTemporaryDirectoryVariables() {
+    LocalToolchain toolchain = new LocalToolchain("/opt/petri/toolchain", "apk");
+    Path scratch = Path.of("/data/worktree-tmp/abc");
+
+    Map<String, String> env = toolchain.environment(Path.of("/tmp/home"),
+        LocalToolchain.temporaryDirectoryEnvironment(scratch));
+
+    assertThat(env).containsEntry("TMPDIR", "/data/worktree-tmp/abc")
+        .containsEntry("TMP", "/data/worktree-tmp/abc")
+        .containsEntry("TEMP", "/data/worktree-tmp/abc")
+        .containsEntry("JAVA_TOOL_OPTIONS", "-Djava.io.tmpdir=/data/worktree-tmp/abc")
+        .containsEntry("HOME", "/tmp/home");
+  }
 }

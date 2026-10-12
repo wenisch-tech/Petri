@@ -65,6 +65,19 @@ changes as soon as new evidence exists. When the final gate would pass and the r
 criterion is not `VERIFIED`, the workflow waits for the user (naming the open criteria) instead of
 completing on its own.
 
+### Test failures and unclear outcomes
+
+- **Only the current state of a test counts.** A failed run that was followed by a passing run of
+  the same command (the implementer fixed the problem, or the failure was an environment hiccup) is
+  history and no longer sends the workflow back to the implementer. A command whose most recent
+  finished run failed still does.
+- **Unclear outcomes go to the user.** When the review is approved (or held for missing evidence)
+  but the final gate does not pass and nobody asked for concrete changes, Petri neither guesses a
+  rework nor holds the workflow. It waits at the final gate with the reasons, and the user decides:
+  *Approve* to finish, or give guidance to continue. The same applies when criteria are not backed
+  by confirmed evidence or no passing test was executed. Concrete requests for changes
+  (`CHANGES_REQUIRED`, `REVISION_REQUIRED`) still go back to the implementer.
+
 ### Retry and attempt budgets
 
 The per-role attempt limit counts attempts since the last manual retry. A manual **Retry** on a held
