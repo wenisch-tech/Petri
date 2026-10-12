@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.9.0 - 2026-10-12
+
+## [0.9.0](https://github.com/wenisch-tech/Petri/compare/v0.8.1...v0.9.0) (2026-10-12)
+
+
+### Features
+
+* automatic commt message generation ([b70dca6](https://github.com/wenisch-tech/Petri/commit/b70dca61d39bbb46813c9d957eb6e1886bc9ea75))
+* introduced loop guard espcially fix problem with smaller local models ([8b5c271](https://github.com/wenisch-tech/Petri/commit/8b5c2712468ff7f18d5da34df47eedda4b272db8))
+* refactoring menu in workspace ([fecd103](https://github.com/wenisch-tech/Petri/commit/fecd10370c4715b3dcc8fa09c3e248cc74919c6c))
+
+
+### Bug Fixes
+
+* Allow  manual approval / completion of workflow although not all gates are completed ([a314749](https://github.com/wenisch-tech/Petri/commit/a31474907c9c3094424b43882e168105af1ff5aa))
+* fixed changes indication for branch ([a8fffb7](https://github.com/wenisch-tech/Petri/commit/a8fffb72056aa16301c984d14f94de1127c84099))
+* only latest run decides and superseeded failures are named ([93c6400](https://github.com/wenisch-tech/Petri/commit/93c64009453b7a0f3cd92f63801c249a17bbc227))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.9.0
+
+
 ## v0.8.1 - 2026-10-12
 
 ### [0.8.1](https://github.com/wenisch-tech/Petri/compare/v0.8.0...v0.8.1) (2026-10-12)
