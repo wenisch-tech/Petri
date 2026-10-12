@@ -83,6 +83,35 @@ public class GitAccountConnectionService {
     return view(connection);
   }
 
+  /**
+   * Replaces the access token of an existing token connection, for example after the token expired
+   * or to give Petri a token with more permissions. The new token must belong to the same account.
+   */
+  @Transactional
+  public GitAccountConnectionView replaceToken(UUID id, String token, String actorEmail) {
+    if (token == null || token.isBlank()) throw new IllegalArgumentException("A new access token is required");
+    GitAccountConnection connection = ownedLocked(id, actorEmail);
+    if (connection.getAuthMethod() != GitConnectionAuthMethod.PAT) {
+      throw new IllegalStateException(
+          "This account signs in with OAuth; disconnect it and connect again to renew access");
+    }
+    GitProviderInstance instance = activeInstance(
+        connection.getProviderInstanceId(), connection.getOwnerId());
+    GitProviderAdapter adapter = adapters.require(instance.getProviderType());
+    String rawToken = token.trim();
+    ProviderIdentity identity = adapter.identity(instance, rawToken, GitConnectionAuthMethod.PAT);
+    if (!connection.getExternalAccountId().equals(identity.id())) {
+      throw new IllegalArgumentException("This token belongs to " + identity.login() + ", not to "
+          + connection.getExternalLogin() + ". Connect it as a separate account instead.");
+    }
+    adapter.repositories(instance, rawToken, GitConnectionAuthMethod.PAT, 1, 1, null);
+    connection.reconnect(GitConnectionAuthMethod.PAT, identity, cipher.encrypt(rawToken), null,
+        null, null, null, Instant.now());
+    audit.record(actorEmail, "GIT_ACCOUNT_TOKEN_REPLACED", "GIT_ACCOUNT", id,
+        "Replaced the access token of " + instance.getDisplayName() + " account " + identity.login());
+    return view(connection);
+  }
+
   @Transactional(noRollbackFor = {GitProviderException.class, IllegalStateException.class})
   public GitAccountConnectionView validate(UUID id, String actorEmail) {
     GitAccountConnection connection = ownedLocked(id, actorEmail);

@@ -47,7 +47,9 @@ public class AgentToolRegistry {
     } else if (!AgentWorkflowToolPolicy.allowed(context.workflowRole()).contains(toolName)) {
       throw new IllegalArgumentException("Tool is not permitted for role " + context.workflowRole());
     }
-    Map<String, Object> safeInput = input == null ? Map.of() : Map.copyOf(input);
+    // Models send explicit nulls for optional parameters; Map.copyOf would reject them.
+    Map<String, Object> safeInput = input == null ? Map.of()
+        : java.util.Collections.unmodifiableMap(new LinkedHashMap<>(input));
     return new ToolExecutionResult(toolName, tool.execute(context, safeInput));
   }
 }

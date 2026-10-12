@@ -174,4 +174,21 @@ class AutomationPageFlowTest {
         .andExpect(content().string(containsString("View run")))
         .andExpect(content().string(org.hamcrest.Matchers.not(containsString("data-live-refresh"))));
   }
+
+  @Test
+  void aFailedReviewShowsItsReasonOnTheAutomationsPage() throws Exception {
+    AutomationRun run = new AutomationRun(UUID.randomUUID(), projectId, AutomationKind.CODE_REVIEW,
+        AutomationTrigger.PULL_REQUEST, "12", "abc12345", "Add feature", null,
+        AutomationPostMode.AUTO, Instant.now());
+    run.failed("The connected Git account is not allowed to write to pull requests (write:issue)",
+        Instant.now());
+    automationRuns.saveAndFlush(run);
+
+    mockMvc.perform(asAdmin(get("/projects/{id}/automations", projectId).param("embedded", "true")))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("not allowed to write to pull requests")))
+        .andExpect(content().string(containsString("/retry")))
+        .andExpect(content().string(containsString("Retry")));
+  }
 }
+

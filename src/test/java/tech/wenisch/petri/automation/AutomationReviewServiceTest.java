@@ -140,4 +140,21 @@ class AutomationReviewServiceTest {
     assertThat(ReviewRenderer.trend(before, same)).isEqualTo(ReviewSubmission.Trend.UNCHANGED);
     assertThat(ReviewRenderer.trend(before, swapped)).isEqualTo(ReviewSubmission.Trend.MIXED);
   }
+
+  @Test
+  void anUnstructuredAnswerIsStoredAsACommentWithoutFindingsAndIsEscaped() {
+    AutomationRun run = run("abc123");
+    when(runs.require(run.getId())).thenReturn(run);
+
+    String markdown = service.submitUnstructured(run.getId(),
+        "  Looks fine overall. Ping @octocat <script>alert(1)</script>  ");
+
+    assertThat(markdown).contains("petri-code-review:abc123", "Verdict:** Comments",
+        "Looks fine overall.", "No findings.").doesNotContain("<script>", "@octocat");
+    verify(runs).review(org.mockito.ArgumentMatchers.eq(run.getId()),
+        org.mockito.ArgumentMatchers.eq(markdown), anyString());
+    assertThatIllegalArgumentException().isThrownBy(
+        () -> service.submitUnstructured(run.getId(), "   "));
+  }
 }
+

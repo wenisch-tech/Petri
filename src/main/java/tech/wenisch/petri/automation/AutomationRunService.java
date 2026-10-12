@@ -4,6 +4,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.List;
 import java.util.Optional;
+import java.util.Set;
 import java.util.UUID;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.stereotype.Service;
@@ -57,6 +58,20 @@ public class AutomationRunService {
     } catch (DataIntegrityViolationException raced) {
       return Optional.empty();
     }
+  }
+
+  /**
+   * A queued or running review of this head that nobody is working on any more (the process was
+   * restarted), so it should be picked up again even though the pull request itself did not change.
+   */
+  @Transactional(readOnly = true)
+  public boolean isStaleActive(
+      UUID projectId, AutomationKind kind, long number, String headSha, Set<UUID> inFlight) {
+    return runs.findByProjectIdAndKindAndExternalRefAndHeadSha(
+            projectId, kind, Long.toString(number), headSha)
+        .filter(run -> run.getStatus().active() && !inFlight.contains(run.getId())
+            && run.getUpdatedAt().isBefore(Instant.now().minus(STALE_AFTER)))
+        .isPresent();
   }
 
   @Transactional(readOnly = true)

@@ -29,3 +29,13 @@ The **Simple Git** tab preserves direct creation with a repository URI, default 
 Projects, worktrees, chats, runs, proposals, tests and API keys are owner-scoped. Foreign identifiers return `404`. API keys can access only projects owned by their creator.
 
 Administrators manage global provider instances, global OAuth applications, model endpoints, audit data and sandbox profiles. Regular users manage their personal self-hosted instances and OAuth applications as well as their own accounts, projects, workspaces, chats, Git actions and API keys.
+
+## Updating a token
+
+Accounts connected with an access token have an **Update token** action in the account list. Paste a
+new token: Petri checks it with the provider (it must belong to the same account and be able to
+list repositories) and only then replaces the stored one, keeping the account and every project that
+uses it. Use it when a token expired or when it needs more permissions, for example Forgejo's
+`write:issue` scope to comment on pull requests. A token of a different account is refused; connect
+that one as a separate account. OAuth accounts renew by disconnecting and connecting again.
+

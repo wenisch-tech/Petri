@@ -41,6 +41,9 @@ import tech.wenisch.petri.project.Project;
 import tech.wenisch.petri.project.ProjectRepository;
 import tech.wenisch.petri.security.AppUser;
 import tech.wenisch.petri.security.AppUserRepository;
+import tech.wenisch.petri.agent.orchestration.AgentWorkflowRole;
+import tech.wenisch.petri.agent.orchestration.OrchestrationProfileService;
+import tech.wenisch.petri.agent.orchestration.OrchestrationRoleProfileView;
 
 class CodeReviewAutomationTest {
   private final AutomationRunService runs = mock(AutomationRunService.class);
@@ -57,15 +60,17 @@ class CodeReviewAutomationTest {
   private final AgentRunExecutor executor = mock(AgentRunExecutor.class);
   private final ModelCredentialService models = mock(ModelCredentialService.class);
   private final AuditLogService audit = mock(AuditLogService.class);
+  private final OrchestrationProfileService orchestration = mock(OrchestrationProfileService.class);
   private final CodeReviewAutomation automation = new CodeReviewAutomation(
       runs, reviews, projects, users, sources, connections, mirrors, diffs, worktrees, skills, agentRuns,
-      executor, models, audit, 100_000);
+      executor, models, orchestration, audit, 100_000);
 
   private final UUID projectId = UUID.randomUUID();
   private final UUID ownerId = UUID.randomUUID();
   private final UUID runId = UUID.randomUUID();
   private final UUID worktreeId = UUID.randomUUID();
   private final UUID agentRunId = UUID.randomUUID();
+  private final UUID modelId = UUID.randomUUID();
   private final PullRequestRef pr = new PullRequestRef(7, "Add cache", "Body", "alice", "abc123",
       "feature", "main", "refs/pull/7/head", false, false, "https://git.test/pull/7", Instant.now());
 
@@ -90,9 +95,12 @@ class CodeReviewAutomationTest {
     when(skills.load("code-review")).thenReturn(new SkillDocument("code-review", "d", "SKILL BODY"));
     ModelCredentialStatus model = mock(ModelCredentialStatus.class);
     when(model.provider()).thenReturn(ModelProvider.OLLAMA);
-    when(model.id()).thenReturn(UUID.randomUUID());
+    when(model.id()).thenReturn(modelId);
     when(model.global()).thenReturn(true);
     when(models.usable(ownerId)).thenReturn(List.of(model));
+    when(orchestration.get(projectId, ownerId)).thenReturn(List.of(
+        profile(AgentWorkflowRole.PLANNER, ModelProvider.LITELLM, UUID.randomUUID(), "planner-model"),
+        profile(AgentWorkflowRole.ORCHESTRATOR, ModelProvider.OLLAMA, modelId, "orchestrator-model")));
     AgentRunView created = mock(AgentRunView.class);
     when(created.id()).thenReturn(agentRunId);
     when(agentRuns.createAutomationRun(any(), any(), any(), anyString(), any(), anyString()))
@@ -212,14 +220,29 @@ class CodeReviewAutomationTest {
   }
 
   @Test
-  void aFailingReactionDoesNotStopTheReview() {
+  void aReactionThatIsRefusedForOtherReasonsDoesNotStopTheReview() {
     agentFinishes(AgentRunStatus.COMPLETED, "REVIEW");
-    org.mockito.Mockito.doThrow(new tech.wenisch.petri.git.provider.GitProviderException("HTTP 403"))
+    org.mockito.Mockito.doThrow(new tech.wenisch.petri.git.provider.GitProviderException(
+            "Provider request failed with HTTP 404: Award Emoji Name has already been taken"))
         .when(connections).reactToPullRequest(any(), anyString(), anyString(), anyLong(), anyString());
 
     automation.execute(job(AutomationPostMode.DRAFT));
 
     verify(runs).awaitingApproval(runId);
+  }
+
+  @Test
+  void aTokenThatMayNotWriteToPullRequestsFailsBeforeTheModelIsUsed() {
+    org.mockito.Mockito.doThrow(new tech.wenisch.petri.git.provider.GitProviderException(
+            "Provider request failed with HTTP 403: token does not have at least one of required scope(s): [write:issue]"))
+        .when(connections).reactToPullRequest(any(), anyString(), anyString(), anyLong(), anyString());
+
+    automation.execute(job(AutomationPostMode.AUTO));
+
+    verify(runs).failed(eq(runId), org.mockito.ArgumentMatchers.contains("not allowed to write"));
+    verify(runs).failed(eq(runId), org.mockito.ArgumentMatchers.contains("write:issue"));
+    verify(mirrors, never()).synchronize(any(), anyString());
+    verify(agentRuns, never()).createAutomationRun(any(), any(), any(), anyString(), any(), anyString());
   }
 
   @Test
@@ -264,4 +287,95 @@ class CodeReviewAutomationTest {
     assertThat(command.getValue().prompt()).contains("New commits were pushed",
         "[1] MAJOR src/A.java:4 - Race condition", "comparison.resolved", "+fixed line", "old11111");
   }
+
+  private ModelCredentialStatus status(UUID id, ModelProvider provider, String model) {
+    ModelCredentialStatus value = mock(ModelCredentialStatus.class);
+    when(value.id()).thenReturn(id);
+    when(value.provider()).thenReturn(provider);
+    when(value.model()).thenReturn(model);
+    when(value.global()).thenReturn(true);
+    return value;
+  }
+
+  private CreateAgentRunCommand commandOf(CodeReviewAutomation.Job job) {
+    agentFinishes(AgentRunStatus.COMPLETED, "REVIEW");
+    automation.execute(job);
+    var command = org.mockito.ArgumentCaptor.forClass(CreateAgentRunCommand.class);
+    verify(agentRuns).createAutomationRun(eq(worktreeId), command.capture(), eq(ownerId),
+        anyString(), eq(runId), anyString());
+    return command.getValue();
+  }
+
+  private static OrchestrationRoleProfileView profile(
+      AgentWorkflowRole role, ModelProvider provider, UUID instanceId, String model) {
+    return new OrchestrationRoleProfileView(role, provider, instanceId, model, 12, 4096, 65536,
+        null, null, 3, null, true);
+  }
+
+  @Test
+  void usesTheModelSelectedForTheProjectsOrchestratorNotTheFirstProvider() {
+    UUID litellm = UUID.randomUUID();
+    UUID compatible = UUID.randomUUID();
+    ModelCredentialStatus first = status(litellm, ModelProvider.LITELLM, "litellm-default");
+    when(models.usable(ownerId)).thenReturn(List.of(first));
+    when(orchestration.get(projectId, ownerId)).thenReturn(List.of(
+        profile(AgentWorkflowRole.IMPLEMENTER, ModelProvider.LITELLM, litellm, "litellm-default"),
+        profile(AgentWorkflowRole.ORCHESTRATOR, ModelProvider.OPENAI_COMPATIBLE, compatible,
+            "qwen-orchestrator")));
+
+    CreateAgentRunCommand command = commandOf(job(AutomationPostMode.DRAFT));
+
+    assertThat(command.providerInstanceId()).isEqualTo(compatible);
+    assertThat(command.provider()).isEqualTo(ModelProvider.OPENAI_COMPATIBLE);
+    assertThat(command.model()).isEqualTo("qwen-orchestrator");
+    assertThat(command.maxOutputTokens()).isEqualTo(4096);
+    assertThat(command.contextWindowTokens()).isEqualTo(65536);
+    assertThat(command.maxModelTurns()).isEqualTo(20);
+  }
+
+  @Test
+  void anAutomationThatNamesAProviderOverridesTheProjectChoice() {
+    UUID litellm = UUID.randomUUID();
+    ModelCredentialStatus named = status(litellm, ModelProvider.LITELLM, "litellm-default");
+    when(models.resolve(ownerId, null, litellm)).thenReturn(named);
+
+    CreateAgentRunCommand command = commandOf(new CodeReviewAutomation.Job(
+        runId, projectId, pr, AutomationPostMode.DRAFT, litellm, "gpt-special", 20));
+
+    assertThat(command.providerInstanceId()).isEqualTo(litellm);
+    assertThat(command.model()).isEqualTo("gpt-special");
+  }
+
+  @Test
+  void anAutomationProviderWithoutAModelUsesThatProvidersDefault() {
+    UUID litellm = UUID.randomUUID();
+    ModelCredentialStatus named = status(litellm, ModelProvider.LITELLM, "litellm-default");
+    when(models.resolve(ownerId, null, litellm)).thenReturn(named);
+
+    CreateAgentRunCommand command = commandOf(new CodeReviewAutomation.Job(
+        runId, projectId, pr, AutomationPostMode.DRAFT, litellm, null, 20));
+
+    assertThat(command.model()).isEqualTo("litellm-default");
+  }
+
+  @Test
+  void aFinalTextAnswerWithoutSubmitReviewIsUsedAsTheReview() {
+    agentFinishes(AgentRunStatus.COMPLETED, null);
+    AutomationRun stored = runs.require(runId);
+    AgentRunView finished = executor.execute(agentRunId, worktreeId, ownerId, "automation:" + runId);
+    when(finished.finalOutput()).thenReturn("Final review text: the change looks fine.");
+    when(reviews.submitUnstructured(eq(runId), anyString())).thenAnswer(call -> {
+      stored.review("MARKDOWN", Instant.now());
+      return "MARKDOWN";
+    });
+    when(connections.postPullRequestComment(any(), anyString(), anyString(), anyLong(), any(),
+        eq("MARKDOWN"))).thenReturn("https://git.test/pull/7#c9");
+
+    automation.execute(job(AutomationPostMode.AUTO));
+
+    verify(reviews).submitUnstructured(runId, "Final review text: the change looks fine.");
+    verify(runs).posted(runId, "https://git.test/pull/7#c9");
+    verify(runs, never()).failed(any(), anyString());
+  }
 }
+

@@ -65,6 +65,23 @@ public class GitAccountController {
     return "redirect:/git-accounts";
   }
 
+  @PostMapping("/git-accounts/{id}/token")
+  String replaceToken(
+      @PathVariable UUID id,
+      @RequestParam String token,
+      Principal principal,
+      RedirectAttributes redirect) {
+    try {
+      var connection = connections.replaceToken(id, token, principal.getName());
+      redirect.addFlashAttribute("notice", "Token of " + connection.login() + " replaced and verified");
+    } catch (ResponseStatusException exception) {
+      throw exception;
+    } catch (RuntimeException exception) {
+      redirect.addFlashAttribute("error", exception.getMessage());
+    }
+    return "redirect:/git-accounts";
+  }
+
   @PostMapping("/git-accounts/{id}/validate")
   String validate(@PathVariable UUID id, Principal principal, RedirectAttributes redirect) {
     try {

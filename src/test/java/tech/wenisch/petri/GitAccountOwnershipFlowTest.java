@@ -66,6 +66,13 @@ class GitAccountOwnershipFlowTest {
             .with(user("bob@petri.local").roles("USER"))
             .with(csrf()))
         .andExpect(status().isNotFound());
+    mockMvc.perform(post("/git-accounts/{id}/token", connection.getId())
+            .param("token", "stolen-attempt")
+            .with(user("bob@petri.local").roles("USER"))
+            .with(csrf()))
+        .andExpect(status().isNotFound());
+    mockMvc.perform(get("/git-accounts").with(user("alice@petri.local").roles("USER")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Update token")));
 
     mockMvc.perform(get("/git-provider-instances")
             .with(user("alice@petri.local").roles("USER")))

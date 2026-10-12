@@ -99,6 +99,12 @@ Every intervention is visible and measurable:
   (`loopGuardNudges`, `loopGuardWithdrawals` on the run view; columns on `agent_run`).
 - Prometheus exposes `petri_agent_loop_guard_interventions_total{action,role}`.
 
+Withdrawal applies to every tool, also in automations. A code review that ends this way still
+delivers: when the agent answers in plain text without having called `submit_review`, that text is
+stored and posted as the review (a comment without findings, escaped like any other review), subject
+to the automation's approval setting. A tool that failed unexpectedly is logged with its stack
+trace; the model sees only a generic message.
+
 A model that makes progress (different calls, different text) is never affected, and one step in a
 different direction resets the count. The turn budget still applies as the last resort.
 

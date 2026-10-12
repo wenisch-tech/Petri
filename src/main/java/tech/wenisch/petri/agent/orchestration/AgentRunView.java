@@ -36,4 +36,5 @@ public record AgentRunView(
     AgentWorkflowStage workflowPhase,
     Integer workflowAttempt,
     int loopGuardNudges,
-    int loopGuardWithdrawals) {}
+    int loopGuardWithdrawals,
+    UUID automationRunId) {}

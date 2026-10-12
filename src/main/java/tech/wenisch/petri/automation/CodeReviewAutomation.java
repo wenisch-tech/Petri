@@ -12,7 +12,10 @@ import tech.wenisch.petri.agent.orchestration.AgentRunExecutor;
 import tech.wenisch.petri.agent.orchestration.AgentRunService;
 import tech.wenisch.petri.agent.orchestration.AgentRunStatus;
 import tech.wenisch.petri.agent.orchestration.AgentRunView;
+import tech.wenisch.petri.agent.orchestration.AgentWorkflowRole;
 import tech.wenisch.petri.agent.orchestration.CreateAgentRunCommand;
+import tech.wenisch.petri.agent.orchestration.OrchestrationProfileService;
+import tech.wenisch.petri.agent.orchestration.OrchestrationRoleProfileView;
 import tech.wenisch.petri.agent.skill.SkillService;
 import tech.wenisch.petri.audit.AuditLogService;
 import tech.wenisch.petri.git.ProjectMirrorService;
@@ -55,6 +58,7 @@ public class CodeReviewAutomation {
   private final AgentRunService agentRuns;
   private final AgentRunExecutor executor;
   private final ModelCredentialService models;
+  private final OrchestrationProfileService orchestrationProfiles;
   private final AuditLogService audit;
   private final int maxDiffBytes;
 
@@ -64,7 +68,8 @@ public class CodeReviewAutomation {
       ProjectProviderSourceService sources, GitAccountConnectionService connections,
       ProjectMirrorService mirrors, PullRequestDiffService diffs, ProjectWorktreeService worktrees,
       SkillService skills, AgentRunService agentRuns, AgentRunExecutor executor,
-      ModelCredentialService models, AuditLogService audit,
+      ModelCredentialService models, OrchestrationProfileService orchestrationProfiles,
+      AuditLogService audit,
       @Value("${petri.automation.max-diff-bytes:120000}") int maxDiffBytes) {
     this.runs = runs;
     this.reviews = reviews;
@@ -79,6 +84,7 @@ public class CodeReviewAutomation {
     this.agentRuns = agentRuns;
     this.executor = executor;
     this.models = models;
+    this.orchestrationProfiles = orchestrationProfiles;
     this.audit = audit;
     this.maxDiffBytes = maxDiffBytes;
   }
@@ -135,17 +141,22 @@ public class CodeReviewAutomation {
           skills.load(AutomationKind.CODE_REVIEW.skill()).content());
       String task = CodeReviewPrompts.task(job.pr(), diff.changedFiles(), diff.diff(),
           diff.truncated(), MAX_LISTED_FILES, previous, sinceDiff);
-      ModelCredentialStatus model = model(job, owner.getId());
       AgentRunView created = agentRuns.createAutomationRun(
           worktreeId,
-          new CreateAgentRunCommand(task, model.provider(), job.maxModelTurns(), blankToNull(job.model()),
-              null, null, null, null, model.id()),
+          command(job, owner.getId(), task),
           owner.getId(), "automation:" + job.runId(), job.runId(), instructions);
       runs.agentRun(job.runId(), created.id());
       AgentRunView finished = executor.execute(
           created.id(), worktreeId, owner.getId(), "automation:" + job.runId());
 
       AutomationRun result = runs.require(job.runId());
+      if (result.getReviewMarkdown() == null && finished.status() == AgentRunStatus.COMPLETED
+          && finished.finalOutput() != null && !finished.finalOutput().isBlank()) {
+        // The agent answered in text without calling submit_review (typically after the loop
+        // guard took its tools away). Its answer is still the review.
+        reviews.submitUnstructured(job.runId(), finished.finalOutput());
+        result = runs.require(job.runId());
+      }
       if (result.getReviewMarkdown() == null) {
         String reason = finished.status() == AgentRunStatus.COMPLETED
             ? "The review agent finished without submitting a review."
@@ -195,6 +206,8 @@ public class CodeReviewAutomation {
       String reason = "Could not post the review comment: "
           + (exception.getMessage() == null ? "unknown error" : exception.getMessage())
           + ". Check that the connected account's token may comment on pull requests.";
+      log.warn("Posting the review of pull request #{} failed: {}", run.getExternalRef(),
+          exception.getMessage());
       runs.failed(runId, reason);
       audit.record(actor, "AUTOMATION_RUN_FAILED", "PROJECT", run.getProjectId(), reason);
     }
@@ -222,20 +235,38 @@ public class CodeReviewAutomation {
       connections.reactToPullRequest(source.getConnectionId(), source.getExternalRepositoryId(),
           source.getFullName(), pr.number(), "eyes");
     } catch (RuntimeException exception) {
-      log.info("Could not add the eyes reaction to pull request #{}: {}",
-          pr.number(), exception.getMessage());
+      String message = exception.getMessage() == null ? "" : exception.getMessage();
+      if (message.contains("HTTP 401") || message.contains("HTTP 403")) {
+        // The token may not write to pull requests, so the review comment would be refused as
+        // well. Stop before the model is used instead of discovering it afterwards.
+        throw new IllegalStateException("The connected Git account is not allowed to write to "
+            + "pull requests of " + source.getFullName() + " (" + message + "). Give its token "
+            + "permission to write issues and pull requests (Forgejo: scope write:issue) in the "
+            + "Git account settings and run the review again.");
+      }
+      log.info("Could not add the eyes reaction to pull request #{}: {}", pr.number(), message);
     }
   }
 
-  private ModelCredentialStatus model(Job job, UUID ownerId) {
+  /**
+   * The automation's own provider and model when it names them; otherwise the model the project's
+   * orchestrator is configured with (the workflow role profile of the project owner), so reviews
+   * run on what the user selected for orchestration rather than on whichever provider is first.
+   */
+  private CreateAgentRunCommand command(Job job, UUID ownerId, String task) {
+    String name = blankToNull(job.model());
     if (job.providerInstanceId() != null) {
-      return models.resolve(ownerId, null, job.providerInstanceId());
+      ModelCredentialStatus status = models.resolve(ownerId, null, job.providerInstanceId());
+      return new CreateAgentRunCommand(task, status.provider(), job.maxModelTurns(),
+          name != null ? name : status.model(), null, null, null, null, status.id());
     }
-    List<ModelCredentialStatus> usable = models.usable(ownerId);
-    return usable.stream().filter(ModelCredentialStatus::global).findFirst()
-        .or(() -> usable.stream().findFirst())
-        .orElseThrow(() -> new IllegalStateException(
-            "No usable model provider is available for the project owner"));
+    OrchestrationRoleProfileView profile = orchestrationProfiles.get(job.projectId(), ownerId)
+        .stream().filter(value -> value.role() == AgentWorkflowRole.ORCHESTRATOR).findFirst()
+        .orElseThrow(() -> new IllegalStateException("The project has no orchestrator model"));
+    return new CreateAgentRunCommand(task, profile.provider(), job.maxModelTurns(),
+        name != null ? name : profile.model(), profile.maxOutputTokens(),
+        profile.contextWindowTokens(), profile.reasoningEffort(), profile.textVerbosity(),
+        profile.providerInstanceId());
   }
 
   private static String blankToNull(String value) {

@@ -449,7 +449,7 @@ public class AgentRunService {
         run.startedAt(), run.completedAt(), turns.stream().map(AgentRunService::view).toList(),
         run.chatId(), run.chatMessageIndex(), run.contextWindowTokens(), run.partialOutput(),
         run.workflowId(), run.workflowRole(), run.workflowPhase(), run.workflowAttempt(),
-        run.loopGuardNudges(), run.loopGuardWithdrawals());
+        run.loopGuardNudges(), run.loopGuardWithdrawals(), run.automationRunId());
   }
 
   private static AgentTurnView view(AgentTurn turn) {

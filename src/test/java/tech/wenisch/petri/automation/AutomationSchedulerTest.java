@@ -80,4 +80,39 @@ class AutomationSchedulerTest {
 
     assertThat(scheduler.runNow(automation(AutomationTrigger.PULL_REQUEST))).isEqualTo(1);
   }
+
+  @Test
+  void aFailedReviewIsQueuedAgainForTheCurrentStateOfThePullRequest() {
+    listing(pull(8, false));
+    when(runs.register(any(), any(), any(), any(), any(),
+        org.mockito.ArgumentMatchers.eq(true), any())).thenReturn(Optional.of(UUID.randomUUID()));
+    AutomationRun failed = new AutomationRun(UUID.randomUUID(), projectId,
+        AutomationKind.CODE_REVIEW, AutomationTrigger.PULL_REQUEST, "8", "old-head", "PR 8", null,
+        AutomationPostMode.AUTO, Instant.now());
+    failed.failed("provider said no", Instant.now());
+
+    scheduler.retry(automation(AutomationTrigger.PULL_REQUEST), failed);
+
+    verify(review, timeout(2_000)).execute(org.mockito.ArgumentMatchers.argThat(
+        job -> job.pr().number() == 8 && job.pr().headSha().equals("sha8")));
+  }
+
+  @Test
+  void aRetryIsRefusedForClosedOrDraftPullRequests() {
+    listing(pull(1, false), pull(2, true));
+    AutomationRun missing = new AutomationRun(UUID.randomUUID(), projectId,
+        AutomationKind.CODE_REVIEW, AutomationTrigger.PULL_REQUEST, "99", "h", "T", null,
+        AutomationPostMode.AUTO, Instant.now());
+    AutomationRun draft = new AutomationRun(UUID.randomUUID(), projectId,
+        AutomationKind.CODE_REVIEW, AutomationTrigger.PULL_REQUEST, "2", "h", "T", null,
+        AutomationPostMode.AUTO, Instant.now());
+    ProjectAutomation automation = automation(AutomationTrigger.PULL_REQUEST);
+
+    org.assertj.core.api.Assertions.assertThatIllegalStateException()
+        .isThrownBy(() -> scheduler.retry(automation, missing)).withMessageContaining("closed or merged");
+    org.assertj.core.api.Assertions.assertThatIllegalStateException()
+        .isThrownBy(() -> scheduler.retry(automation, draft)).withMessageContaining("draft");
+    verify(review, never()).execute(any());
+  }
 }
+

@@ -83,6 +83,14 @@ severity (`BLOCKER`, `MAJOR`, `MINOR`, `NIT`), body and optional suggested code.
 that finding paths are files changed by the pull request and renders the comment itself: HTML is
 escaped and `@mentions` are defused, so a review cannot ping people or inject markup.
 
+### Retrying
+
+A review that *failed* or was *skipped* shows a **Retry** button in the recent runs. It lists the
+pull request again and queues a new review of its current state: with new commits since, the new
+head is reviewed. It is refused with the reason when the pull request was closed or merged, became a
+draft, or its review is already queued or running. Typical use: after fixing the token permissions
+or the model provider that made the review fail.
+
 ### Following a review live
 
 Every automation run in the *Recent runs* list links to the agent run that performs it (*Follow
@@ -90,6 +98,11 @@ live* while it works, *View run* afterwards). The run page shows the live output
 turns and tool calls, and refreshes itself every few seconds while the run is active; in the
 workspace it opens inside the *Runs* tab. The automations page refreshes while a review is queued
 or running, and neither page refreshes while a dialog is open or a field is being edited.
+
+If the agent ends without calling `submit_review` (for example after the loop guard took its tools
+away), its final text answer is used as the review: it is posted as a comment without structured
+findings, escaped like every review, and follows the same approval setting. Only when there is no
+answer at all does the run fail.
 
 ### Posting
 
@@ -105,15 +118,19 @@ pull requests:
 | --- | --- |
 | GitHub | `repo` (classic) or pull request write (fine-grained) |
 | GitLab | `api` |
-| Forgejo | write access to issues/pull requests |
+| Forgejo | `write:issue` (comments and reactions on pull requests), plus `write:repository` to push |
 
 A missing permission shows as a *Failed* run with the provider's HTTP status; the review itself is
 kept.
 
 ### Model and limits
 
-The run uses the project owner's usable model provider unless the automation names one. The owner's
-own API key is used when the provider needs a per-user key. Reviews run on a bounded pool
+The run uses the model selected for the project's **orchestrator**: the *Orchestrator* role of the
+workflow role profiles (the model dialog next to the workflow in the workspace) of the project owner,
+including its output token and context window settings and reasoning options. When no role profile
+was saved, the project's last chosen workspace model applies, as it does for workflows. An
+automation that names a model provider and/or model in its *Model* section overrides this. The
+owner's own API key is used when the provider needs a per-user key. Reviews run on a bounded pool
 (`PETRI_AUTOMATION_MAX_CONCURRENT`, default 2), one at a time per project, and at most
 `PETRI_AUTOMATION_MAX_PER_POLL` (default 5) new reviews start per poll. The diff handed to the model
 is cut at `PETRI_AUTOMATION_MAX_DIFF_BYTES` (default 120000); the agent reads the remaining files

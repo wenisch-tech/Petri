@@ -91,4 +91,28 @@ class AutomationRunServiceTest {
         "refs/pull/" + number + "/head", false, false, "https://example.test/pull/" + number,
         Instant.now());
   }
+
+  @Test
+  void anInterruptedReviewIsResumedEvenWhenThePullRequestDidNotChange() {
+    UUID projectId = project();
+    PullRequestRef pull = pull(21, "eee555");
+    UUID id = runs.register(projectId, AutomationKind.CODE_REVIEW, AutomationTrigger.PULL_REQUEST,
+        pull, AutomationPostMode.AUTO, false, Set.of()).orElseThrow();
+
+    assertThat(runs.isStaleActive(projectId, AutomationKind.CODE_REVIEW, 21, "eee555", Set.of()))
+        .isFalse();
+
+    AutomationRun run = repository.findById(id).orElseThrow();
+    org.springframework.test.util.ReflectionTestUtils.setField(
+        run, "updatedAt", Instant.now().minusSeconds(3600));
+    repository.saveAndFlush(run);
+
+    assertThat(runs.isStaleActive(projectId, AutomationKind.CODE_REVIEW, 21, "eee555", Set.of()))
+        .isTrue();
+    assertThat(runs.isStaleActive(projectId, AutomationKind.CODE_REVIEW, 21, "eee555", Set.of(id)))
+        .isFalse();
+    assertThat(runs.isStaleActive(projectId, AutomationKind.CODE_REVIEW, 21, "other", Set.of()))
+        .isFalse();
+  }
 }
+

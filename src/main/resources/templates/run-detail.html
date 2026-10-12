@@ -34,6 +34,20 @@
     <h2 class="section-title mb-3">Prompt</h2>
     <pre class="card max-h-96 overflow-auto whitespace-pre-wrap break-words p-4 text-sm text-ink-300" th:text="${run.prompt}">prompt</pre>
   </section>
+  <section th:if="${automationRun != null}" class="section">
+    <h2 class="section-title mb-3">Automation result</h2>
+    <div class="card space-y-2 p-4 text-sm text-ink-300">
+      <div class="flex flex-wrap items-center gap-3">
+        <strong th:text="${automationRun.kind.title}">Code review</strong>
+        <span class="badge" th:classappend="${automationRun.status.name() == 'FAILED'} ? 'badge-neutral' : ''" th:text="${automationRun.status}">POSTED</span>
+        <a th:if="${automationRun.webUrl != null}" th:href="${automationRun.webUrl}" target="_blank" rel="noopener noreferrer" th:text="|Pull request #${automationRun.externalRef}|">PR</a>
+        <a th:if="${automationRun.commentUrl != null}" th:href="${automationRun.commentUrl}" target="_blank" rel="noopener noreferrer">Review comment</a>
+      </div>
+      <div th:if="${automationRun.error != null}" th:replace="~{fragments/layout :: alert('error', ${automationRun.error})}"></div>
+      <p th:if="${automationRun.status.name() == 'POSTED' and automationRun.commentUrl == null}" class="text-xs text-ink-500">The provider did not return a link to the comment.</p>
+      <p th:if="${automationRun.status.name() == 'AWAITING_APPROVAL'}" class="text-xs text-ink-500">The review is waiting for approval on the project's Automations tab.</p>
+    </div>
+  </section>
   <section th:if="${run.finalOutput == null and run.partialOutput != null and !#strings.isEmpty(run.partialOutput)}" class="section">
     <h2 class="section-title mb-3">Live output</h2>
     <pre class="card max-h-96 overflow-auto whitespace-pre-wrap break-words p-4 text-sm text-ink-300" th:text="${run.partialOutput}">partial output</pre>

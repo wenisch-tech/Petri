@@ -69,7 +69,7 @@ public class SubmitReviewTool implements AgentTool {
     if (context.automationRunId() == null) {
       throw new IllegalStateException("submit_review is only available to automation runs");
     }
-    String summary = ToolInputs.requiredString(input, "summary", 8_000);
+    String summary = ToolInputs.requiredString(input, "summary", 12_000);
     ReviewSubmission.Verdict verdict = enumValue(
         ReviewSubmission.Verdict.class, ToolInputs.requiredString(input, "verdict", 32), "verdict");
     if (!(input.get("findings") instanceof List<?> raw)) {

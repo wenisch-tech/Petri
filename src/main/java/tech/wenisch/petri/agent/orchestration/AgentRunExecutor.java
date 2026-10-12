@@ -18,6 +18,8 @@ import tech.wenisch.petri.agent.tool.AutomationToolPolicy;
 
 @Service
 public class AgentRunExecutor {
+  private static final org.slf4j.Logger log =
+      org.slf4j.LoggerFactory.getLogger(AgentRunExecutor.class);
   private static final String INSTRUCTIONS = """
       You are Petri, a coding agent operating in one controlled disposable worktree.
       Inspect repository content with the available tools before drawing conclusions.
@@ -118,6 +120,11 @@ public class AgentRunExecutor {
             } catch (AgentRunCancellationException exception) {
               break;
             } catch (RuntimeException exception) {
+              if (!(exception instanceof IllegalArgumentException
+                  || exception instanceof IllegalStateException)) {
+                // The model only sees a generic message; the cause belongs in the log.
+                log.warn("Tool {} failed unexpectedly in run {}", call.name(), runId, exception);
+              }
               String safeMessage = safeToolMessage(exception);
               try {
                 stateService.recordToolFailure(runId, claimId, call, safeMessage);
@@ -261,6 +268,7 @@ public class AgentRunExecutor {
             ? tools.definitions() : tools.definitions(AgentWorkflowToolPolicy.allowed(role));
     if (state.repetitionStrikes() > 0) {
       instructions = instructions + LoopGuard.guidance(state.repetitionStrikes());
+      // Every tool is withdrawn, also in automations: the model has to answer with what it has.
       if (state.repetitionStrikes() >= LoopGuard.WITHDRAW_TOOLS_AT) definitions = java.util.List.of();
     }
     if (state.initialModelRequest()) {

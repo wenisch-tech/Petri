@@ -113,8 +113,8 @@ final class LoopGuard {
     }
     return "\nLOOP GUARD: you have repeated yourself several times in a row. Tools are no longer "
         + "available. Using what you have already gathered, give your final response now in the "
-        + "required format. State briefly what could not be verified instead of repeating the "
-        + "analysis.\n";
+        + "required format, as plain text if the format cannot be delivered with a tool. State "
+        + "briefly what could not be verified instead of repeating the analysis.\n";
   }
 
   /** Result returned for tool calls the model makes after tools were withdrawn. */

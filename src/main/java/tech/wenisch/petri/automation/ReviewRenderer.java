@@ -34,7 +34,7 @@ public final class ReviewRenderer {
     out.append(MARKER_PREFIX).append(headSha).append(" -->\n");
     out.append(comparing ? "## Petri code review (update)\n\n" : "## Petri code review\n\n");
     out.append("**Verdict:** ").append(review.verdict().label()).append("\n\n");
-    out.append(clean(review.summary(), 4_000)).append("\n");
+    out.append(clean(review.summary(), 12_000)).append("\n");
     if (comparing) comparison(out, headSha, review, previous);
 
     List<ReviewSubmission.Finding> findings = review.findings().stream()

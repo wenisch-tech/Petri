@@ -57,4 +57,26 @@ class AutomationToolPolicyTest {
     assertThat(AutomationToolPolicy.allowed()).containsExactlyInAnyOrder(
         "list_files", "read_file", "search_files", "submit_review");
   }
+
+  @Test
+  void explicitNullArgumentsReachTheToolInsteadOfFailingTheCall() {
+    var seen = new java.util.concurrent.atomic.AtomicReference<Map<String, Object>>();
+    AgentToolRegistry nullable = new AgentToolRegistry(List.of(new AgentTool() {
+      @Override public ToolDefinition definition() {
+        return new ToolDefinition("read_file", "read_file", Map.of());
+      }
+      @Override public Object execute(ToolExecutionContext context, Map<String, Object> input) {
+        seen.set(input);
+        return "ok";
+      }
+    }));
+    Map<String, Object> arguments = new java.util.HashMap<>();
+    arguments.put("path", "a.txt");
+    arguments.put("maxBytes", null);
+
+    assertThat(nullable.execute("read_file", automation(), arguments).output()).isEqualTo("ok");
+    assertThat(seen.get()).containsEntry("path", "a.txt").containsKey("maxBytes");
+  }
+
 }
+

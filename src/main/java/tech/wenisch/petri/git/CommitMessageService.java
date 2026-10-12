@@ -7,7 +7,6 @@ import tech.wenisch.petri.agent.model.ModelClientRegistry;
 import tech.wenisch.petri.agent.model.ModelCredentialRef;
 import tech.wenisch.petri.agent.model.ModelCredentialService;
 import tech.wenisch.petri.agent.model.ModelCredentialStatus;
-import tech.wenisch.petri.agent.model.ModelProvider;
 import tech.wenisch.petri.agent.model.ModelRequest;
 import tech.wenisch.petri.agent.model.ModelResponse;
 import tech.wenisch.petri.agent.skill.SkillService;
@@ -15,7 +14,7 @@ import tech.wenisch.petri.audit.AuditLogService;
 import tech.wenisch.petri.security.AppUser;
 import tech.wenisch.petri.security.AppUserRepository;
 import tech.wenisch.petri.workspace.WorkspaceModelPreferenceService;
-import tech.wenisch.petri.workspace.WorkspaceModelPreferenceView;
+import tech.wenisch.petri.workspace.WorkspaceModelResolver;
 
 /**
  * Suggests a commit message for the changes a commit would contain, using the
@@ -37,14 +36,14 @@ public class CommitMessageService {
   private final AppUserRepository users;
   private final AuditLogService audit;
   private final ProjectWorktreeService worktrees;
-  private final WorkspaceModelPreferenceService preferences;
+  private final WorkspaceModelResolver resolver;
 
   public CommitMessageService(
       WorkspaceGitService git, SkillService skills, ModelCredentialService models,
       ModelClientRegistry clients, AppUserRepository users, AuditLogService audit,
       ProjectWorktreeService worktrees, WorkspaceModelPreferenceService preferences) {
     this.worktrees = worktrees;
-    this.preferences = preferences;
+    this.resolver = new WorkspaceModelResolver(models, preferences);
     this.git = git;
     this.skills = skills;
     this.models = models;
@@ -63,10 +62,9 @@ public class CommitMessageService {
           ? "There are no changes to describe" : "Nothing is staged; tick stage all to include every change");
     }
     UUID projectId = worktrees.get(worktreeId).projectId();
-    ModelCredentialStatus model = workspaceModel(projectId, actor.getId());
-    WorkspaceModelPreferenceView preference = preferences.get(projectId, actor.getId());
-    String modelName = preference != null && preference.model() != null && !preference.model().isBlank()
-        && model.id().equals(preference.providerInstanceId()) ? preference.model() : model.model();
+    WorkspaceModelResolver.Resolved resolved = resolver.resolve(projectId, actor.getId());
+    ModelCredentialStatus model = resolved.status();
+    String modelName = resolved.model();
     ModelResponse response = clients.require(model.provider()).respond(new ModelRequest(
         modelName, instructions(), prompt(context), null, List.of(), List.of(),
         MAX_OUTPUT_TOKENS, null, null).withCredential(new ModelCredentialRef(model.id(), actor.getId())));
@@ -77,26 +75,6 @@ public class CommitMessageService {
     audit.record(actorEmail, "GIT_COMMIT_MESSAGE_GENERATED", "PROJECT_WORKTREE", worktreeId,
         "Generated a commit message suggestion");
     return clean(response.text());
-  }
-
-  /**
-   * The model the workspace uses for chats: the user's saved choice for this project while they can
-   * still call it, otherwise the same fallback the chat uses (Ollama first, then any usable one).
-   */
-  private ModelCredentialStatus workspaceModel(UUID projectId, UUID userId) {
-    List<ModelCredentialStatus> usable = models.usable(userId);
-    WorkspaceModelPreferenceView preference = preferences.get(projectId, userId);
-    if (preference != null) {
-      for (ModelCredentialStatus candidate : usable) {
-        boolean matches = preference.providerInstanceId() != null
-            ? candidate.id().equals(preference.providerInstanceId())
-            : candidate.provider() == preference.provider();
-        if (matches) return candidate;
-      }
-    }
-    return usable.stream().filter(value -> value.provider() == ModelProvider.OLLAMA).findFirst()
-        .or(() -> usable.stream().findFirst())
-        .orElseThrow(() -> new IllegalStateException("No usable model provider is available"));
   }
 
   /** A suggested pull request title and description. */
@@ -112,10 +90,9 @@ public class CommitMessageService {
           + context.sourceBranch() + " has nothing that " + context.targetBranch() + " lacks");
     }
     UUID projectId = worktrees.get(worktreeId).projectId();
-    ModelCredentialStatus model = workspaceModel(projectId, actor.getId());
-    WorkspaceModelPreferenceView preference = preferences.get(projectId, actor.getId());
-    String modelName = preference != null && preference.model() != null && !preference.model().isBlank()
-        && model.id().equals(preference.providerInstanceId()) ? preference.model() : model.model();
+    WorkspaceModelResolver.Resolved resolved = resolver.resolve(projectId, actor.getId());
+    ModelCredentialStatus model = resolved.status();
+    String modelName = resolved.model();
     String instructions = "You write pull request titles and descriptions.\n\n"
         + body(skills.load(PULL_REQUEST_SKILL).content());
     ModelResponse response = clients.require(model.provider()).respond(new ModelRequest(

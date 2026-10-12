@@ -25,12 +25,15 @@ public class AgentRunAdminController {
   private final ChangeProposalService changes;
   private final TestRunService testRuns;
   private final AppUserRepository users;
+  private final tech.wenisch.petri.automation.AutomationRunService automationRuns;
 
   public AgentRunAdminController(
       AgentRunService runs,
       ChangeProposalService changes,
       TestRunService testRuns,
-      AppUserRepository users) {
+      AppUserRepository users,
+      tech.wenisch.petri.automation.AutomationRunService automationRuns) {
+    this.automationRuns = automationRuns;
     this.runs = runs;
     this.changes = changes;
     this.testRuns = testRuns;
@@ -57,6 +60,13 @@ public class AgentRunAdminController {
     model.addAttribute("run", run);
     model.addAttribute("changeProposals", changes.listForAgentRun(runId));
     model.addAttribute("testRuns", testRuns.listForAgentRun(runId));
+    if (run.automationRunId() != null) {
+      try {
+        model.addAttribute("automationRun", automationRuns.require(run.automationRunId()));
+      } catch (IllegalArgumentException ignored) {
+        // the automation run was removed; the agent run is still shown
+      }
+    }
     // The workspace shows the run in its Runs tab and asks for the content only.
     return embedded ? "run-detail :: content" : "run-detail";
   }

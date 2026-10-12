@@ -61,6 +61,31 @@ public class AutomationReviewService {
     return markdown;
   }
 
+  /**
+   * Stores the agent's final text as the review when it answered without calling
+   * {@code submit_review} (for example after the loop guard withdrew its tools). It is rendered
+   * through the same escaping as a structured review, as a comment without findings.
+   */
+  public String submitUnstructured(UUID automationRunId, String text) {
+    AutomationRun run = runs.require(automationRunId);
+    if (run.getReviewMarkdown() != null) {
+      throw new IllegalStateException("A review was already submitted for this pull request");
+    }
+    String summary = text == null ? "" : text.strip();
+    if (summary.isEmpty()) throw new IllegalArgumentException("The agent returned no text to use");
+    ReviewSubmission review = new ReviewSubmission(
+        summary, ReviewSubmission.Verdict.COMMENT, List.of(), null);
+    String markdown = ReviewRenderer.render(run.getHeadSha(), review, null);
+    String stored;
+    try {
+      stored = json.writeValueAsString(review);
+    } catch (JacksonException exception) {
+      throw new IllegalStateException("Review could not be stored", exception);
+    }
+    runs.review(automationRunId, markdown, stored);
+    return markdown;
+  }
+
   private static ReviewSubmission withoutComparison(ReviewSubmission review) {
     List<ReviewSubmission.Finding> findings = review.findings().stream()
         .map(finding -> new ReviewSubmission.Finding(finding.path(), finding.line(),

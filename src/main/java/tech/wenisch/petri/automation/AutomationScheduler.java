@@ -103,6 +103,35 @@ public class AutomationScheduler {
     return queue(automation, true, true);
   }
 
+  /**
+   * Starts a failed or skipped review of one pull request again, with the pull request as it is
+   * now: when it received new commits since, the new head is reviewed instead.
+   */
+  public void retry(ProjectAutomation automation, AutomationRun failed) {
+    UUID projectId = automation.getProjectId();
+    ProjectProviderSource source = sources.find(projectId);
+    if (source == null) {
+      throw new IllegalStateException("The project is no longer linked to a connected Git account");
+    }
+    long number = Long.parseLong(failed.getExternalRef());
+    PullRequestRef pr = connections.openPullRequests(
+            source.getConnectionId(), source.getExternalRepositoryId(), source.getFullName())
+        .pullRequests().stream().filter(value -> value.number() == number).findFirst()
+        .orElseThrow(() -> new IllegalStateException(
+            "Pull request #" + number + " is closed or merged"));
+    if (pr.draft()) {
+      throw new IllegalStateException("Pull request #" + number
+          + " is a draft; it is reviewed once it is ready");
+    }
+    Optional<UUID> runId = runs.register(projectId, automation.getKind(), automation.getTrigger(),
+        pr, automation.getPostMode(), true, inFlight);
+    if (runId.isEmpty()) {
+      throw new IllegalStateException("This review is already queued or running");
+    }
+    submit(new CodeReviewAutomation.Job(runId.get(), projectId, pr, automation.getPostMode(),
+        automation.getProviderInstanceId(), automation.getModel(), automation.getMaxModelTurns()));
+  }
+
   private int queue(ProjectAutomation automation, boolean includeAll, boolean retryFailed) {
     UUID projectId = automation.getProjectId();
     ProjectProviderSource source = sources.find(projectId);
@@ -116,7 +145,9 @@ public class AutomationScheduler {
     List<PullRequestRef> candidates = listing.pullRequests().stream()
         .filter(pr -> !pr.draft())
         .filter(pr -> includeAll || baseline == null || pr.updatedAt() == null
-            || pr.updatedAt().isAfter(baseline))
+            || pr.updatedAt().isAfter(baseline)
+            // A review interrupted by a restart is resumed even if the pull request is unchanged.
+            || runs.isStaleActive(projectId, automation.getKind(), pr.number(), pr.headSha(), inFlight))
         .toList();
     for (PullRequestRef pr : candidates) {
       if (queued >= maxPerPoll) {

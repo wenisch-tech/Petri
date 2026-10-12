@@ -130,6 +130,35 @@ public class AutomationController {
     return "redirect:/projects/" + projectId + "/automations";
   }
 
+  @PostMapping("/projects/{projectId}/automations/runs/{runId}/retry")
+  String retry(
+      @PathVariable UUID projectId, @PathVariable UUID runId, Principal principal,
+      RedirectAttributes redirect) {
+    access.requireProject(projectId, principal.getName());
+    AutomationRun run;
+    try {
+      run = runs.require(runId);
+    } catch (IllegalArgumentException exception) {
+      throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+    }
+    if (!run.getProjectId().equals(projectId)) throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+    try {
+      if (run.getStatus() != AutomationRunStatus.FAILED && run.getStatus() != AutomationRunStatus.SKIPPED) {
+        throw new IllegalStateException("Only failed or skipped reviews can be retried");
+      }
+      List<ProjectAutomation> all = settings.list(projectId, principal.getName());
+      ProjectAutomation automation = all.stream().filter(value -> value.getKind() == run.getKind())
+          .sorted(java.util.Comparator.comparing(ProjectAutomation::isEnabled).reversed())
+          .findFirst().orElseThrow(() -> new IllegalStateException(
+              "No automation of this kind is configured for the project any more"));
+      scheduler.retry(automation, run);
+      redirect.addFlashAttribute("notice", "Review of #" + run.getExternalRef() + " queued again");
+    } catch (RuntimeException exception) {
+      redirect.addFlashAttribute("error", exception.getMessage());
+    }
+    return "redirect:/projects/" + projectId + "/automations";
+  }
+
   @PostMapping("/projects/{projectId}/automations/runs/{runId}/approve")
   String approve(
       @PathVariable UUID projectId, @PathVariable UUID runId, Principal principal,
