@@ -37,6 +37,16 @@ public class HomeController {
     return "index";
   }
 
+  @GetMapping("/settings")
+  String settings() {
+    return "redirect:/git-accounts";
+  }
+
+  @GetMapping("/admin")
+  String admin() {
+    return "redirect:/model-settings";
+  }
+
   @GetMapping("/login")
   String login(Model model) {
     model.addAttribute("oidcProviders", oidcProviders());

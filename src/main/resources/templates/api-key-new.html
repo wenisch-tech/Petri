@@ -1,49 +1,42 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Create API key · Petri</title>
-  <link rel="stylesheet" href="/css/petri.css">
-  <script defer src="/js/petri.js"></script>
-</head>
+<head th:replace="~{fragments/layout :: head('Create API key')}"></head>
 <body>
-  <header class="topbar">
-    <div class="page flex items-center justify-between py-4">
-      <a href="/" class="flex items-center gap-3 font-semibold">
-        <span class="grid size-9 place-items-center rounded-xl bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span>
-        <span>Petri</span>
-      </a>
-      <button class="btn-secondary" type="button" x-data @click="$store.theme.toggle()" aria-label="Toggle theme"><i data-lucide="Sun"></i></button>
+<header th:replace="~{fragments/layout :: topbar('settings')}"></header>
+
+<div class="area-layout">
+  <nav th:replace="~{fragments/layout :: settingsNav('api-keys')}"></nav>
+
+  <main class="min-w-0 max-w-2xl">
+    <a class="back-link" href="/api-keys"><i data-lucide="ArrowLeft"></i> API keys</a>
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Create API key</h1>
+        <p class="page-description">The secret is shown once on the next screen.</p>
+      </div>
     </div>
-  </header>
 
-  <main class="page max-w-3xl">
-    <a class="mb-5 inline-flex items-center gap-2 text-sm text-ink-500 hover:text-ink-100" href="/api-keys"><i data-lucide="ArrowLeft"></i> Back to API keys</a>
-    <section class="panel p-6 sm:p-8">
-      <p class="text-xs font-bold uppercase tracking-[.2em] text-brand-400">Service authentication</p>
-      <h1 class="mt-2 text-3xl font-semibold tracking-tight">Create API key</h1>
-      <p class="mt-2 text-ink-500">Use a descriptive name. The generated secret cannot be recovered after leaving the confirmation page.</p>
-
-      <form class="mt-8 space-y-6" method="post" action="/api-keys" th:object="${apiKeyForm}">
-        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-        <p th:if="${formError}" class="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300" th:text="${formError}">Unable to create API key.</p>
-        <label class="block">
-          <span class="mb-2 block text-sm font-medium">Name</span>
-          <input class="field" type="text" th:field="*{name}" maxlength="120" placeholder="VS Code extension on desktop" required autofocus>
+    <form class="card" method="post" action="/api-keys" th:object="${apiKeyForm}">
+      <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+      <div class="card-body space-y-5">
+        <div th:replace="~{fragments/layout :: alert('error', ${formError})}"></div>
+        <div>
+          <label class="label" for="name">Name</label>
+          <input class="field" type="text" th:field="*{name}" maxlength="120" placeholder="VS Code on my laptop" required autofocus>
           <span class="field-error" th:if="${#fields.hasErrors('name')}" th:errors="*{name}">Invalid name</span>
-        </label>
-        <label class="block">
-          <span class="mb-2 block text-sm font-medium">Expires on <span class="text-ink-500">(optional, UTC)</span></span>
-          <input class="field" type="date" th:field="*{expiresOn}">
-          <span class="mt-1.5 block text-xs text-ink-500">A selected date remains valid through the end of that date in UTC.</span>
-        </label>
-        <div class="flex flex-wrap justify-end gap-3 border-t border-ink-700 pt-6">
-          <a class="btn-secondary" href="/api-keys">Cancel</a>
-          <button class="btn-primary" type="submit"><i data-lucide="KeyRound"></i> Create API key</button>
         </div>
-      </form>
-    </section>
+        <div>
+          <label class="label" for="expiresOn">Expires on <span class="label-optional">(optional)</span></label>
+          <input class="field" type="date" th:field="*{expiresOn}">
+          <span class="hint">Valid through the end of the selected day (UTC).</span>
+        </div>
+      </div>
+      <div class="card-footer">
+        <a class="btn-secondary" href="/api-keys">Cancel</a>
+        <button class="btn-primary" type="submit"><i data-lucide="KeyRound"></i> Create key</button>
+      </div>
+    </form>
   </main>
+</div>
 </body>
 </html>

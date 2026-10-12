@@ -67,7 +67,7 @@ public class SecurityConfiguration {
             .requestMatchers("/css/**", "/js/**", "/actuator/health", "/actuator/health/**")
             .permitAll()
             .requestMatchers(apiRequests).hasRole("API_CLIENT")
-            .requestMatchers("/audit", "/audit/**").hasRole("INSTANCE_ADMIN")
+            .requestMatchers("/admin", "/audit", "/audit/**").hasRole("INSTANCE_ADMIN")
             .requestMatchers("/model-settings", "/model-settings/**").hasRole("INSTANCE_ADMIN")
             .requestMatchers("/sandbox-profiles", "/sandbox-profiles/**").hasRole("INSTANCE_ADMIN")
             .requestMatchers("/operations/model-credentials", "/operations/model-credentials/**")

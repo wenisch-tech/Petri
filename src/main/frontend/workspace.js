@@ -572,6 +572,7 @@ async function ensureMonaco(state) {
 }
 
 function layoutEditor(state) {
+  if (!state.host) return;
   const dimension = { width: state.host.clientWidth, height: state.host.clientHeight };
   if (dimension.width < 1 || dimension.height < 1) return;
   state.editor?.layout(dimension);

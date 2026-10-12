@@ -25,8 +25,50 @@ Alpine.store('theme', {
   }
 });
 
+function initializeDialogs() {
+  document.addEventListener('click', event => {
+    const opener = event.target.closest?.('[data-dialog-open]');
+    if (opener) {
+      document.getElementById(opener.dataset.dialogOpen)?.showModal();
+      return;
+    }
+    // A click that lands on the <dialog> element itself is a click on its backdrop.
+    if (event.target instanceof HTMLDialogElement && event.target.classList.contains('dialog')) event.target.close();
+  });
+  document.addEventListener('submit', event => {
+    const message = event.target.dataset?.confirm;
+    if (message && !window.confirm(message)) event.preventDefault();
+  });
+  // Server-side validation re-renders the page; reopen the dialog that holds the failing form.
+  document.querySelectorAll('dialog.dialog').forEach(dialog => {
+    if (dialog.hasAttribute('data-open-on-load') || dialog.querySelector('.field-error, .alert-error')) dialog.showModal();
+  });
+  document.querySelectorAll('[data-copy-target]').forEach(button => button.addEventListener('click', async () => {
+    const source = document.getElementById(button.dataset.copyTarget);
+    if (!source) return;
+    try {
+      await navigator.clipboard.writeText(source.value ?? source.textContent);
+      const label = button.querySelector('[data-copy-label]');
+      if (label) { label.textContent = 'Copied'; setTimeout(() => { label.textContent = 'Copy'; }, 1500); }
+    } catch { source.select?.(); }
+  }));
+}
+
+function localizeTimes(scope = document) {
+  const format = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  const dateOnly = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
+  scope.querySelectorAll('time[data-local]').forEach(element => {
+    const value = new Date(element.getAttribute('datetime'));
+    if (Number.isNaN(value.getTime())) return;
+    element.textContent = (element.dataset.local === 'date' ? dateOnly : format).format(value);
+    element.title = value.toISOString();
+  });
+}
+
 function bootPetri() {
   hydrateIcons();
+  initializeDialogs();
+  localizeTimes();
   hydrateMarkdown(document);
 
   const chat = document.querySelector('[data-chat-run]');

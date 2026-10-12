@@ -1,87 +1,59 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="_csrf" th:content="${_csrf.token}">
-  <meta name="_csrf_header" th:content="${_csrf.headerName}">
-  <title>Projects · Petri</title>
-  <link rel="stylesheet" href="/css/petri.css">
-  <script defer src="/js/petri.js"></script>
-</head>
+<head th:replace="~{fragments/layout :: head('Projects')}"></head>
 <body>
-  <header class="topbar">
-    <div class="page flex items-center justify-between py-4">
-      <a href="/" class="flex items-center gap-3 font-semibold">
-        <span class="grid size-9 place-items-center rounded-xl bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span>
-        <span>Petri</span>
-      </a>
-      <nav class="hidden items-center gap-1 sm:flex" aria-label="Primary navigation">
-        <a class="nav-link" href="/projects">Workspace</a>
-        <a class="nav-link bg-ink-800 text-ink-100" href="/projects">Projects</a>
-        <a class="nav-link" href="/runs">Runs</a>
-        <a th:if="${isInstanceAdmin}" class="nav-link" href="/model-settings">Models</a>
-        <a th:if="${isInstanceAdmin}" class="nav-link" href="/audit">Audit</a>
-        <a class="nav-link" href="/api-keys">API keys</a>
-        <a class="nav-link" href="/git-accounts">Git accounts</a>
-        <a class="nav-link" href="/git-provider-instances">Git instances</a>
-      </nav>
-      <div class="flex items-center gap-2">
-        <button class="btn-secondary" type="button" x-data @click="$store.theme.toggle()" aria-label="Toggle theme"><i data-lucide="Sun"></i></button>
-        <form method="post" action="/logout">
-          <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-          <button class="btn-secondary" type="submit"><i data-lucide="LogOut"></i> Sign out</button>
-        </form>
-      </div>
+<header th:replace="~{fragments/layout :: topbar('projects')}"></header>
+
+<main class="page">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Projects</h1>
+      <p class="page-description">Repositories Petri mirrors and prepares worktrees for. Open a project to work in its workspace.</p>
     </div>
-  </header>
+    <div class="page-actions">
+      <a class="btn-primary" href="/projects/new"><i data-lucide="Plus"></i> Add project</a>
+    </div>
+  </div>
 
-  <main class="page">
-    <section class="panel p-6 sm:p-8">
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p class="text-xs font-bold uppercase tracking-[.2em] text-brand-400">Workspace registry</p>
-          <h1 class="mt-2 text-3xl font-semibold tracking-tight">Projects</h1>
-          <p class="mt-2 text-ink-500">Repositories registered for future mirrors, worktrees and agent runs.</p>
-        </div>
-        <div class="flex gap-2"><a class="btn-secondary" href="/git-accounts"><i data-lucide="PlugZap"></i> Connect account</a><a class="btn-primary" href="/projects/new"><i data-lucide="Plus"></i> Add project</a></div>
-      </div>
+  <div th:replace="~{fragments/layout :: alert('success', ${createdProject} ? |${createdProject} was added.| : null)}"></div>
 
-      <div th:if="${createdProject}" class="mt-6 flex items-center gap-2 rounded-xl border border-good-500/30 bg-good-500/10 p-4 text-sm text-good-500">
-        <i data-lucide="CircleCheck"></i>
-        <span><strong th:text="${createdProject}">Project</strong> was added.</span>
-      </div>
+  <div th:if="${#lists.isEmpty(projects)}" class="empty-state">
+    <i data-lucide="FolderGit2"></i>
+    <h2>No projects yet</h2>
+    <p>Import a repository from a connected Git account or register one by URL.</p>
+    <a class="btn-primary" href="/projects/new"><i data-lucide="Plus"></i> Add project</a>
+  </div>
 
-      <div th:if="${#lists.isEmpty(projects)}" class="mt-8 rounded-xl border border-dashed border-ink-700 p-10 text-center">
-        <i class="mx-auto text-ink-500" data-lucide="FolderGit2"></i>
-        <h2 class="mt-4 font-semibold">No projects yet</h2>
-        <p class="mt-2 text-sm text-ink-500">Register a Git repository to establish its Petri identity.</p>
+  <ul th:unless="${#lists.isEmpty(projects)}" class="list">
+    <li th:each="project : ${projects}" class="list-row"
+        th:with="source=${projectSources[project.id]}, connection=${projectConnections[project.id]}, job=${initializationJobs[project.id]}">
+      <span class="list-icon"><i data-lucide="FolderGit2"></i></span>
+      <div class="list-main">
+        <a class="list-title hover:text-brand-400" th:href="@{/workspace/projects/{id}(id=${project.id})}" th:text="${project.name}">Project</a>
+        <span class="list-meta">
+          <span th:if="${source == null}">Simple Git</span>
+          <span th:if="${source != null}" th:text="${source.fullName}">owner/repository</span>
+          <span th:if="${connection != null}" th:text="|${connection.providerName} · ${connection.login}|">Provider · login</span>
+          <span th:if="${source == null}" class="truncate" th:text="${project.repositoryUri}">repository</span>
+          <span><i data-lucide="GitBranch"></i><span th:text="${project.defaultBranch}">main</span></span>
+        </span>
+        <span th:if="${job != null and job.errorMessage != null}" class="mt-1 block text-xs text-danger-400" th:text="${job.errorMessage}">Error</span>
       </div>
-
-      <div th:unless="${#lists.isEmpty(projects)}" class="table-shell mt-8">
-        <table class="data-table">
-          <thead><tr><th>Project</th><th>Source</th><th>Repository</th><th>Initialization</th><th>Status</th><th></th></tr></thead>
-          <tbody>
-            <tr th:each="project : ${projects}">
-              <td>
-                <a class="font-semibold text-ink-100 hover:text-brand-400" th:href="@{/workspace/projects/{id}(id=${project.id})}" th:text="${project.name}">Project</a>
-                <span class="mt-1 block font-mono text-xs text-ink-500" th:text="${project.slug}">project</span>
-              </td>
-              <td><span th:if="${projectSources[project.id] == null}" class="badge">Simple Git</span><span th:if="${projectSources[project.id] != null}" class="badge" th:text="${projectSources[project.id].fullName}">provider/repository</span><span th:if="${projectConnections[project.id] != null}" class="mt-1 block text-xs text-ink-500" th:text="|${projectConnections[project.id].providerName} · ${projectConnections[project.id].login} · ${projectConnections[project.id].status}|">Provider · account · ACTIVE</span><span th:if="${projectSources[project.id] != null and !projectSources[project.id].canWrite}" class="mt-1 block text-xs text-amber-300">Read only</span></td>
-              <td class="max-w-md"><span class="block truncate" th:text="${project.repositoryUri}">repository</span><code class="mt-1 block" th:text="${project.defaultBranch}">main</code></td>
-              <td><span th:if="${initializationJobs[project.id] == null}" class="text-sm text-ink-500">Manual</span><span th:if="${initializationJobs[project.id] != null}" class="badge" th:text="${initializationJobs[project.id].status}">PENDING</span><span th:if="${initializationJobs[project.id] != null and initializationJobs[project.id].errorMessage != null}" class="mt-1 block max-w-xs text-xs text-red-300" th:text="${initializationJobs[project.id].errorMessage}">Error</span></td>
-              <td><span class="badge" th:text="${project.status}">ACTIVE</span></td>
-              <td class="text-right" th:if="${canManageProjects}">
-                <form th:if="${initializationJobs[project.id] != null and initializationJobs[project.id].status.name() == 'FAILED'}" class="inline" method="post" th:action="@{/projects/{id}/initialization/retry(id=${project.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-secondary" type="submit"><i data-lucide="RefreshCw"></i> Retry</button></form>
-                <a class="btn-secondary" th:href="@{/workspace/projects/{id}(id=${project.id})}"><i data-lucide="FileCode2"></i> Open</a>
-                <a class="btn-secondary" th:href="@{/projects/{id}/settings(id=${project.id})}"><i data-lucide="Settings"></i> Settings</a>
-              </td>
-              <td th:unless="${canManageProjects}"></td>
-            </tr>
-          </tbody>
-        </table>
+      <span th:if="${source != null and !source.canWrite}" class="badge badge-warn">Read only</span>
+      <span th:if="${connection != null and connection.status.name() != 'ACTIVE'}" class="badge badge-warn" th:text="|Account ${#strings.toLowerCase(connection.status)}|">Account expired</span>
+      <span th:if="${job != null and job.status.name() != 'SUCCEEDED' and job.status.name() != 'COMPLETED'}" class="badge"
+            th:classappend="${job.status.name() == 'FAILED'} ? 'badge-danger' : 'badge-brand'" th:text="${#strings.capitalize(#strings.toLowerCase(job.status))}">Pending</span>
+      <span th:if="${project.status.name() != 'ACTIVE'}" class="badge badge-neutral" th:text="${project.status}">ARCHIVED</span>
+      <div class="list-actions" th:if="${canManageProjects}">
+        <form th:if="${job != null and job.status.name() == 'FAILED'}" method="post" th:action="@{/projects/{id}/initialization/retry(id=${project.id})}">
+          <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+          <button class="btn-ghost" type="submit"><i data-lucide="RefreshCw"></i> Retry</button>
+        </form>
+        <a class="icon-button" th:href="@{/projects/{id}/settings(id=${project.id})}" title="Project settings" aria-label="Project settings"><i data-lucide="Settings"></i></a>
+        <a class="btn-secondary btn-sm" th:href="@{/workspace/projects/{id}(id=${project.id})}">Open</a>
       </div>
-    </section>
-  </main>
+    </li>
+  </ul>
+</main>
 </body>
 </html>

@@ -1,86 +1,66 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="_csrf" th:content="${_csrf.token}">
-  <meta name="_csrf_header" th:content="${_csrf.headerName}">
-  <title>Petri</title>
-  <link rel="stylesheet" href="/css/petri.css">
-  <script defer src="/js/petri.js"></script>
-</head>
+<head th:replace="~{fragments/layout :: head(null)}"></head>
 <body>
-  <header class="topbar">
-    <div class="page flex items-center justify-between py-4">
-      <a href="/" class="flex items-center gap-3 font-semibold">
-        <span class="grid size-9 place-items-center rounded-xl bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span>
-        <span>Petri</span>
-      </a>
-      <nav class="hidden items-center gap-1 sm:flex" aria-label="Primary navigation">
-        <a class="nav-link" href="/chat">Chat</a>
-        <a class="nav-link" href="/projects">Projects</a>
-        <a class="nav-link" href="/runs">Runs</a>
-        <a th:if="${isInstanceAdmin}" class="nav-link" href="/model-settings">Models</a>
-        <a th:if="${isInstanceAdmin}" class="nav-link" href="/audit">Audit</a>
-        <a class="nav-link" href="/api-keys">API keys</a>
-        <a class="nav-link" href="/git-accounts">Git accounts</a>
-      </nav>
-      <div class="flex items-center gap-2">
-        <button class="btn-secondary" type="button" x-data @click="$store.theme.toggle()" aria-label="Toggle theme">
-          <i data-lucide="Sun"></i>
-        </button>
-        <form method="post" action="/logout">
-          <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-          <button class="btn-secondary" type="submit"><i data-lucide="LogOut"></i> Sign out</button>
-        </form>
-      </div>
-    </div>
-  </header>
+<header th:replace="~{fragments/layout :: topbar('home')}"></header>
 
-  <main class="page">
-    <section class="panel overflow-hidden">
-      <div class="border-b border-ink-700/70 p-6 sm:p-8">
-        <p class="text-xs font-bold uppercase tracking-[.2em] text-brand-400">Foundation online</p>
-        <h1 class="mt-3 text-3xl font-semibold tracking-tight sm:text-4xl">Welcome to Petri</h1>
-        <p class="mt-3 max-w-2xl text-ink-300">The secure foundation for managed coding-agent runs is ready.</p>
-        <p class="mt-4 text-sm text-ink-500">Signed in as <strong class="text-ink-300" th:text="${username}">user</strong></p>
+<main class="page">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Welcome back</h1>
+      <p class="page-description">Signed in as <span class="text-ink-300" th:text="${username}">user</span>. Pick up a project or start a new one.</p>
+    </div>
+    <div class="page-actions">
+      <a class="btn-primary" href="/projects/new"><i data-lucide="Plus"></i> Add project</a>
+    </div>
+  </div>
+
+  <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+    <section class="min-w-0">
+      <div class="section-header">
+        <div><h2 class="section-title">Recent projects</h2></div>
+        <a th:unless="${#lists.isEmpty(recentProjects)}" class="text-sm font-medium text-brand-400 hover:underline" href="/projects">View all <span th:text="${projectCount}">0</span></a>
       </div>
-      <div class="grid gap-4 p-6 sm:grid-cols-3 sm:p-8">
-        <article class="metric">
-          <i class="text-cyan-500" data-lucide="FolderGit2"></i>
-          <span class="metric-label mt-4 block">Projects</span>
-          <span class="metric-value" th:text="${projectCount}">0</span>
-        </article>
-        <article class="metric">
-          <i class="text-cyan-500" data-lucide="ShieldCheck"></i>
-          <span class="metric-label mt-4 block">Execution</span>
-          <span class="metric-value">Approval-first</span>
-        </article>
-        <article class="metric">
-          <i class="text-cyan-500" data-lucide="Boxes"></i>
-          <span class="metric-label mt-4 block">Architecture</span>
-          <span class="metric-value">Modular</span>
-        </article>
+      <div th:if="${#lists.isEmpty(recentProjects)}" class="empty-state">
+        <i data-lucide="FolderGit2"></i>
+        <h2>No projects yet</h2>
+        <p>Import a repository from a connected Git account or register one by URL.</p>
+        <a class="btn-primary" href="/projects/new"><i data-lucide="Plus"></i> Add project</a>
       </div>
-      <div class="border-t border-ink-700/70 p-6 sm:p-8">
-        <div class="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <h2 class="text-lg font-semibold">Recent projects</h2>
-            <p class="mt-1 text-sm text-ink-500">Repositories prepared for controlled agent runs.</p>
-          </div>
-          <a class="btn-primary" href="/projects/new"><i data-lucide="Plus"></i> Add project</a>
-        </div>
-        <p th:if="${#lists.isEmpty(recentProjects)}" class="mt-6 rounded-xl border border-dashed border-ink-700 p-6 text-sm text-ink-500">
-          No projects yet. Add the first repository to continue.
-        </p>
-        <div th:unless="${#lists.isEmpty(recentProjects)}" class="mt-6 grid gap-3 sm:grid-cols-2">
-          <a th:each="project : ${recentProjects}" th:href="@{/workspace/projects/{id}(id=${project.id})}" class="metric transition hover:border-brand-400/60">
-            <span class="font-semibold text-ink-100" th:text="${project.name}">Project</span>
-            <span class="mt-1 block truncate text-sm text-ink-500" th:text="${project.repositoryUri}">repository</span>
+      <ul th:unless="${#lists.isEmpty(recentProjects)}" class="list">
+        <li th:each="project : ${recentProjects}">
+          <a class="list-row list-row-link" th:href="@{/workspace/projects/{id}(id=${project.id})}">
+            <span class="list-icon"><i data-lucide="FolderGit2"></i></span>
+            <span class="list-main">
+              <span class="list-title" th:text="${project.name}">Project</span>
+              <span class="list-meta"><span class="truncate" th:text="${project.repositoryUri}">repository</span></span>
+            </span>
+            <span class="hidden items-center gap-1 text-sm font-medium text-ink-500 sm:flex">Open workspace <i data-lucide="ArrowRight"></i></span>
           </a>
-        </div>
-      </div>
+        </li>
+      </ul>
     </section>
-  </main>
+
+    <aside class="space-y-3">
+      <h2 class="section-title mb-3">Shortcuts</h2>
+      <a class="card card-body flex items-center gap-3 transition hover:border-ink-500" href="/git-accounts">
+        <span class="list-icon"><i data-lucide="PlugZap"></i></span>
+        <span><span class="block text-sm font-semibold">Git accounts</span><span class="block text-xs text-ink-500">Connect GitHub, GitLab or Forgejo</span></span>
+      </a>
+      <a class="card card-body flex items-center gap-3 transition hover:border-ink-500" href="/runs">
+        <span class="list-icon"><i data-lucide="Workflow"></i></span>
+        <span><span class="block text-sm font-semibold">Agent runs</span><span class="block text-xs text-ink-500">Inspect turns, changes and tests</span></span>
+      </a>
+      <a class="card card-body flex items-center gap-3 transition hover:border-ink-500" href="/api-keys">
+        <span class="list-icon"><i data-lucide="KeyRound"></i></span>
+        <span><span class="block text-sm font-semibold">API keys</span><span class="block text-xs text-ink-500">Connect editors and automation</span></span>
+      </a>
+      <a th:if="${isInstanceAdmin}" class="card card-body flex items-center gap-3 border-admin-400/30 transition hover:border-admin-400/60" href="/admin">
+        <span class="list-icon !bg-admin-400/10 !text-admin-400"><i data-lucide="ShieldCheck"></i></span>
+        <span><span class="block text-sm font-semibold">Administration</span><span class="block text-xs text-ink-500">Models, sandboxes, Git providers, audit</span></span>
+      </a>
+    </aside>
+  </div>
+</main>
 </body>
 </html>

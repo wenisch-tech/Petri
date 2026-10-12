@@ -1,21 +1,138 @@
 <!doctype html>
-<html lang="en" xmlns:th="http://www.thymeleaf.org"><head>
-  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Git accounts · Petri</title>
-  <link rel="stylesheet" href="/css/petri.css"><script defer src="/js/petri.js"></script>
-</head><body>
-<header class="topbar"><div class="page flex items-center justify-between py-4"><a href="/" class="flex items-center gap-3 font-semibold"><span class="grid size-9 place-items-center rounded-xl bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span>Petri</a><div class="flex gap-2"><a class="btn-secondary" href="/git-provider-instances"><i data-lucide="ServerCog"></i> Self-hosted instances</a><a class="btn-secondary" href="/projects"><i data-lucide="FolderGit2"></i> Projects</a><button class="btn-secondary" type="button" x-data @click="$store.theme.toggle()"><i data-lucide="Sun"></i></button></div></div></header>
-<main class="page max-w-5xl"><section class="panel p-6 sm:p-8">
-  <p class="text-xs font-bold uppercase tracking-[.2em] text-brand-400">Personal credentials</p><h1 class="mt-2 text-3xl font-semibold">Git accounts</h1><p class="mt-2 text-ink-500">Connect personal accounts. Tokens are encrypted and never shown again.</p>
-  <p th:if="${notice}" class="mt-5 rounded-lg border border-good-500/30 bg-good-500/10 p-3 text-sm text-good-500" th:text="${notice}">Saved.</p><p th:if="${error}" class="mt-5 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300" th:text="${error}">Error.</p>
-  <div class="mt-7 grid gap-5 md:grid-cols-2">
-    <article th:each="instance : ${providerInstances}" class="metric">
-      <div class="flex items-start justify-between gap-3"><div><strong th:text="${instance.displayName}">Provider</strong><span class="mt-1 block text-xs text-ink-500" th:text="${instance.providerType + ' · ' + instance.webBaseUrl}">Type</span></div><span class="badge" th:text="${instance.oauthConfigured ? 'PAT + OAuth' : 'PAT'}">PAT</span></div>
-      <p th:if="${#strings.startsWith(instance.webBaseUrl, 'http://')}" class="mt-3 text-xs text-amber-300">Warning: credentials are transmitted over unencrypted HTTP.</p>
-      <form class="mt-4 space-y-3" method="post" action="/git-accounts/pat"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><input type="hidden" name="instanceId" th:value="${instance.id}"><label class="block"><span class="mb-1 block text-xs font-medium">Personal access token</span><input class="field" type="password" name="token" autocomplete="off" required></label><button class="btn-primary" type="submit"><i data-lucide="KeyRound"></i> Connect PAT</button></form>
-      <form th:if="${instance.oauthConfigured}" class="mt-3" method="post" th:action="@{/git-accounts/oauth/{id}/start(id=${instance.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><label th:if="${instance.providerType.name() == 'FORGEJO'}" class="mb-3 flex items-start gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 p-3 text-xs"><input type="checkbox" name="forgejoRightsAcknowledged" value="true" required><span>Forgejo OAuth currently has no scope restriction and acts with all permissions of your account. I understand and want to continue.</span></label><button class="btn-secondary" type="submit"><i data-lucide="ExternalLink"></i> Connect with OAuth</button></form>
-    </article>
-  </div>
-  <h2 class="mt-10 text-xl font-semibold">Connected accounts</h2>
-  <div th:if="${#lists.isEmpty(connections)}" class="mt-4 rounded-xl border border-dashed border-ink-700 p-8 text-center text-sm text-ink-500">No accounts connected yet.</div>
-  <div th:unless="${#lists.isEmpty(connections)}" class="table-shell mt-4"><table class="data-table"><thead><tr><th>Account</th><th>Provider</th><th>Method</th><th>Status</th><th></th></tr></thead><tbody><tr th:each="connection : ${connections}"><td><strong th:text="${connection.login}">login</strong><span class="block text-xs text-ink-500" th:text="${connection.displayName}">name</span></td><td th:text="${connection.providerName}">Provider</td><td th:text="${connection.authMethod}">PAT</td><td><span class="badge" th:text="${connection.status}">ACTIVE</span><span th:if="${connection.forgejoOauthWarning}" class="mt-1 block text-xs text-amber-300">OAuth has unrestricted account rights</span></td><td class="text-right"><div class="flex justify-end gap-2"><form method="post" th:action="@{/git-accounts/{id}/validate(id=${connection.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-secondary" type="submit"><i data-lucide="RefreshCw"></i> Validate</button></form><form method="post" th:action="@{/git-accounts/{id}/disconnect(id=${connection.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-secondary" type="submit"><i data-lucide="Unplug"></i> Disconnect</button></form></div></td></tr></tbody></table></div>
-</section></main></body></html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Git accounts')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('settings')}"></header>
+
+<div class="area-layout">
+  <nav th:replace="~{fragments/layout :: settingsNav('git-accounts')}"></nav>
+
+  <main class="min-w-0">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Git accounts</h1>
+        <p class="page-description">Personal GitHub, GitLab and Forgejo accounts used to import repositories and push changes. Tokens are encrypted and never shown again.</p>
+      </div>
+      <div class="page-actions">
+        <button class="btn-primary" type="button" data-dialog-open="connect-account" th:disabled="${#lists.isEmpty(providerInstances)}"><i data-lucide="Plus"></i> Connect account</button>
+      </div>
+    </div>
+
+    <div th:replace="~{fragments/layout :: alert('success', ${notice})}"></div>
+    <div th:replace="~{fragments/layout :: alert('error', ${error})}"></div>
+
+    <div th:if="${#lists.isEmpty(connections)}" class="empty-state">
+      <i data-lucide="PlugZap"></i>
+      <h2>No accounts connected</h2>
+      <p>Connect a Git provider account to import repositories without managing credentials per project.</p>
+      <button class="btn-primary" type="button" data-dialog-open="connect-account" th:disabled="${#lists.isEmpty(providerInstances)}"><i data-lucide="Plus"></i> Connect account</button>
+    </div>
+
+    <ul th:unless="${#lists.isEmpty(connections)}" class="list">
+      <li th:each="connection : ${connections}" class="list-row">
+        <span class="list-icon"><i data-lucide="GitBranch"></i></span>
+        <div class="list-main">
+          <span class="list-title" th:text="${connection.login}">login</span>
+          <span class="list-meta">
+            <span th:text="${connection.providerName}">Provider</span>
+            <span th:if="${connection.displayName}" th:text="${connection.displayName}">Display name</span>
+            <span th:text="${connection.authMethod.name() == 'PAT' ? 'Access token' : connection.authMethod}">PAT</span>
+          </span>
+          <span th:if="${connection.forgejoOauthWarning}" class="mt-1 block text-xs text-warn-400">OAuth grants unrestricted account rights</span>
+        </div>
+        <span class="badge" th:classappend="${connection.status.name() == 'ACTIVE'} ? '' : 'badge-warn'" th:text="${#strings.capitalize(#strings.toLowerCase(connection.status))}">Active</span>
+        <div class="list-actions">
+          <form method="post" th:action="@{/git-accounts/{id}/validate(id=${connection.id})}">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <button class="btn-ghost" type="submit" title="Check that the credential still works"><i data-lucide="RefreshCw"></i> Validate</button>
+          </form>
+          <form method="post" th:action="@{/git-accounts/{id}/disconnect(id=${connection.id})}" th:attr="data-confirm=|Disconnect ${connection.login}? Projects using this account lose remote access.|">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <button class="btn-ghost" type="submit"><i data-lucide="Unplug"></i> Disconnect</button>
+          </form>
+        </div>
+      </li>
+    </ul>
+
+    <p class="mt-6 text-sm text-ink-500" th:unless="${isInstanceAdmin}">
+      Using GitHub Enterprise, GitLab Self-Managed or your own Forgejo?
+      <a class="font-medium text-brand-400 hover:underline" href="/git-provider-instances">Add a self-hosted instance</a>.
+    </p>
+  </main>
+
+  <!-- One dialog: choose provider, choose method, provide the credential. -->
+  <dialog id="connect-account" class="dialog"
+          x-data="{
+            id: '', name: '', oauth: false, forgejo: false, insecure: false, method: 'pat',
+            pick(el) {
+              this.id = el.value; this.name = el.dataset.name;
+              this.oauth = el.dataset.oauth === 'true'; this.forgejo = el.dataset.type === 'FORGEJO';
+              this.insecure = el.dataset.insecure === 'true';
+              if (!this.oauth) this.method = 'pat';
+            }
+          }"
+          x-init="const first = $el.querySelector('input[name=instanceId]:checked'); if (first) pick(first)">
+    <form class="dialog-panel" method="post" :action="method === 'oauth' ? '/git-accounts/oauth/' + id + '/start' : '/git-accounts/pat'" action="/git-accounts/pat">
+      <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+      <div class="dialog-header">
+        <div>
+          <h2>Connect a Git account</h2>
+          <p>Choose a provider and how Petri should authenticate.</p>
+        </div>
+        <button class="icon-button" formmethod="dialog" formnovalidate aria-label="Close"><i data-lucide="X"></i></button>
+      </div>
+
+      <div class="dialog-body">
+        <section>
+          <p class="step-label"><b>1</b> Provider</p>
+          <div class="choice-list">
+            <label th:each="instance, iter : ${providerInstances}" class="choice">
+              <input type="radio" name="instanceId" required th:value="${instance.id}" th:checked="${iter.first}" @change="pick($el)"
+                     th:attr="data-name=${instance.displayName},data-oauth=${instance.oauthConfigured},data-type=${instance.providerType},data-insecure=${#strings.startsWith(instance.webBaseUrl, 'http://')}">
+              <span class="min-w-0 flex-1">
+                <span class="choice-title" th:text="${instance.displayName}">Provider</span>
+                <span class="choice-meta" th:text="${instance.webBaseUrl}">https://example.com</span>
+              </span>
+              <span class="badge badge-neutral" th:text="${instance.oauthConfigured ? 'Token · OAuth' : 'Token'}">Token</span>
+            </label>
+          </div>
+        </section>
+
+        <section>
+          <p class="step-label"><b>2</b> Method</p>
+          <div class="segmented">
+            <label><input type="radio" value="pat" x-model="method"><i data-lucide="KeyRound"></i> Access token</label>
+            <label :title="oauth ? '' : 'OAuth is not configured for this provider'"><input type="radio" value="oauth" x-model="method" :disabled="!oauth"><i data-lucide="ExternalLink"></i> OAuth</label>
+          </div>
+        </section>
+
+        <div x-show="insecure" x-cloak class="alert alert-warning !mb-0"><i data-lucide="TriangleAlert"></i><span>This provider uses plain HTTP. Credentials are transmitted unencrypted.</span></div>
+
+        <div x-show="method === 'pat'">
+          <label class="label" for="git-account-token">Personal access token</label>
+          <input id="git-account-token" class="field font-mono text-sm" type="password" name="token" autocomplete="off" spellcheck="false"
+                 :required="method === 'pat'" :disabled="method !== 'pat'" placeholder="Paste token">
+          <span class="hint">Grant repository read access, plus write access if Petri should push branches.</span>
+        </div>
+
+        <div x-show="method === 'oauth'" x-cloak class="space-y-4">
+          <p class="text-sm text-ink-500">You will be redirected to <strong class="text-ink-300" x-text="name"></strong> to authorize Petri, then returned here.</p>
+          <label x-show="forgejo" class="alert alert-warning !mb-0 cursor-pointer">
+            <input class="mt-0.5 size-4 shrink-0 accent-brand-500" type="checkbox" name="forgejoRightsAcknowledged" value="true" :required="method === 'oauth' && forgejo" :disabled="!(method === 'oauth' && forgejo)">
+            <span>Forgejo OAuth has no scope restriction and acts with all permissions of your account. I understand and want to continue.</span>
+          </label>
+        </div>
+      </div>
+
+      <div class="dialog-footer">
+        <button class="btn-secondary" formmethod="dialog" formnovalidate>Cancel</button>
+        <button class="btn-primary" type="submit" :disabled="!id">
+          <span x-show="method === 'pat'"><i data-lucide="KeyRound"></i></span><span x-show="method === 'oauth'" x-cloak><i data-lucide="ExternalLink"></i></span>
+          <span x-text="method === 'oauth' ? 'Continue to ' + name : 'Connect'">Connect</span>
+        </button>
+      </div>
+    </form>
+  </dialog>
+</div>
+</body>
+</html>

@@ -1,63 +1,48 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="_csrf" th:content="${_csrf.token}">
-  <meta name="_csrf_header" th:content="${_csrf.headerName}">
-  <title>Agent runs · Petri</title>
-  <link rel="stylesheet" href="/css/petri.css">
-  <script defer src="/js/petri.js"></script>
-</head>
+<head th:replace="~{fragments/layout :: head('Agent runs')}"></head>
 <body>
-  <header class="topbar">
-    <div class="page flex items-center justify-between py-4">
-      <a href="/" class="flex items-center gap-3 font-semibold">
-        <span class="grid size-9 place-items-center rounded-xl bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span>
-        <span>Petri</span>
-      </a>
-      <nav class="hidden items-center gap-1 sm:flex" aria-label="Primary navigation">
-        <a class="nav-link" href="/chat">Chat</a>
-        <a class="nav-link" href="/projects">Projects</a>
-        <a class="nav-link bg-ink-800 text-ink-100" href="/runs">Runs</a>
-        <a th:if="${isInstanceAdmin}" class="nav-link" href="/model-settings">Models</a>
-        <a th:if="${isInstanceAdmin}" class="nav-link" href="/audit">Audit</a>
-        <a class="nav-link" href="/api-keys">API keys</a>
-        <a class="nav-link" href="/git-accounts">Git accounts</a>
-      </nav>
-      <div class="flex items-center gap-2">
-        <button class="btn-secondary" type="button" x-data @click="$store.theme.toggle()" aria-label="Toggle theme"><i data-lucide="Sun"></i></button>
-        <form method="post" action="/logout">
-          <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-          <button class="btn-secondary" type="submit"><i data-lucide="LogOut"></i> Sign out</button>
-        </form>
-      </div>
+<header th:replace="~{fragments/layout :: topbar('runs')}"></header>
+
+<main class="page">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Agent runs</h1>
+      <p class="page-description">Every model and tool execution, persisted so it can be inspected and resumed.</p>
     </div>
-  </header>
+    <div class="segmented" role="tablist" aria-label="Filter runs">
+      <a class="flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium transition" href="/runs"
+         th:classappend="${includeWorkflowStages} ? 'text-ink-500 hover:text-ink-100' : 'bg-ink-800 text-ink-100'">Chats</a>
+      <a class="flex items-center justify-center rounded-md px-3 py-1.5 text-sm font-medium transition" href="/runs?includeWorkflowStages=true"
+         th:classappend="${includeWorkflowStages} ? 'bg-ink-800 text-ink-100' : 'text-ink-500 hover:text-ink-100'">Including workflow stages</a>
+    </div>
+  </div>
 
-  <main class="page">
-    <section class="panel p-6 sm:p-8">
-      <p class="text-xs font-bold uppercase tracking-[.2em] text-brand-400">Agent operations</p>
-      <h1 class="mt-2 flex items-center gap-3 text-3xl font-semibold tracking-tight"><i data-lucide="Workflow"></i> Agent runs</h1>
-      <p class="mt-2 text-ink-500">Persistent model and tool executions across controlled worktrees.</p>
+  <div th:if="${#lists.isEmpty(runs)}" class="empty-state">
+    <i data-lucide="Workflow"></i>
+    <h2>No runs yet</h2>
+    <p>Runs appear here once you send a message from a project workspace.</p>
+    <a class="btn-secondary" href="/projects">Go to projects</a>
+  </div>
 
-      <p th:if="${#lists.isEmpty(runs)}" class="mt-8 rounded-xl border border-dashed border-ink-700 p-8 text-center text-sm text-ink-500">No agent runs have been created.</p>
-      <div th:unless="${#lists.isEmpty(runs)}" class="table-shell mt-8">
-        <table class="data-table">
-          <thead><tr><th>Created</th><th>Status</th><th>Provider / model</th><th>Turns</th><th>Worktree</th><th></th></tr></thead>
-          <tbody>
-            <tr th:each="run : ${runs}">
-              <td class="whitespace-nowrap font-mono text-xs" th:text="${run.createdAt}">time</td>
-              <td><span class="badge" th:text="${run.status}">PENDING</span></td>
-              <td><span th:text="${run.provider}">OPENAI</span><code class="mt-1 block" th:text="${run.model}">model</code></td>
-              <td th:text="|${run.modelTurnCount} / ${run.maxModelTurns}|">0 / 20</td>
-              <td><code class="text-xs" th:text="${run.worktreeId}">worktree</code></td>
-              <td class="text-right"><a class="btn-secondary" th:href="@{/runs/{id}(id=${run.id})}"><i data-lucide="Eye"></i> Inspect</a></td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-  </main>
+  <div th:unless="${#lists.isEmpty(runs)}" class="table-shell bg-ink-900">
+    <table class="data-table">
+      <thead><tr><th>Status</th><th>Prompt</th><th>Model</th><th class="text-right">Turns</th><th>Created</th><th></th></tr></thead>
+      <tbody>
+        <tr th:each="run : ${runs}" class="transition hover:bg-ink-800/40">
+          <td><span th:replace="~{fragments/layout :: statusBadge(${run.status})}"></span></td>
+          <td class="max-w-md">
+            <a class="line-clamp-2 text-ink-100 hover:text-brand-400" th:href="@{/runs/{id}(id=${run.id})}" th:text="${run.prompt}">prompt</a>
+            <span th:if="${run.workflowRole != null}" class="mt-1 block text-xs text-ink-500" th:text="|${#strings.capitalize(#strings.toLowerCase(run.workflowRole))} · attempt ${run.workflowAttempt}|">Planner</span>
+          </td>
+          <td><span class="block text-xs text-ink-500" th:text="${run.provider.displayName()}">OpenAI</span><code class="text-xs" th:text="${run.model}">model</code></td>
+          <td class="whitespace-nowrap text-right tabular-nums" th:text="|${run.modelTurnCount} / ${run.maxModelTurns}|">0 / 20</td>
+          <td class="whitespace-nowrap text-xs"><time data-local th:attr="datetime=${run.createdAt}" th:text="${run.createdAt}">time</time></td>
+          <td class="text-right"><a class="btn-ghost" th:href="@{/runs/{id}(id=${run.id})}">Inspect</a></td>
+        </tr>
+      </tbody>
+    </table>
+  </div>
+</main>
 </body>
 </html>

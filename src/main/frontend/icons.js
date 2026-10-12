@@ -6,7 +6,8 @@ import {
   GitBranch, GitBranchPlus, GitCommitHorizontal, GitCompare, GitCompareArrows, GitPullRequestArrow,
   History, KeyRound, List, LoaderCircle, LockKeyhole, LogOut, MessageSquare,
   MoreHorizontal, Package, PanelRight, Pencil, Play, Plus, RefreshCw, Save, Send, Settings, Settings2,
-  Search, ShieldCheck, SquareTerminal, Sun, Trash2, TriangleAlert, Workflow, Wrench, X, createElement as createLucideElement
+  Search, ShieldCheck, SquareTerminal, Sun, Trash2, TriangleAlert, Workflow, Wrench, X,
+  ArrowRight, Box, Clock, Copy, Cpu, CircleX, Download, ExternalLink, Globe, Info, LayoutDashboard, Moon, PlugZap, ScrollText, Server, ServerCog, Unplug, User, Users, createElement as createLucideElement
 } from 'lucide';
 
 const registry = {
@@ -17,7 +18,8 @@ const registry = {
   GitBranch, GitBranchPlus, GitCommitHorizontal, GitCompare, GitCompareArrows, GitPullRequestArrow,
   History, KeyRound, List, LoaderCircle, LockKeyhole, LogOut, MessageSquare,
   MoreHorizontal, Package, PanelRight, Pencil, Play, Plus, RefreshCw, Save, Send, Settings, Settings2,
-  Search, ShieldCheck, SquareTerminal, Sun, Trash2, TriangleAlert, Workflow, Wrench, X
+  Search, ShieldCheck, SquareTerminal, Sun, Trash2, TriangleAlert, Workflow, Wrench, X,
+  ArrowRight, Box, Clock, Copy, Cpu, CircleX, Download, ExternalLink, Globe, Info, LayoutDashboard, Moon, PlugZap, ScrollText, Server, ServerCog, Unplug, User, Users
 };
 
 export function renderIcon(name, attributes = {}) {

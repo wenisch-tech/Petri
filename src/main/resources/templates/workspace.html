@@ -10,23 +10,22 @@
   <script defer src="/js/petri.js?v=24"></script>
 </head>
 <body class="workspace-body">
-  <header class="topbar workspace-topbar">
+  <header class="topbar workspace-topbar relative z-40">
     <div class="flex h-14 items-center justify-between gap-3 px-4">
-      <div class="flex min-w-0 items-center gap-3">
-        <a href="/projects" class="flex items-center gap-2 font-semibold">
-          <span class="grid size-8 place-items-center rounded-lg bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span>
-          <span>Petri</span>
-        </a>
-        <span class="hidden h-5 border-l border-ink-700 sm:block"></span>
-        <span class="truncate text-sm font-medium" th:text="${project.name}">Project</span>
-      </div>
-      <nav class="hidden items-center gap-1 lg:flex">
-        <a class="nav-link bg-ink-800 text-ink-100" href="/projects">Workspace</a>
-        <a class="nav-link" href="/runs">Runs</a><a class="nav-link" href="/git-accounts">Git accounts</a><a th:if="${isInstanceAdmin}" class="nav-link" href="/model-settings">Models</a><a th:if="${isInstanceAdmin}" class="nav-link" href="/audit">Audit</a>
+      <nav class="flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
+        <a href="/" class="app-brand mr-1" title="Dashboard"><span class="app-logo"><i data-lucide="Bot"></i></span><span class="hidden sm:inline">Petri</span></a>
+        <span class="hidden text-ink-700 sm:inline">/</span>
+        <a href="/projects" class="hidden text-ink-500 transition hover:text-ink-100 sm:inline">Projects</a>
+        <span class="text-ink-700">/</span>
+        <span class="truncate font-medium text-ink-100" th:text="${project.name}">Project</span>
+        <a class="icon-button shrink-0" th:href="@{/projects/{id}/settings(id=${project.id})}" title="Project settings" aria-label="Project settings"><i data-lucide="Settings"></i></a>
       </nav>
-      <div class="flex items-center gap-1">
+      <div class="flex items-center gap-1.5">
+        <a class="btn-ghost hidden !min-h-8 lg:inline-flex" href="/runs">Runs</a>
+        <a th:if="${isInstanceAdmin}" href="/admin" class="app-admin-link" title="Instance administration"><i data-lucide="ShieldCheck"></i><span class="hidden sm:inline">Admin</span></a>
         <button class="icon-button" type="button" data-toggle-chat title="Toggle chat" aria-label="Toggle chat"><i data-lucide="PanelRight"></i></button>
-        <button class="icon-button" type="button" x-data @click="$store.theme.toggle()" title="Toggle theme" aria-label="Toggle theme"><i data-lucide="Sun"></i></button>
+        <button th:replace="~{fragments/layout :: themeToggle}"></button>
+        <div th:replace="~{fragments/layout :: userMenu}"></div>
       </div>
     </div>
   </header>
