@@ -16,6 +16,7 @@ import tech.wenisch.petri.agent.change.ChangeProposalDiffView;
 import tech.wenisch.petri.agent.change.ChangeProposalService;
 import tech.wenisch.petri.agent.change.ChangeProposalView;
 import tech.wenisch.petri.agent.model.ModelCredentialService;
+import tech.wenisch.petri.agent.model.ModelCredentialStatus;
 import tech.wenisch.petri.agent.model.ModelProvider;
 import tech.wenisch.petri.agent.model.ReasoningEffort;
 import tech.wenisch.petri.agent.model.TextVerbosity;
@@ -127,10 +128,10 @@ public class WorkspaceCollaborationController {
       @PathVariable UUID projectId, @RequestBody ModelPreferenceRequest request, Principal principal) {
     access.requireProject(projectId, principal.getName());
     AppUser actor = actor(principal);
-    if (!credentials.status(request.provider()).configured()) {
-      throw new IllegalStateException(request.provider() + " credentials are not configured");
-    }
-    return preferences.save(projectId, actor.getId(), actor.getEmail(), request.provider(), request.model());
+    ModelCredentialStatus target = credentials.resolve(
+        actor.getId(), request.provider(), request.providerInstanceId());
+    return preferences.save(
+        projectId, actor.getId(), actor.getEmail(), target.provider(), target.id(), request.model());
   }
 
   @GetMapping("/chats/{chatId}/snapshot")
@@ -353,22 +354,38 @@ public class WorkspaceCollaborationController {
       WorkspaceMessageRequest request, UUID projectId, AppUser actor) {
     WorkspaceModelPreferenceView preference = preferences.get(projectId, actor.getId());
     ModelProvider provider = request.provider();
-    if (provider == null && preference != null && credentials.status(preference.provider()).configured()) {
-      provider = preference.provider();
+    UUID instanceId = request.providerInstanceId();
+    if (provider == null && instanceId == null && preference != null) {
+      // Prefer the saved choice while the user can still call it.
+      boolean stillUsable = credentials.usable(actor.getId()).stream().anyMatch(value ->
+          preference.providerInstanceId() != null
+              ? value.id().equals(preference.providerInstanceId())
+              : value.provider() == preference.provider());
+      if (stillUsable) {
+        provider = preference.provider();
+        instanceId = preference.providerInstanceId();
+      }
     }
-    if (provider == null) {
-      provider = credentials.status(ModelProvider.OLLAMA).configured() ? ModelProvider.OLLAMA
-          : java.util.Arrays.stream(ModelProvider.values())
-              .filter(candidate -> credentials.status(candidate).configured()).findFirst()
-              .orElse(ModelProvider.OLLAMA);
+    if (provider == null && instanceId == null) {
+      List<ModelCredentialStatus> usable = credentials.usable(actor.getId());
+      ModelCredentialStatus fallback = usable.stream()
+          .filter(value -> value.provider() == ModelProvider.OLLAMA).findFirst()
+          .orElse(usable.isEmpty() ? null : usable.getFirst());
+      if (fallback != null) {
+        provider = fallback.provider();
+        instanceId = fallback.id();
+      }
     }
     String model = request.model();
-    if ((model == null || model.isBlank()) && preference != null && preference.provider() == provider) {
+    boolean sameTarget = preference != null && (instanceId != null
+        ? instanceId.equals(preference.providerInstanceId())
+        : preference.provider() == provider);
+    if ((model == null || model.isBlank()) && sameTarget) {
       model = preference.model();
     }
     return new CreateAgentRunCommand(request.prompt(), provider, request.maxModelTurns(),
         model, request.maxOutputTokens(), request.contextWindowTokens(),
-        request.reasoningEffort(), request.textVerbosity());
+        request.reasoningEffort(), request.textVerbosity(), instanceId);
   }
 
   private AppUser actor(Principal principal) {
@@ -380,9 +397,11 @@ public class WorkspaceCollaborationController {
   public record ApprovalSettingsRequest(
       boolean autoApprovePackageInstalls, boolean autoApproveTerminalCommands) {}
   public record TerminalStatus(boolean available) {}
-  public record ModelPreferenceRequest(ModelProvider provider, String model) {}
+  public record ModelPreferenceRequest(
+      ModelProvider provider, UUID providerInstanceId, String model) {}
   public record WorkspaceMessageRequest(
-      String prompt, ModelProvider provider, Integer maxModelTurns, String model,
+      String prompt, ModelProvider provider, UUID providerInstanceId, Integer maxModelTurns,
+      String model,
       Integer maxOutputTokens, Integer contextWindowTokens,
       ReasoningEffort reasoningEffort, TextVerbosity textVerbosity) {}
   public record AutomationRequest(boolean autoApproveChanges, boolean autoApproveTests) {}

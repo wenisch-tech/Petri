@@ -93,7 +93,7 @@ final class OpenAiResponsesCodec {
       ModelRequest request,
       ModelStreamListener listener) {
     AtomicReference<ModelResponse> completed = new AtomicReference<>();
-    transport.postSse(provider, "/responses", encodeStreaming(request), data -> {
+    transport.postSse(provider, request.credential(), "/responses", encodeStreaming(request), data -> {
       if ("[DONE]".equals(data)) return;
       try {
         JsonNode event = objectMapper.readTree(data);

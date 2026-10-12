@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="src/main/resources/static/img/petri-logo.png" alt="Petri logo" width="160">
+</p>
+
 # Petri
 
 **Petri is a self-hosted agentic coding harness, multi-agent orchestrator and agentic development
@@ -107,7 +111,8 @@ Set `PETRI_ADMIN_EMAIL` and `PETRI_ADMIN_PASSWORD` before exposing the service b
 
 Then:
 
-1. Configure a model provider at `/model-settings`.
+1. Add a model provider at `/model-settings` (administrators), then add your API key under
+   **Model providers** if the provider needs one.
 2. Register a repository at `/projects` (or connect a Git account at `/git-accounts`) and synchronize
    its mirror.
 3. Open the project workspace, pick or create a branch, and start a chat in **Workflow** mode.

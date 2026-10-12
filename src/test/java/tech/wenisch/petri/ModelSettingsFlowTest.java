@@ -35,54 +35,85 @@ class ModelSettingsFlowTest {
   @Autowired MockMvc mockMvc;
   @Autowired JdbcTemplate jdbc;
   @Autowired SecretCipher cipher;
+  @Autowired tech.wenisch.petri.agent.model.ModelCredentialService modelCredentials;
   @Autowired AppUserRepository users;
   @PersistenceContext EntityManager entityManager;
 
   @Test
-  void administratorCanConfigureAndUpdateModelWithoutReenteringSecret() throws Exception {
-    mockMvc.perform(post("/model-settings")
+  void administratorCanAddAndUpdateAProviderWithoutReenteringTheSharedKey() throws Exception {
+    mockMvc.perform(post("/model-settings/providers")
             .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN"))
             .with(csrf())
+            .param("provider", "OPENAI")
+            .param("displayName", "OpenAI")
             .param("apiKey", "provider-super-secret")
             .param("model", "test-reasoning-model")
             .param("maxOutputTokens", "8192")
             .param("reasoningEffort", "HIGH")
-            .param("textVerbosity", "LOW"))
+            .param("textVerbosity", "LOW")
+            .param("enabled", "true"))
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl("/model-settings"));
 
-    String stored = storedSecret();
+    entityManager.flush();
+    String stored = sharedSecret("OpenAI");
     assertThat(stored).startsWith("v1:").doesNotContain("provider-super-secret");
     assertThat(cipher.decrypt(stored)).isEqualTo("provider-super-secret");
-    assertThat(jdbc.queryForObject(
-        "select model_name from model_provider_credential where provider = 'OPENAI'",
-        String.class)).isEqualTo("test-reasoning-model");
+    UUID id = jdbc.queryForObject(
+        "select id from model_provider_instance where display_name = 'OpenAI'", UUID.class);
 
-    mockMvc.perform(get("/model-settings")
-            .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN")))
+    mockMvc.perform(get("/model-settings").with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN")))
         .andExpect(status().isOk())
         .andExpect(content().string(org.hamcrest.Matchers.containsString("test-reasoning-model")))
         .andExpect(content().string(org.hamcrest.Matchers.not(
             org.hamcrest.Matchers.containsString("provider-super-secret"))));
 
-    mockMvc.perform(post("/model-settings")
+    mockMvc.perform(post("/model-settings/providers")
             .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN"))
             .with(csrf())
+            .param("id", id.toString())
+            .param("displayName", "OpenAI")
             .param("apiKey", "")
             .param("model", "replacement-model")
             .param("maxOutputTokens", "16384")
             .param("reasoningEffort", "MEDIUM")
-            .param("textVerbosity", "HIGH"))
+            .param("textVerbosity", "HIGH")
+            .param("enabled", "true"))
         .andExpect(status().is3xxRedirection());
 
-    assertThat(cipher.decrypt(storedSecret())).isEqualTo("provider-super-secret");
+    entityManager.flush();
+    assertThat(cipher.decrypt(sharedSecret("OpenAI"))).isEqualTo("provider-super-secret");
     assertThat(jdbc.queryForMap(
         "select model_name, max_output_tokens, reasoning_effort, text_verbosity "
-            + "from model_provider_credential where provider = 'OPENAI'"))
+            + "from model_provider_instance where id = ?", id))
         .containsEntry("model_name", "replacement-model")
         .containsEntry("max_output_tokens", 16384)
         .containsEntry("reasoning_effort", "MEDIUM")
         .containsEntry("text_verbosity", "HIGH");
+  }
+
+  @Test
+  void administratorCanConfigureSeveralProvidersOfTheSameKind() throws Exception {
+    for (String name : new String[] {"Team gateway", "Research gateway"}) {
+      mockMvc.perform(post("/model-settings/providers")
+              .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN"))
+              .with(csrf())
+              .param("provider", "LITELLM")
+              .param("displayName", name)
+              .param("baseUrl", "http://litellm-" + name.split(" ")[0].toLowerCase() + ":4000/v1")
+              .param("model", "gpt-x")
+              .param("enabled", "true"))
+          .andExpect(status().is3xxRedirection());
+    }
+    entityManager.flush();
+    assertThat(jdbc.queryForObject(
+        "select count(*) from model_provider_instance where provider = 'LITELLM' and owner_id is null",
+        Integer.class)).isEqualTo(2);
+
+    mockMvc.perform(get("/model-settings").with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN")))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Team gateway")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Research gateway")));
   }
 
   @Test
@@ -95,68 +126,173 @@ class ModelSettingsFlowTest {
     mockMvc.perform(get("/chat").with(user(memberEmail).roles("USER")))
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl("/projects"));
-    mockMvc.perform(post("/model-settings")
+    mockMvc.perform(post("/model-settings/providers")
             .with(user(memberEmail).roles("USER"))
             .with(csrf())
+            .param("provider", "OPENAI")
+            .param("displayName", "Sneaky")
             .param("apiKey", "must-not-be-stored")
-            .param("model", "model")
-            .param("maxOutputTokens", "4096"))
+            .param("model", "model"))
+        .andExpect(status().isForbidden());
+    mockMvc.perform(post("/model-settings/policy")
+            .with(user(memberEmail).roles("USER"))
+            .with(csrf())
+            .param("allowUserProviders", "true"))
         .andExpect(status().isForbidden());
   }
 
   @Test
   void administratorCanConfigureKeylessLocalOllamaEndpoint() throws Exception {
-    mockMvc.perform(post("/model-settings/OLLAMA")
+    mockMvc.perform(post("/model-settings/providers")
             .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN"))
             .with(csrf())
+            .param("provider", "OLLAMA")
+            .param("displayName", "Local Ollama")
             .param("apiKey", "")
             .param("baseUrl", "http://ollama:11434/v1/")
             .param("model", "qwen3-coder")
             .param("maxOutputTokens", "4096")
-            .param("reasoningEffort", "MEDIUM"))
+            .param("reasoningEffort", "MEDIUM")
+            .param("enabled", "true"))
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl("/model-settings"));
 
     entityManager.flush();
     assertThat(jdbc.queryForMap(
-        "select api_key_ciphertext, base_url, model_name from model_provider_credential "
-            + "where provider = 'OLLAMA'"))
-        .containsEntry("api_key_ciphertext", null)
+        "select shared_api_key_ciphertext, base_url, model_name from model_provider_instance "
+            + "where display_name = 'Local Ollama'"))
+        .containsEntry("shared_api_key_ciphertext", null)
         .containsEntry("base_url", "http://ollama:11434/v1")
         .containsEntry("model_name", "qwen3-coder");
 
-    mockMvc.perform(get("/model-settings")
-            .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN")))
+    mockMvc.perform(get("/model-settings").with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN")))
         .andExpect(status().isOk())
         .andExpect(content().string(org.hamcrest.Matchers.containsString("qwen3-coder")))
-        .andExpect(content().string(org.hamcrest.Matchers.containsString(
-            "http://ollama:11434/v1")));
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("http://ollama:11434/v1")));
   }
 
   @Test
-  void chatRendersConfigurationCallToActionWithoutCredentials() throws Exception {
-    jdbc.update("delete from model_provider_credential where provider = 'OPENAI'");
+  void workspaceRedirectsWithoutProvidersAndInvalidSettingsNeverStoreTheSecret() throws Exception {
+    jdbc.update("delete from model_provider_instance");
 
     mockMvc.perform(get("/chat").with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN")))
         .andExpect(status().is3xxRedirection())
         .andExpect(redirectedUrl("/projects"));
-  }
 
-  @Test
-  void invalidModelSettingsNeverEchoOrStoreTheSubmittedSecret() throws Exception {
-    mockMvc.perform(post("/model-settings")
+    mockMvc.perform(post("/model-settings/providers")
             .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN"))
             .with(csrf())
+            .param("provider", "OPENAI")
+            .param("displayName", "OpenAI")
             .param("apiKey", "must-never-be-rendered")
             .param("model", "")
             .param("maxOutputTokens", "2"))
-        .andExpect(status().isOk())
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/model-settings"))
         .andExpect(content().string(org.hamcrest.Matchers.not(
             org.hamcrest.Matchers.containsString("must-never-be-rendered"))));
 
+    entityManager.flush();
     assertThat(jdbc.queryForObject(
-        "select count(*) from model_provider_credential where provider = 'OPENAI'",
+        "select count(*) from model_provider_instance", Integer.class)).isZero();
+  }
+
+  @Test
+  void usersAddTheirOwnKeyPerProviderAndCannotSeeOthers() throws Exception {
+    UUID instanceId = adminAddsProvider("Shared OpenAI", "OPENAI", "gpt-test");
+    String alice = "alice@petri.local";
+    String bob = "bob@petri.local";
+    UUID aliceId = newUser(alice);
+    UUID bobId = newUser(bob);
+
+    // No shared key and the kind needs one: nobody can run until they add their own.
+    assertThat(modelCredentials.usable(aliceId)).isEmpty();
+
+    mockMvc.perform(get("/model-providers").with(user(alice).roles("USER")))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Shared OpenAI")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Key needed")));
+
+    mockMvc.perform(post("/model-providers/" + instanceId + "/key")
+            .with(user(alice).roles("USER"))
+            .with(csrf())
+            .param("apiKey", "alice-private-key"))
+        .andExpect(status().is3xxRedirection())
+        .andExpect(redirectedUrl("/model-providers"));
+    entityManager.flush();
+
+    String stored = jdbc.queryForObject(
+        "select api_key_ciphertext from model_user_api_key where instance_id = ? and user_id = ?",
+        String.class, instanceId, aliceId);
+    assertThat(stored).startsWith("v1:").doesNotContain("alice-private-key");
+    assertThat(cipher.decrypt(stored)).isEqualTo("alice-private-key");
+
+    assertThat(modelCredentials.usable(aliceId)).extracting("id").containsExactly(instanceId);
+    assertThat(modelCredentials.usable(bobId)).isEmpty();
+    mockMvc.perform(get("/model-providers").with(user(bob).roles("USER")))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.not(
+            org.hamcrest.Matchers.containsString("alice-private-key"))));
+
+    assertThat(modelCredentials.resolve(aliceId, null, instanceId).hasUserKey()).isTrue();
+    org.assertj.core.api.Assertions.assertThatThrownBy(
+            () -> modelCredentials.resolve(bobId, null, instanceId))
+        .isInstanceOf(IllegalStateException.class)
+        .hasMessageContaining("Add your API key");
+  }
+
+  @Test
+  void personalProvidersNeedTheAdministratorsConsentAndStayPrivate() throws Exception {
+    String alice = "alice2@petri.local";
+    String bob = "bob2@petri.local";
+    UUID aliceId = newUser(alice);
+    UUID bobId = newUser(bob);
+
+    mockMvc.perform(post("/model-providers/own")
+            .with(user(alice).roles("USER"))
+            .with(csrf())
+            .param("provider", "OLLAMA")
+            .param("displayName", "Alice local")
+            .param("model", "qwen3-coder"))
+        .andExpect(status().is3xxRedirection());
+    entityManager.flush();
+    assertThat(jdbc.queryForObject(
+        "select count(*) from model_provider_instance where owner_id is not null",
         Integer.class)).isZero();
+
+    mockMvc.perform(post("/model-settings/policy")
+            .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN"))
+            .with(csrf())
+            .param("allowUserProviders", "true"))
+        .andExpect(status().is3xxRedirection());
+
+    mockMvc.perform(post("/model-providers/own")
+            .with(user(alice).roles("USER"))
+            .with(csrf())
+            .param("provider", "OLLAMA")
+            .param("displayName", "Alice local")
+            .param("baseUrl", "http://alice-box:11434/v1")
+            .param("model", "qwen3-coder"))
+        .andExpect(status().is3xxRedirection());
+    entityManager.flush();
+    UUID personal = jdbc.queryForObject(
+        "select id from model_provider_instance where owner_id = ?", UUID.class, aliceId);
+
+    assertThat(modelCredentials.usable(aliceId)).extracting("id").containsExactly(personal);
+    assertThat(modelCredentials.usable(bobId)).isEmpty();
+    org.assertj.core.api.Assertions.assertThatThrownBy(
+            () -> modelCredentials.resolve(bobId, null, personal))
+        .isInstanceOf(IllegalStateException.class);
+
+    // Withdrawing consent hides the provider again without deleting it.
+    mockMvc.perform(post("/model-settings/policy")
+            .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN"))
+            .with(csrf()))
+        .andExpect(status().is3xxRedirection());
+    assertThat(modelCredentials.usable(aliceId)).isEmpty();
+    org.assertj.core.api.Assertions.assertThatThrownBy(
+            () -> modelCredentials.resolve(aliceId, null, personal))
+        .isInstanceOf(IllegalStateException.class);
   }
 
   @Test
@@ -222,10 +358,31 @@ class ModelSettingsFlowTest {
         .andExpect(content().string(org.hamcrest.Matchers.containsString("The module is ready.")));
   }
 
-  private String storedSecret() {
+  private String sharedSecret(String displayName) {
     entityManager.flush();
     return jdbc.queryForObject(
-        "select api_key_ciphertext from model_provider_credential where provider = 'OPENAI'",
-        String.class);
+        "select shared_api_key_ciphertext from model_provider_instance where display_name = ?",
+        String.class, displayName);
+  }
+
+  private UUID adminAddsProvider(String name, String kind, String model) throws Exception {
+    mockMvc.perform(post("/model-settings/providers")
+            .with(user(ADMIN_EMAIL).roles("INSTANCE_ADMIN"))
+            .with(csrf())
+            .param("provider", kind)
+            .param("displayName", name)
+            .param("model", model)
+            .param("enabled", "true"))
+        .andExpect(status().is3xxRedirection());
+    entityManager.flush();
+    return jdbc.queryForObject(
+        "select id from model_provider_instance where display_name = ?", UUID.class, name);
+  }
+
+  private UUID newUser(String email) {
+    UUID id = UUID.randomUUID();
+    users.save(new AppUser(id, email, "unused", "USER"));
+    entityManager.flush();
+    return id;
   }
 }

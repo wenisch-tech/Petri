@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Model providers')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('settings')}"></header>
+
+<div class="area-layout">
+  <nav th:replace="~{fragments/layout :: settingsNav('model-providers')}"></nav>
+
+  <main class="min-w-0">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Model providers</h1>
+        <p class="page-description">Add your own API key for the providers your administrator set up. Your keys are encrypted and only used for your runs.</p>
+      </div>
+      <div class="page-actions" th:if="${allowUserProviders}">
+        <button class="btn-primary" type="button" data-dialog-open="own-new"><i data-lucide="Plus"></i> Add provider</button>
+      </div>
+    </div>
+
+    <div th:replace="~{fragments/layout :: alert('success', ${notice})}"></div>
+    <div th:replace="~{fragments/layout :: alert('error', ${error})}"></div>
+
+    <section>
+      <div class="section-header"><div><h2 class="section-title">Available to you</h2><p class="section-description">Set up by your administrator.</p></div></div>
+      <div th:if="${#lists.isEmpty(shared)}" class="empty-state">
+        <i data-lucide="Cpu"></i>
+        <h2>No providers available</h2>
+        <p>Your administrator has not enabled any model provider yet.</p>
+      </div>
+      <ul th:unless="${#lists.isEmpty(shared)}" class="list">
+        <li th:each="inst : ${shared}" class="list-row">
+          <span class="list-icon" th:classappend="${inst.usable} ? '!bg-brand-500/15 !text-brand-400'"><i data-lucide="Cpu"></i></span>
+          <div class="list-main">
+            <span class="list-title" th:text="${inst.displayName}">Provider</span>
+            <span class="list-meta">
+              <span th:text="${inst.provider.displayName()}">LiteLLM</span>
+              <code th:text="${inst.model}">model</code>
+            </span>
+          </div>
+          <span class="badge" th:if="${inst.hasUserKey}">Your key</span>
+          <span class="badge" th:if="${!inst.hasUserKey && inst.hasSharedKey}" title="Provided by your administrator">Shared key</span>
+          <span class="badge badge-warn" th:if="${!inst.hasUserKey && !inst.hasSharedKey && inst.keyRequired}">Key needed</span>
+          <span class="badge badge-neutral" th:if="${!inst.hasUserKey && !inst.hasSharedKey && !inst.keyRequired}" title="Works without a key; add one if your endpoint needs it">Key optional</span>
+          <div class="list-actions">
+            <button th:class="${!inst.usable} ? 'btn-primary btn-sm' : 'btn-ghost'" type="button" th:attr="data-dialog-open=|key-${inst.id}|">
+              <i data-lucide="KeyRound"></i> <span th:text="${inst.hasUserKey} ? 'Replace key' : 'Add key'">Add key</span>
+            </button>
+          </div>
+
+          <dialog class="dialog" th:id="|key-${inst.id}|">
+            <form class="dialog-panel" method="post" th:action="@{/model-providers/{id}/key(id=${inst.id})}" autocomplete="off">
+              <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+              <div class="dialog-header">
+                <div><h2 th:text="|Your key for ${inst.displayName}|">Your key</h2><p>Stored encrypted. It is never shown again.</p></div>
+                <button class="icon-button" formmethod="dialog" formnovalidate aria-label="Close"><i data-lucide="X"></i></button>
+              </div>
+              <div class="dialog-body">
+                <div>
+                  <label class="label" th:for="|key-input-${inst.id}|">API key</label>
+                  <input class="field font-mono text-sm" type="password" name="apiKey" th:id="|key-input-${inst.id}|" required autocomplete="new-password" spellcheck="false" placeholder="Paste key">
+                  <span class="hint" th:if="${inst.hasSharedKey}">Your key is used instead of the shared key.</span>
+                </div>
+              </div>
+              <div class="dialog-footer">
+                <button th:if="${inst.hasUserKey}" class="btn-danger btn-sm spacer" type="submit" formnovalidate
+                        th:attr="formaction=@{/model-providers/{id}/key/delete(id=${inst.id})}"><i data-lucide="Trash2"></i> Remove my key</button>
+                <button class="btn-secondary" formmethod="dialog" formnovalidate>Cancel</button>
+                <button class="btn-primary" type="submit"><i data-lucide="LockKeyhole"></i> Save key</button>
+              </div>
+            </form>
+          </dialog>
+        </li>
+      </ul>
+    </section>
+
+    <section class="section" th:if="${allowUserProviders || !#lists.isEmpty(own)}">
+      <div class="section-header"><div><h2 class="section-title">Your providers</h2><p class="section-description">Private to you. Nobody else can see or use them.</p></div></div>
+      <div th:if="${!allowUserProviders}" class="alert alert-warning">
+        <i data-lucide="TriangleAlert"></i>
+        <span>Your administrator has turned off personal providers, so the ones below are not available right now.</span>
+      </div>
+      <div th:if="${#lists.isEmpty(own)}" class="empty-state">
+        <i data-lucide="Server"></i>
+        <h2>No personal providers</h2>
+        <p>Connect an endpoint of your own, for example a local Ollama server or your own LiteLLM gateway.</p>
+        <button class="btn-primary" type="button" data-dialog-open="own-new"><i data-lucide="Plus"></i> Add provider</button>
+      </div>
+      <ul th:unless="${#lists.isEmpty(own)}" class="list">
+        <li th:each="inst : ${own}" class="list-row">
+          <span class="list-icon"><i data-lucide="Server"></i></span>
+          <div class="list-main">
+            <span class="list-title" th:text="${inst.displayName}">Provider</span>
+            <span class="list-meta">
+              <span th:text="${inst.provider.displayName()}">Ollama</span>
+              <code th:text="${inst.model}">model</code>
+              <span class="truncate" th:text="${inst.baseUrl}">http://localhost</span>
+            </span>
+          </div>
+          <span class="badge badge-warn" th:if="${inst.keyRequired && !inst.hasUserKey}">Key needed</span>
+          <div class="list-actions">
+            <button class="btn-ghost" type="button" th:attr="data-dialog-open=|own-${inst.id}|"><i data-lucide="Pencil"></i> Edit</button>
+          </div>
+
+          <dialog class="dialog dialog-wide" th:id="|own-${inst.id}|">
+            <form class="dialog-panel" method="post" action="/model-providers/own" autocomplete="off">
+              <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+              <input type="hidden" name="id" th:value="${inst.id}">
+              <div class="dialog-header">
+                <div><h2 th:text="|Edit ${inst.displayName}|">Edit provider</h2><p>Only you can see this provider.</p></div>
+                <button class="icon-button" formmethod="dialog" formnovalidate aria-label="Close"><i data-lucide="X"></i></button>
+              </div>
+              <div class="dialog-body">
+                <div th:replace="~{fragments/model-provider-form :: fields(|own-${inst.id}|, ${inst}, null, 'API key', 'Stored encrypted. Leave empty if the endpoint needs no key.')}"></div>
+              </div>
+              <div class="dialog-footer">
+                <button class="btn-danger btn-sm spacer" type="submit" formnovalidate
+                        th:attr="formaction=@{/model-providers/own/{id}/delete(id=${inst.id})}"
+                        onclick="return confirm('Remove this provider and its key?')"><i data-lucide="Trash2"></i> Remove</button>
+                <button class="btn-secondary" formmethod="dialog" formnovalidate>Cancel</button>
+                <button class="btn-primary" type="submit"><i data-lucide="Save"></i> Save</button>
+              </div>
+            </form>
+          </dialog>
+        </li>
+      </ul>
+    </section>
+  </main>
+</div>
+
+<dialog id="own-new" class="dialog dialog-wide" th:if="${allowUserProviders}">
+  <form class="dialog-panel" method="post" action="/model-providers/own" autocomplete="off">
+    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+    <div class="dialog-header">
+      <div><h2>Add your own provider</h2><p>Private to you. Petri will call this endpoint from the server.</p></div>
+      <button class="icon-button" formmethod="dialog" formnovalidate aria-label="Close"><i data-lucide="X"></i></button>
+    </div>
+    <div class="dialog-body">
+      <div th:replace="~{fragments/model-provider-form :: fields('own-new', null, ${providerKinds}, 'API key', 'Stored encrypted. Leave empty if the endpoint needs no key.')}"></div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn-secondary" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn-primary" type="submit"><i data-lucide="Plus"></i> Add provider</button>
+    </div>
+  </form>
+</dialog>
+</body>
+</html>

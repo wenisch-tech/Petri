@@ -47,7 +47,12 @@ final class OpenAiCompatibleTransport {
   }
 
   byte[] post(ModelProvider provider, String resource, String json) {
-    ModelCredentialMaterial credential = credentials.requireMaterial(provider);
+    return post(provider, null, resource, json);
+  }
+
+  /** A null reference addresses the oldest global instance of the kind with its shared key. */
+  byte[] post(ModelProvider provider, ModelCredentialRef ref, String resource, String json) {
+    ModelCredentialMaterial credential = material(provider, ref);
     URI uri = URI.create(credential.baseUrl() + resource);
     HttpRequest.Builder request = HttpRequest.newBuilder(uri)
         .timeout(timeout)
@@ -84,7 +89,13 @@ final class OpenAiCompatibleTransport {
   }
 
   void postSse(ModelProvider provider, String resource, String json, Consumer<String> eventData) {
-    ModelCredentialMaterial credential = credentials.requireMaterial(provider);
+    postSse(provider, null, resource, json, eventData);
+  }
+
+  void postSse(
+      ModelProvider provider, ModelCredentialRef ref, String resource, String json,
+      Consumer<String> eventData) {
+    ModelCredentialMaterial credential = material(provider, ref);
     URI uri = URI.create(credential.baseUrl() + resource);
     HttpRequest.Builder request = HttpRequest.newBuilder(uri)
         .timeout(timeout)
@@ -137,5 +148,11 @@ final class OpenAiCompatibleTransport {
     } catch (IOException exception) {
       throw new ModelClientException(provider.displayName() + " streaming request failed", exception);
     }
+  }
+
+  private ModelCredentialMaterial material(ModelProvider provider, ModelCredentialRef ref) {
+    return ref == null || ref.instanceId() == null
+        ? credentials.requireMaterial(provider)
+        : credentials.requireMaterial(ref);
   }
 }

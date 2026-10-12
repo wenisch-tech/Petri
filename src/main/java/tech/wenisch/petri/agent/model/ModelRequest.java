@@ -14,7 +14,25 @@ public record ModelRequest(
     ReasoningEffort reasoningEffort,
     TextVerbosity textVerbosity,
     List<ModelConversationMessage> conversation,
-    boolean jsonObjectOutput) {
+    boolean jsonObjectOutput,
+    ModelCredentialRef credential) {
+
+  public ModelRequest(
+      String model,
+      String instructions,
+      String prompt,
+      String previousResponseId,
+      List<ModelToolOutput> toolOutputs,
+      List<ToolDefinition> tools,
+      int maxOutputTokens,
+      ReasoningEffort reasoningEffort,
+      TextVerbosity textVerbosity,
+      List<ModelConversationMessage> conversation,
+      boolean jsonObjectOutput) {
+    this(
+        model, instructions, prompt, previousResponseId, toolOutputs, tools, maxOutputTokens,
+        reasoningEffort, textVerbosity, conversation, jsonObjectOutput, null);
+  }
 
   public ModelRequest(
       String model,
@@ -93,6 +111,13 @@ public record ModelRequest(
   public ModelRequest withJsonObjectOutput(boolean enabled) {
     return new ModelRequest(
         model, instructions, prompt, previousResponseId, toolOutputs, tools, maxOutputTokens,
-        reasoningEffort, textVerbosity, conversation, enabled);
+        reasoningEffort, textVerbosity, conversation, enabled, credential);
+  }
+
+  /** The same request, sent with the given instance and on behalf of the given user. */
+  public ModelRequest withCredential(ModelCredentialRef value) {
+    return new ModelRequest(
+        model, instructions, prompt, previousResponseId, toolOutputs, tools, maxOutputTokens,
+        reasoningEffort, textVerbosity, conversation, jsonObjectOutput, value);
   }
 }

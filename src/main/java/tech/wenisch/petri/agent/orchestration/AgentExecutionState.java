@@ -13,6 +13,8 @@ record AgentExecutionState(
     UUID chatId,
     UUID worktreeId,
     ModelProvider provider,
+    UUID providerInstanceId,
+    UUID createdBy,
     String model,
     String prompt,
     AgentRunStatus status,

@@ -44,7 +44,8 @@ public class OpenAiResponsesClient implements ModelClient {
 
   @Override
   public ModelResponse respond(ModelRequest request) {
-    return codec.decode(transport.post(provider(), "/responses", codec.encode(request)));
+    return codec.decode(transport.post(
+        provider(), request.credential(), "/responses", codec.encode(request)));
   }
 
   @Override

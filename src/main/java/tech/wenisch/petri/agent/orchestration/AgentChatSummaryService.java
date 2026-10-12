@@ -78,7 +78,11 @@ class AgentChatSummaryService {
     String source = sourceForRevision(history, latest, through);
     ModelResponse response = clients.require(current.provider()).respond(new ModelRequest(
         current.model(), INSTRUCTIONS, source, null, List.of(), List.of(),
-        Math.min(2048, current.maxOutputTokens()), null, null));
+        Math.min(2048, current.maxOutputTokens()), null, null)
+        .withCredential(current.providerInstanceId() == null
+            ? null
+            : new tech.wenisch.petri.agent.model.ModelCredentialRef(
+                current.providerInstanceId(), current.createdBy())));
     if (!"completed".equals(response.status()) || response.text() == null || response.text().isBlank()) {
       throw new IllegalStateException("Conversation context could not be summarized");
     }

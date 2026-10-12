@@ -73,7 +73,7 @@
   .app-topbar { @apply sticky top-0 z-30 border-b border-ink-700/70 bg-ink-950/85 backdrop-blur-xl; }
   .app-topbar-inner { @apply mx-auto flex h-14 w-full max-w-7xl items-center gap-3 px-4 sm:gap-6 sm:px-8; }
   .app-brand { @apply flex shrink-0 items-center gap-2.5 text-[15px] font-semibold text-ink-100; }
-  .app-logo { @apply grid size-8 place-items-center rounded-lg bg-brand-500/15 text-brand-400; }
+  .app-logo { @apply block size-9 shrink-0 object-contain; }
   .app-nav { @apply -mx-1 flex min-w-0 flex-1 items-center gap-0.5 overflow-x-auto px-1; }
   .app-nav a { @apply shrink-0 rounded-md px-3 py-1.5 text-sm font-medium text-ink-500 transition hover:bg-ink-800 hover:text-ink-100; }
   .app-nav a.is-active { @apply bg-ink-800 text-ink-100; }

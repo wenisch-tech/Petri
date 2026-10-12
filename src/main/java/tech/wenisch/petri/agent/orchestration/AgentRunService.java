@@ -84,11 +84,9 @@ public class AgentRunService {
     gitOperations.assertAgentAllowed(worktreeId);
     if (!users.existsById(actorId)) throw new IllegalArgumentException("Unknown run creator");
     String prompt = required(command.prompt(), "Prompt", MAX_PROMPT_LENGTH);
-    ModelProvider provider = command.provider() == null ? ModelProvider.OPENAI : command.provider();
-    ModelCredentialStatus credential = credentials.status(provider);
-    if (!credential.configured()) {
-      throw new IllegalStateException(provider + " credentials are not configured");
-    }
+    ModelCredentialStatus credential = credentials.resolve(
+        actorId, command.provider(), command.providerInstanceId());
+    ModelProvider provider = credential.provider();
     String model = command.model() == null || command.model().isBlank()
         ? credential.model()
         : required(command.model(), "Model", 200).strip();
@@ -111,7 +109,7 @@ public class AgentRunService {
     Instant now = Instant.now(clock);
     AgentChat chat = chats.save(new AgentChat(
         UUID.randomUUID(), worktreeId, title(prompt), actorId, now));
-    AgentRun run = createRun(chat, prompt, provider, model, maxTurns, maxOutputTokens,
+    AgentRun run = createRun(chat, prompt, provider, credential.id(), model, maxTurns, maxOutputTokens,
         contextWindowTokens,
         command.reasoningEffort() == null ? credential.reasoningEffort() : command.reasoningEffort(),
         command.textVerbosity() == null ? credential.textVerbosity() : command.textVerbosity(),
@@ -135,9 +133,9 @@ public class AgentRunService {
     gitOperations.assertAgentAllowed(chat.worktreeId());
     if (!users.existsById(actorId)) throw new IllegalArgumentException("Unknown run creator");
     String prompt = required(command.prompt(), "Prompt", MAX_PROMPT_LENGTH);
-    ModelProvider provider = command.provider() == null ? ModelProvider.OPENAI : command.provider();
-    ModelCredentialStatus credential = credentials.status(provider);
-    if (!credential.configured()) throw new IllegalStateException(provider + " credentials are not configured");
+    ModelCredentialStatus credential = credentials.resolve(
+        actorId, command.provider(), command.providerInstanceId());
+    ModelProvider provider = credential.provider();
     String model = command.model() == null || command.model().isBlank()
         ? credential.model() : required(command.model(), "Model", 200).strip();
     int maxOutputTokens = command.maxOutputTokens() == null
@@ -153,7 +151,7 @@ public class AgentRunService {
       throw new IllegalArgumentException("Maximum model turns must be between 1 and 100");
     }
     Instant now = Instant.now(clock);
-    AgentRun run = createRun(chat, prompt, provider, model, maxTurns, maxOutputTokens,
+    AgentRun run = createRun(chat, prompt, provider, credential.id(), model, maxTurns, maxOutputTokens,
         contextWindowTokens,
         command.reasoningEffort() == null ? credential.reasoningEffort() : command.reasoningEffort(),
         command.textVerbosity() == null ? credential.textVerbosity() : command.textVerbosity(),
@@ -175,13 +173,15 @@ public class AgentRunService {
     if (workflow.terminal()) throw new IllegalStateException("Workflow is already terminal");
     String safePrompt = required(prompt, "Stage prompt", MAX_PROMPT_LENGTH);
     Instant now = Instant.now(clock);
-    AgentRun run = runs.save(new AgentRun(
+    AgentRun stage = new AgentRun(
         UUID.randomUUID(), workflow.chatId(), workflow.id(), snapshot.role(), phase, attempt,
         workflow.executionWorktreeId(), snapshot.provider(), snapshot.model(), safePrompt,
         snapshot.maxModelTurns(), snapshot.maxOutputTokens(), snapshot.contextWindowTokens(),
         snapshot.reasoningEffort(), snapshot.textVerbosity(),
         WorkflowPrompts.instructions(snapshot.role(), snapshot.promptAddendum()),
-        workflow.createdBy(), now));
+        workflow.createdBy(), now);
+    stage.useProviderInstance(snapshot.providerInstanceId());
+    AgentRun run = runs.save(stage);
     turns.save(new AgentTurn(UUID.randomUUID(), run.id(), 0, AgentTurnKind.USER_PROMPT,
         null, null, null, safePrompt, now));
     auditLog.record(auditActor, "WORKFLOW_STAGE_RUN_CREATED", "AGENT_RUN", run.id(),
@@ -368,12 +368,14 @@ public class AgentRunService {
   }
 
   private AgentRun createRun(
-      AgentChat chat, String prompt, ModelProvider provider, String model, int maxTurns,
-      int maxOutputTokens, int contextWindowTokens, tech.wenisch.petri.agent.model.ReasoningEffort reasoning,
+      AgentChat chat, String prompt, ModelProvider provider, UUID providerInstanceId, String model,
+      int maxTurns, int maxOutputTokens, int contextWindowTokens, tech.wenisch.petri.agent.model.ReasoningEffort reasoning,
       tech.wenisch.petri.agent.model.TextVerbosity verbosity, UUID actorId, Instant now) {
-    AgentRun run = runs.save(new AgentRun(
+    AgentRun created = new AgentRun(
         UUID.randomUUID(), chat.id(), chat.nextMessageIndex(now), chat.worktreeId(), provider, model,
-        prompt, maxTurns, maxOutputTokens, contextWindowTokens, reasoning, verbosity, actorId, now));
+        prompt, maxTurns, maxOutputTokens, contextWindowTokens, reasoning, verbosity, actorId, now);
+    created.useProviderInstance(providerInstanceId);
+    AgentRun run = runs.save(created);
     turns.save(new AgentTurn(UUID.randomUUID(), run.id(), 0, AgentTurnKind.USER_PROMPT,
         null, null, null, prompt, now));
     return run;
@@ -411,7 +413,8 @@ public class AgentRunService {
 
   private static AgentRunView view(AgentRun run, List<AgentTurn> turns) {
     return new AgentRunView(
-        run.id(), run.worktreeId(), run.provider(), run.model(), run.prompt(), run.status(), run.maxModelTurns(),
+        run.id(), run.worktreeId(), run.provider(), run.providerInstanceId(), run.model(), run.prompt(),
+        run.status(), run.maxModelTurns(),
         run.maxOutputTokens(), run.reasoningEffort(), run.textVerbosity(), run.modelTurnCount(),
         run.finalOutput(), run.errorMessage(), run.createdBy(), run.createdAt(),
         run.startedAt(), run.completedAt(), turns.stream().map(AgentRunService::view).toList(),

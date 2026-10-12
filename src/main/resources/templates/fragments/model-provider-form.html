@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<!--
+  Fields shared by every dialog that creates or edits a model provider.
+  prefix   unique id prefix for label/input pairs
+  inst     existing provider status, or null when creating
+  kinds    selectable provider kinds (creating only)
+  keyLabel label for the API key input
+  keyHint  helper text below the API key input
+-->
+<div th:fragment="fields(prefix, inst, kinds, keyLabel, keyHint)" class="space-y-5">
+  <div th:if="${inst == null}">
+    <label class="label" th:for="|${prefix}-kind|">Kind</label>
+    <select class="field" name="provider" th:id="|${prefix}-kind|" required
+            onchange="const o=this.selectedOptions[0];const f=this.form;f.baseUrl.placeholder=o.dataset.url;f.model.placeholder=o.dataset.model">
+      <option th:each="kind, iter : ${kinds}" th:value="${kind}" th:text="${kind.displayName() + ' · ' + kind.apiStyle()}"
+              th:attr="data-url=${kind.defaultBaseUrl()},data-model=${kind.name() == 'OLLAMA' ? 'qwen3-coder' : 'model-name'}"
+              th:selected="${kind.name() == 'LITELLM'}">LiteLLM</option>
+    </select>
+    <span class="hint">The kind decides which API Petri speaks. You can add several providers of the same kind.</span>
+  </div>
+  <div th:if="${inst != null}" class="flex items-center gap-2 text-sm text-ink-500">
+    <span class="badge badge-neutral" th:text="${inst.provider().displayName()}">LiteLLM</span>
+    <span th:text="${inst.provider().apiStyle()}">Responses API</span>
+  </div>
+
+  <div class="form-grid">
+    <div>
+      <label class="label" th:for="|${prefix}-name|">Name</label>
+      <input class="field" name="displayName" th:id="|${prefix}-name|" maxlength="120" required
+             th:value="${inst != null ? inst.displayName() : ''}" placeholder="Team LiteLLM">
+    </div>
+    <div>
+      <label class="label" th:for="|${prefix}-model|">Model ID</label>
+      <input class="field" name="model" th:id="|${prefix}-model|" maxlength="200" required
+             th:value="${inst != null ? inst.model() : ''}" placeholder="model-name">
+    </div>
+  </div>
+
+  <div>
+    <label class="label" th:for="|${prefix}-url|">Base URL</label>
+    <input class="field font-mono text-sm" name="baseUrl" th:id="|${prefix}-url|" maxlength="2048"
+           th:value="${inst != null ? inst.baseUrl() : ''}" placeholder="http://localhost:4000/v1">
+    <span class="hint">Petri appends <code>/responses</code> or <code>/chat/completions</code>, depending on the kind. Leave empty for the kind's default.</span>
+  </div>
+
+  <div>
+    <label class="label" th:for="|${prefix}-key|"><span th:text="${keyLabel}">API key</span>
+      <span th:if="${inst != null && inst.hasSharedKey()}" class="label-optional">(stored — leave blank to keep)</span></label>
+    <input class="field" type="password" name="apiKey" th:id="|${prefix}-key|" autocomplete="new-password" spellcheck="false"
+           placeholder="Paste key">
+    <span class="hint" th:text="${keyHint}">Hint</span>
+    <label th:if="${inst != null && inst.hasSharedKey()}" class="check mt-2">
+      <input type="checkbox" name="clearApiKey" value="true"><span>Remove the stored key</span>
+    </label>
+  </div>
+
+  <fieldset>
+    <legend class="label">Generation defaults</legend>
+    <div class="grid gap-4 sm:grid-cols-4">
+      <div>
+        <label class="hint !mt-0 mb-1" th:for="|${prefix}-out|">Max output tokens</label>
+        <input class="field" type="number" min="16" max="1000000" name="maxOutputTokens" th:id="|${prefix}-out|"
+               th:value="${inst != null ? inst.maxOutputTokens() : 4096}">
+      </div>
+      <div>
+        <label class="hint !mt-0 mb-1" th:for="|${prefix}-ctx|">Context window</label>
+        <input class="field" type="number" min="2048" max="10000000" name="contextWindowTokens" th:id="|${prefix}-ctx|"
+               th:value="${inst != null ? inst.contextWindowTokens() : 32768}">
+      </div>
+      <div>
+        <label class="hint !mt-0 mb-1" th:for="|${prefix}-reasoning|">Reasoning</label>
+        <select class="field" name="reasoningEffort" th:id="|${prefix}-reasoning|">
+          <option value="">Model default</option>
+          <option th:each="effort : ${reasoningEfforts}" th:value="${effort}"
+                  th:text="${#strings.capitalize(#strings.toLowerCase(effort.name()))}"
+                  th:selected="${inst != null && inst.reasoningEffort() == effort}">Medium</option>
+        </select>
+      </div>
+      <div>
+        <label class="hint !mt-0 mb-1" th:for="|${prefix}-verbosity|">Verbosity</label>
+        <select class="field" name="textVerbosity" th:id="|${prefix}-verbosity|">
+          <option value="">Model default</option>
+          <option th:each="verbosity : ${textVerbosities}" th:value="${verbosity}"
+                  th:text="${#strings.capitalize(#strings.toLowerCase(verbosity.name()))}"
+                  th:selected="${inst != null && inst.textVerbosity() == verbosity}">Medium</option>
+        </select>
+      </div>
+    </div>
+    <span class="hint">Leave reasoning and verbosity on “Model default” if the endpoint does not support them.</span>
+  </fieldset>
+</div>
+</body>
+</html>

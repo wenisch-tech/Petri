@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: head('Models')}"></head>
+<head th:replace="~{fragments/layout :: head('Model providers')}"></head>
 <body>
 <header th:replace="~{fragments/layout :: topbar('admin')}"></header>
 <div th:replace="~{fragments/layout :: adminBanner}"></div>
@@ -11,97 +11,60 @@
   <main class="min-w-0">
     <div class="page-header">
       <div>
-        <h1 class="page-title">Models</h1>
-        <p class="page-description">Model providers available to every user. New runs snapshot the selected endpoint and generation settings; existing runs keep theirs.</p>
+        <h1 class="page-title">Model providers</h1>
+        <p class="page-description">Endpoints every user can choose from. You can add several of the same kind, for example more than one LiteLLM gateway. Each user adds their own API key, or you can store a shared one.</p>
+      </div>
+      <div class="page-actions">
+        <button class="btn-primary" type="button" data-dialog-open="provider-new"><i data-lucide="Plus"></i> Add provider</button>
       </div>
     </div>
 
-    <div th:replace="~{fragments/layout :: alert('success', ${settingsSaved} ? 'Model settings saved.' : null)}"></div>
-    <div th:replace="~{fragments/layout :: alert('info', ${settingsRemoved} ? 'Model configuration removed.' : null)}"></div>
+    <div th:replace="~{fragments/layout :: alert('success', ${notice})}"></div>
+    <div th:replace="~{fragments/layout :: alert('error', ${error})}"></div>
 
-    <ul class="list">
-      <li th:each="credential : ${credentials}" class="list-row">
-        <span class="list-icon" th:classappend="${credential.configured} ? '!bg-brand-500/15 !text-brand-400'"><i data-lucide="Cpu"></i></span>
+    <div th:if="${#lists.isEmpty(instances)}" class="empty-state">
+      <i data-lucide="Cpu"></i>
+      <h2>No model providers yet</h2>
+      <p>Add an endpoint such as OpenAI, a LiteLLM gateway or a local Ollama server so users can start chatting.</p>
+      <button class="btn-primary" type="button" data-dialog-open="provider-new"><i data-lucide="Plus"></i> Add provider</button>
+    </div>
+
+    <ul th:unless="${#lists.isEmpty(instances)}" class="list">
+      <li th:each="inst : ${instances}" class="list-row" th:classappend="${!inst.enabled} ? 'opacity-70'">
+        <span class="list-icon" th:classappend="${inst.enabled} ? '!bg-brand-500/15 !text-brand-400'"><i data-lucide="Cpu"></i></span>
         <div class="list-main">
-          <span class="list-title" th:text="${credential.provider.displayName()}">Provider</span>
-          <span class="list-meta" th:if="${credential.configured}">
-            <code th:text="${credential.model}">model</code>
-            <span class="truncate" th:text="${credential.baseUrl}">http://localhost</span>
+          <span class="list-title" th:text="${inst.displayName}">Provider</span>
+          <span class="list-meta">
+            <span th:text="${inst.provider.displayName()}">LiteLLM</span>
+            <code th:text="${inst.model}">model</code>
+            <span class="truncate" th:text="${inst.baseUrl}">http://localhost</span>
           </span>
-          <span class="list-meta" th:unless="${credential.configured}"><span th:text="${credential.provider.apiStyle()}">API style</span></span>
-          <span class="mt-1 block text-xs text-warn-400" th:if="${credential.configured && #strings.startsWith(credential.baseUrl, 'http://')}">Unencrypted HTTP — trusted networks only</span>
+          <span class="mt-1 block text-xs text-warn-400" th:if="${#strings.startsWith(inst.baseUrl, 'http://')}">Unencrypted HTTP — trusted networks only</span>
         </div>
-        <span class="badge" th:classappend="${credential.configured} ? '' : 'badge-neutral'" th:text="${credential.configured} ? 'Configured' : 'Not configured'">status</span>
+        <span class="badge badge-neutral" th:if="${!inst.enabled}">Disabled</span>
+        <span class="badge" th:if="${inst.hasSharedKey}" title="Used when a user has not added their own key">Shared key</span>
+        <span class="badge badge-neutral" th:if="${!inst.hasSharedKey && inst.keyRequired}" title="Each user must add their own key">Users bring a key</span>
+        <span class="badge badge-neutral" th:if="${!inst.hasSharedKey && !inst.keyRequired}" title="Works without a key; users may still add one">Key optional</span>
         <div class="list-actions">
-          <button th:class="${credential.configured} ? 'btn-ghost' : 'btn-secondary btn-sm'" type="button" th:attr="data-dialog-open=|model-${credential.provider}|">
-            <i th:attr="data-lucide=${credential.configured} ? 'Pencil' : 'Plus'"></i> <span th:text="${credential.configured} ? 'Edit' : 'Configure'">Configure</span>
-          </button>
+          <button class="btn-ghost" type="button" th:attr="data-dialog-open=|provider-${inst.id}|"><i data-lucide="Pencil"></i> Edit</button>
         </div>
 
-        <dialog class="dialog dialog-wide" th:id="|model-${credential.provider}|"
-                th:attr="data-open-on-load=${formError != null && submittedProvider == credential.provider} ? 'true'">
-          <form class="dialog-panel" method="post" th:action="@{/model-settings/{provider}(provider=${credential.provider})}" th:object="${modelSettingsForm}" autocomplete="off">
+        <dialog class="dialog dialog-wide" th:id="|provider-${inst.id}|">
+          <form class="dialog-panel" method="post" action="/model-settings/providers" autocomplete="off">
             <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <input type="hidden" name="id" th:value="${inst.id}">
             <div class="dialog-header">
-              <div><h2 th:text="${credential.provider.displayName()}">Provider</h2><p th:text="${credential.provider.apiStyle()}">API style</p></div>
+              <div><h2 th:text="|Edit ${inst.displayName}|">Edit provider</h2><p>Changes apply to runs started afterwards.</p></div>
               <button class="icon-button" formmethod="dialog" formnovalidate aria-label="Close"><i data-lucide="X"></i></button>
             </div>
             <div class="dialog-body">
-              <div th:replace="~{fragments/layout :: alert('error', ${submittedProvider == credential.provider} ? ${formError} : null)}"></div>
-
-              <div>
-                <label class="label" th:for="|baseUrl-${credential.provider}|">Base URL</label>
-                <input class="field font-mono text-sm" name="baseUrl" th:id="|baseUrl-${credential.provider}|" th:value="${submittedProvider == credential.provider ? modelSettingsForm.baseUrl : credential.baseUrl}" placeholder="http://localhost:11434/v1" required>
-                <span class="field-error" th:if="${submittedProvider == credential.provider && #fields.hasErrors('baseUrl')}" th:errors="*{baseUrl}">Invalid URL</span>
-                <span class="hint">Petri appends <code th:text="${credential.provider.apiStyle() == 'Responses API'} ? '/responses' : '/chat/completions'">/endpoint</code>.</span>
-              </div>
-
-              <div class="form-grid">
-                <div>
-                  <label class="label" th:for="|model-id-${credential.provider}|">Model ID</label>
-                  <input class="field" name="model" th:id="|model-id-${credential.provider}|" th:value="${submittedProvider == credential.provider ? modelSettingsForm.model : credential.model}" th:placeholder="${credential.provider.name() == 'OLLAMA'} ? 'qwen3-coder' : 'model-name'" required>
-                  <span class="field-error" th:if="${submittedProvider == credential.provider && #fields.hasErrors('model')}" th:errors="*{model}">Invalid model</span>
-                </div>
-                <div>
-                  <label class="label" th:for="|apiKey-${credential.provider}|">API key <span th:unless="${credential.provider.apiKeyRequired()}" class="label-optional">(optional)</span></label>
-                  <input class="field" name="apiKey" th:id="|apiKey-${credential.provider}|" type="password" th:placeholder="${credential.hasApiKey} ? 'Stored — leave blank to keep' : 'Leave blank if not needed'" autocomplete="new-password" th:required="${credential.provider.apiKeyRequired() && !credential.hasApiKey}">
-                  <span class="field-error" th:if="${submittedProvider == credential.provider && #fields.hasErrors('apiKey')}" th:errors="*{apiKey}">Invalid key</span>
-                </div>
-              </div>
-
-              <fieldset>
-                <legend class="label">Generation defaults</legend>
-                <div class="grid gap-4 sm:grid-cols-4">
-                  <div>
-                    <label class="hint !mt-0 mb-1" th:for="|tokens-${credential.provider}|">Max output tokens</label>
-                    <input class="field" name="maxOutputTokens" th:id="|tokens-${credential.provider}|" type="number" min="16" max="1000000" th:value="${submittedProvider == credential.provider ? modelSettingsForm.maxOutputTokens : credential.maxOutputTokens}" required>
-                  </div>
-                  <div>
-                    <label class="hint !mt-0 mb-1" th:for="|context-${credential.provider}|">Context window</label>
-                    <input class="field" name="contextWindowTokens" th:id="|context-${credential.provider}|" type="number" min="2048" max="10000000" th:value="${submittedProvider == credential.provider ? modelSettingsForm.contextWindowTokens : credential.contextWindowTokens}" required>
-                  </div>
-                  <div>
-                    <label class="hint !mt-0 mb-1" th:for="|reasoning-${credential.provider}|">Reasoning</label>
-                    <select class="field" name="reasoningEffort" th:id="|reasoning-${credential.provider}|">
-                      <option value="">Model default</option>
-                      <option th:each="effort : ${reasoningEfforts}" th:value="${effort}" th:text="${#strings.capitalize(#strings.toLowerCase(effort.name()))}" th:selected="${effort == (submittedProvider == credential.provider ? modelSettingsForm.reasoningEffort : credential.reasoningEffort)}">Medium</option>
-                    </select>
-                  </div>
-                  <div>
-                    <label class="hint !mt-0 mb-1" th:for="|verbosity-${credential.provider}|">Verbosity</label>
-                    <select class="field" name="textVerbosity" th:id="|verbosity-${credential.provider}|">
-                      <option value="">Model default</option>
-                      <option th:each="verbosity : ${textVerbosities}" th:value="${verbosity}" th:text="${#strings.capitalize(#strings.toLowerCase(verbosity.name()))}" th:selected="${verbosity == (submittedProvider == credential.provider ? modelSettingsForm.textVerbosity : credential.textVerbosity)}">Medium</option>
-                    </select>
-                  </div>
-                </div>
-                <span class="hint">Leave reasoning and verbosity on “Model default” if the endpoint does not support them.</span>
-              </fieldset>
+              <div th:replace="~{fragments/model-provider-form :: fields(|edit-${inst.id}|, ${inst}, null, 'Shared API key', 'Optional. Used for users who have not added their own key. Leave empty to make every user bring theirs.')}"></div>
+              <label class="check"><input type="checkbox" name="enabled" value="true" th:checked="${inst.enabled}"><span>Enabled <span class="hint !mt-0">Disabled providers are hidden from users; running work using them stops.</span></span></label>
             </div>
             <div class="dialog-footer">
-              <button th:if="${credential.configured}" class="btn-danger btn-sm spacer" type="submit" formnovalidate
-                      th:attr="formaction=@{/model-settings/{provider}/delete(provider=${credential.provider})}"
-                      onclick="return confirm('Remove this model configuration?')"><i data-lucide="Trash2"></i> Remove</button>
+              <button class="btn-danger btn-sm spacer" type="submit" formnovalidate
+                      th:attr="formaction=@{/model-settings/providers/{id}/delete(id=${inst.id})}"
+                      onclick="return confirm('Remove this provider? Users lose their keys for it.')"><i data-lucide="Trash2"></i> Remove</button>
               <button class="btn-secondary" formmethod="dialog" formnovalidate>Cancel</button>
               <button class="btn-primary" type="submit"><i data-lucide="Save"></i> Save</button>
             </div>
@@ -110,10 +73,44 @@
       </li>
     </ul>
 
-    <p class="mt-6 text-sm leading-6 text-ink-500">
-      OpenAI and LiteLLM use the Responses API. Ollama and generic OpenAI-compatible servers use Chat Completions with reconstructed conversation history, which also works with stateless local endpoints.
-    </p>
+    <section class="section">
+      <div class="section-header"><div><h2 class="section-title">Personal providers</h2></div></div>
+      <form class="card" method="post" action="/model-settings/policy">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        <div class="card-body space-y-4">
+          <label class="check cursor-pointer">
+            <input type="checkbox" name="allowUserProviders" value="true" th:checked="${allowUserProviders}" onchange="this.form.submit()">
+            <span>
+              <span class="block font-medium text-ink-100">Let users add their own model providers</span>
+              <span class="hint !mt-0.5">Personal providers and their keys are only visible to the user who created them. They are never shared with anyone else.</span>
+            </span>
+          </label>
+          <div class="alert alert-warning !mb-0">
+            <i data-lucide="TriangleAlert"></i>
+            <span>A personal provider can point Petri at any HTTP(S) address the server can reach, including internal services. Turn this on only when every user is trusted. Turning it off hides personal providers and stops runs that use them.</span>
+          </div>
+        </div>
+      </form>
+    </section>
   </main>
 </div>
+
+<dialog id="provider-new" class="dialog dialog-wide">
+  <form class="dialog-panel" method="post" action="/model-settings/providers" autocomplete="off">
+    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+    <div class="dialog-header">
+      <div><h2>Add model provider</h2><p>Users choose from the providers you add here.</p></div>
+      <button class="icon-button" formmethod="dialog" formnovalidate aria-label="Close"><i data-lucide="X"></i></button>
+    </div>
+    <div class="dialog-body">
+      <div th:replace="~{fragments/model-provider-form :: fields('new', null, ${providerKinds}, 'Shared API key', 'Optional. Used for users who have not added their own key. Leave empty to make every user bring theirs.')}"></div>
+      <label class="check"><input type="checkbox" name="enabled" value="true" checked><span>Enabled</span></label>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn-secondary" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn-primary" type="submit"><i data-lucide="Plus"></i> Add provider</button>
+    </div>
+  </form>
+</dialog>
 </body>
 </html>

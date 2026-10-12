@@ -1022,7 +1022,7 @@ function initializeChat(state) {
         await snapshot(state);
       } else {
         const option = model?.selectedOptions[0];
-        const body = { prompt, provider: model?.value || null, model: option?.dataset.model,
+        const body = { prompt, providerInstanceId: model?.value || null, provider: option?.dataset.kind || null, model: option?.dataset.model,
           maxModelTurns: 20, maxOutputTokens: option?.dataset.tokens ? Number(option.dataset.tokens) : null,
           contextWindowTokens: option?.dataset.context ? Number(option.dataset.context) : null,
           reasoningEffort: option?.dataset.reasoning || null, textVerbosity: option?.dataset.verbosity || null };
@@ -1066,7 +1066,7 @@ function initializeChat(state) {
   model?.addEventListener('change', async () => {
     const option = model.selectedOptions[0];
     try {
-      await request(`/workspace/api/projects/${state.projectId}/model-preference`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ provider: model.value, model: option.dataset.model }) });
+      await request(`/workspace/api/projects/${state.projectId}/model-preference`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ providerInstanceId: model.value, provider: option.dataset.kind, model: option.dataset.model }) });
       chat.querySelector('[data-chat-status]').textContent = 'Model saved for this project';
     } catch (error) { chat.querySelector('[data-chat-status]').textContent = error.message; }
   });
@@ -1713,7 +1713,11 @@ function roleProfileRow(state, profile) {
   const row = el('section', 'workspace-role-profile'); row.dataset.role = profile.role;
   row.append(el('h3', '', profile.role.charAt(0) + profile.role.slice(1).toLowerCase()));
   const grid = el('div', 'workspace-role-grid');
-  const provider = labeledSelect('Provider', 'provider', [...state.chat.querySelector('[data-model-selector]').options].map(option => [option.value, option.textContent.split(' · ')[0]]), profile.provider);
+  const providerOptions = [...state.chat.querySelector('[data-model-selector]').options];
+  // Rows saved before provider instances only know the kind; map those to the first matching instance.
+  const selectedProvider = profile.providerInstanceId
+    || providerOptions.find(option => option.dataset.kind === profile.provider)?.value || '';
+  const provider = labeledSelect('Provider', 'provider', providerOptions.map(option => [option.value, option.textContent]), selectedProvider);
   const model = labeledInput('Model', 'model', profile.model, 'text');
   const attempts = labeledInput('Attempts', 'maxAttempts', profile.maxAttempts, 'number', 1, 10);
   const turns = labeledInput('Turn budget', 'maxModelTurns', profile.maxModelTurns, 'number', 1, 100);
@@ -1761,7 +1765,7 @@ function wireOrchestrationDialog(state) {
     const values = [...dialog.querySelectorAll('[data-role]')].map(row => {
       const get = field => row.querySelector(`[data-field="${field}"]`).value;
       const number = field => Number(get(field));
-      return { role: row.dataset.role, provider: get('provider'), model: get('model'),
+      return { role: row.dataset.role, providerInstanceId: get('provider'), model: get('model'),
         maxAttempts: number('maxAttempts'), maxModelTurns: number('maxModelTurns'),
         maxOutputTokens: number('maxOutputTokens'), contextWindowTokens: number('contextWindowTokens'),
         reasoningEffort: get('reasoningEffort') || null, textVerbosity: get('textVerbosity') || null,

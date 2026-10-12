@@ -6,12 +6,15 @@
   <meta name="_csrf" th:content="${_csrf.token}">
   <meta name="_csrf_header" th:content="${_csrf.headerName}">
   <title>Chat · Petri</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
+  <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
   <link rel="stylesheet" href="/css/petri.css">
   <script defer src="/js/petri.js"></script>
 </head>
 <body>
   <header class="topbar"><div class="page flex items-center justify-between py-4">
-    <a href="/" class="flex items-center gap-3 font-semibold"><span class="grid size-9 place-items-center rounded-xl bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span><span>Petri</span></a>
+    <a href="/" class="flex items-center gap-3 font-semibold"><img class="app-logo" src="/img/petri-logo-64.png" alt="" width="36" height="36"><span>Petri</span></a>
     <nav class="hidden items-center gap-1 sm:flex"><a class="nav-link bg-ink-800 text-ink-100" href="/chat">Chat</a><a class="nav-link" href="/projects">Projects</a><a class="nav-link" href="/runs">Runs</a><a class="nav-link" href="/model-settings">Models</a><a class="nav-link" href="/audit">Audit</a></nav>
     <a class="btn-secondary" href="/model-settings"><i data-lucide="Settings"></i> Models</a>
   </div></header>

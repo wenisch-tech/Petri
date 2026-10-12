@@ -36,7 +36,9 @@
 - LiteLLM Responses API.
 - Ollama OpenAI-compatible Chat Completions API.
 - Generic OpenAI-compatible Chat Completions endpoint.
-- Independent base URL, model, output budget and optional key per provider.
+- Several administrator-defined providers per kind, each with its own base URL, model and output budget.
+- Per-user API keys per provider, with an optional shared key.
+- Optional personal providers, enabled by an administrator and private to their owner.
 - Optional reasoning effort and text verbosity controls.
 - Per-run model setting snapshots and per-task overrides.
 - Full persisted conversation reconstruction for stateless Chat Completions servers.

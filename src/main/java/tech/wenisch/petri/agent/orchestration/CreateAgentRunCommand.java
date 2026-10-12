@@ -1,5 +1,6 @@
 package tech.wenisch.petri.agent.orchestration;
 
+import java.util.UUID;
 import tech.wenisch.petri.agent.model.ModelProvider;
 import tech.wenisch.petri.agent.model.ReasoningEffort;
 import tech.wenisch.petri.agent.model.TextVerbosity;
@@ -12,7 +13,21 @@ public record CreateAgentRunCommand(
     Integer maxOutputTokens,
     Integer contextWindowTokens,
     ReasoningEffort reasoningEffort,
-    TextVerbosity textVerbosity) {
+    TextVerbosity textVerbosity,
+    UUID providerInstanceId) {
+
+  public CreateAgentRunCommand(
+      String prompt,
+      ModelProvider provider,
+      Integer maxModelTurns,
+      String model,
+      Integer maxOutputTokens,
+      Integer contextWindowTokens,
+      ReasoningEffort reasoningEffort,
+      TextVerbosity textVerbosity) {
+    this(prompt, provider, maxModelTurns, model, maxOutputTokens, contextWindowTokens,
+        reasoningEffort, textVerbosity, null);
+  }
 
   public CreateAgentRunCommand(
       String prompt, ModelProvider provider, Integer maxModelTurns) {

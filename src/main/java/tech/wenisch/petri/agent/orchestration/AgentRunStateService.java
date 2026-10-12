@@ -332,7 +332,8 @@ class AgentRunStateService {
       else outputs.add(new ModelToolOutput(call.callId(), output));
     }
     return new AgentExecutionState(
-        run.id(), run.chatId(), run.worktreeId(), run.provider(), run.model(), run.prompt(), run.status(),
+        run.id(), run.chatId(), run.worktreeId(), run.provider(), run.providerInstanceId(), run.createdBy(),
+        run.model(), run.prompt(), run.status(),
         run.maxModelTurns(), run.maxOutputTokens(), run.reasoningEffort(), run.textVerbosity(),
         run.modelTurnCount(), latestResponseId,
         List.copyOf(pending), List.copyOf(outputs), conversationForChat(run, history),
