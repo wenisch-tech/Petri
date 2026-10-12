@@ -329,13 +329,28 @@
   .workspace-file-icon.is-sheet { color: #4fb286; }
   .workspace-file-icon.is-script { color: #8dc891; }
   .workspace-file-icon.is-generic { @apply text-ink-500; }
-  .workspace-commit-dialog { width: min(40rem, calc(100vw - 2rem)); }
+  /* Two classes: the generic .workspace-dialog width is defined later and would win otherwise. */
+  .workspace-dialog.workspace-commit-dialog { width: min(40rem, calc(100vw - 2rem)); }
   .workspace-commit-files { @apply mb-3 max-h-56 overflow-y-auto rounded-md border border-ink-700/70 p-2; }
   .workspace-commit-files-title { @apply flex items-center justify-between px-1 pt-1 text-xs text-ink-500; }
   .workspace-commit-file-list { @apply m-0 list-none p-0; }
   .workspace-commit-file-list li { @apply flex items-center gap-1 px-1 py-0.5 text-xs; }
   .workspace-commit-file-list .workspace-change-badge { @apply ml-0 w-24 text-center; }
   .workspace-commit-file-path { @apply min-w-0 truncate font-mono text-ink-300; }
+  /* At least 56rem (twice the default dialog), 60% of the page on wide screens, never off screen. */
+  .workspace-dialog.workspace-pr-dialog { width: min(max(60vw, 56rem), calc(100vw - 2rem)); max-width: none; }
+  .workspace-pr-dialog form { @apply max-h-[88dvh] overflow-y-auto; }
+  .workspace-pr-branches { @apply mb-3 flex flex-wrap items-center gap-2 text-sm text-ink-300; }
+  .workspace-pr-branch { @apply rounded-md bg-ink-800 px-2 py-1 font-mono text-xs; }
+  .workspace-pr-label { @apply mt-3 mb-1 block text-sm text-ink-300; }
+  .workspace-pr-label small { @apply text-ink-500; }
+  .workspace-pr-commits { @apply mt-3 rounded-md border border-ink-700/70 p-2; }
+  .workspace-pr-commits .workspace-commit-file-list { @apply max-h-40 overflow-y-auto; }
+  .workspace-pr-files summary { @apply cursor-pointer px-1 pt-2 text-xs text-ink-500; }
+  .workspace-pr-options { @apply mt-3 grid gap-2; }
+  .workspace-pr-checks { @apply mb-3 grid list-none gap-1 p-0 text-sm text-ink-300; }
+  .workspace-pr-checks li { @apply flex items-start gap-2; }
+  .workspace-pr-result { @apply grid gap-2 py-4 text-sm text-ink-300; }
   .workspace-commit-message-head { @apply mt-3 mb-1 flex items-center justify-between text-sm text-ink-300; }
   .workspace-change-badge { @apply ml-2 shrink-0 rounded px-1.5 py-0.5 font-mono text-[10px] text-ink-500; }
   .workspace-change-badge.is-modified { @apply bg-amber-400/10 text-amber-300; }

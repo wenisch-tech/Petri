@@ -280,6 +280,64 @@ class GitProviderAdapterTest {
         .extracting(PullRequestRef::draft).containsExactly(true, true, true, false);
   }
 
+  @Test
+  void pullRequestsAreOpenedWithEachProvidersFieldsAndFollowUps() {
+    AtomicReference<HttpRequest> last = new AtomicReference<>();
+    java.util.List<String> calls = new java.util.ArrayList<>();
+    HttpClient github = client(last, value -> {
+      calls.add(value.method() + " " + value.uri().getPath());
+      return value.uri().getPath().endsWith("/pulls")
+          ? new ResponseSpec(201, "{\"number\":12,\"html_url\":\"https://gh.test/acme/petri/pull/12\"}")
+          : new ResponseSpec(200, "[]");
+    });
+    var request = new CreatePullRequest("Add thing", "Body", "feature", "main", true, true,
+        java.util.List.of("bug"), false, false);
+    var me = new ProviderIdentity("7", "octocat", "Octo");
+
+    CreatedPullRequest created = new GithubProviderAdapter(json, github).createPullRequest(
+        instance(GitProviderType.GITHUB), "tok", GitConnectionAuthMethod.PAT, "42", "acme/petri",
+        me, request);
+
+    assertThat(created.number()).isEqualTo(12);
+    assertThat(created.webUrl()).endsWith("/pull/12");
+    assertThat(created.warnings()).isEmpty();
+    assertThat(calls).containsExactly("POST /api/repos/acme/petri/pulls",
+        "POST /api/repos/acme/petri/issues/12/labels", "POST /api/repos/acme/petri/issues/12/assignees");
+
+    HttpClient gitlab = client(last, value -> new ResponseSpec(201,
+        "{\"iid\":3,\"web_url\":\"https://gl.test/team/service/-/merge_requests/3\"}"));
+    CreatedPullRequest merge = new GitlabProviderAdapter(json, gitlab).createPullRequest(
+        instance(GitProviderType.GITLAB), "tok", GitConnectionAuthMethod.PAT, "91", "team/service",
+        me, new CreatePullRequest("Fix", "Body", "fix", "develop", true, true, java.util.List.of(),
+            true, true));
+    assertThat(merge.number()).isEqualTo(3);
+    assertThat(last.get().uri().getPath()).isEqualTo("/api/projects/91/merge_requests");
+
+    HttpClient forgejo = client(last, value -> value.method().equals("GET")
+        ? ok("[{\"id\":5,\"name\":\"bug\"}]")
+        : value.uri().getPath().endsWith("/pulls")
+            ? new ResponseSpec(201, "{\"number\":2,\"html_url\":\"https://fj.test/o/r/pulls/2\"}")
+            : new ResponseSpec(200, "[]"));
+    CreatedPullRequest pr = new ForgejoProviderAdapter(json, forgejo).createPullRequest(
+        instance(GitProviderType.FORGEJO), "tok", GitConnectionAuthMethod.PAT, "5", "o/r", me,
+        new CreatePullRequest("Do it", "B", "a", "main", true, false,
+            java.util.List.of("bug", "ghost"), false, false));
+    assertThat(pr.number()).isEqualTo(2);
+    assertThat(pr.warnings()).anyMatch(value -> value.contains("ghost"));
+  }
+
+  @Test
+  void aProviderErrorMessageIsPassedOnToTheUser() {
+    HttpClient client = client(new AtomicReference<>(), ignored -> new ResponseSpec(422,
+        "{\"message\":\"Validation Failed: No commits between main and feature\"}"));
+
+    assertThatThrownBy(() -> new GithubProviderAdapter(json, client).createPullRequest(
+        instance(GitProviderType.GITHUB), "tok", GitConnectionAuthMethod.PAT, "42", "acme/petri",
+        null, new CreatePullRequest("T", "B", "feature", "main", false, false, null, false, false)))
+        .isInstanceOf(GitProviderException.class)
+        .hasMessageContaining("422").hasMessageContaining("No commits between main and feature");
+  }
+
   private static GitProviderInstance instance(GitProviderType type) {
     return new GitProviderInstance(UUID.randomUUID(), type, type.name(),
         "https://git.example.test", "https://git.example.test/api",

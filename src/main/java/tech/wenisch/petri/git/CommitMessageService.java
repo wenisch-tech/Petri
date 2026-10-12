@@ -25,6 +25,7 @@ import tech.wenisch.petri.workspace.WorkspaceModelPreferenceView;
 @Service
 public class CommitMessageService {
   static final String SKILL = "conventional-commit";
+  static final String PULL_REQUEST_SKILL = "pull-request-description";
   private static final String DELIMITER = "PETRI_UNTRUSTED_CHANGES";
   private static final int MAX_DIFF_CHARS = 30_000;
   private static final int MAX_OUTPUT_TOKENS = 600;
@@ -96,6 +97,72 @@ public class CommitMessageService {
     return usable.stream().filter(value -> value.provider() == ModelProvider.OLLAMA).findFirst()
         .or(() -> usable.stream().findFirst())
         .orElseThrow(() -> new IllegalStateException("No usable model provider is available"));
+  }
+
+  /** A suggested pull request title and description. */
+  public record PullRequestText(String title, String description) {}
+
+  public PullRequestText generatePullRequest(UUID worktreeId, String target, String actorEmail) {
+    AppUser actor = users.findByEmailIgnoreCase(actorEmail)
+        .orElseThrow(() -> new IllegalArgumentException("Unknown user"));
+    WorkspaceGitService.PullRequestContext context =
+        git.pullRequestContext(worktreeId, target, MAX_DIFF_CHARS);
+    if (context.commits().isEmpty()) {
+      throw new IllegalStateException("There are no commits to describe: "
+          + context.sourceBranch() + " has nothing that " + context.targetBranch() + " lacks");
+    }
+    UUID projectId = worktrees.get(worktreeId).projectId();
+    ModelCredentialStatus model = workspaceModel(projectId, actor.getId());
+    WorkspaceModelPreferenceView preference = preferences.get(projectId, actor.getId());
+    String modelName = preference != null && preference.model() != null && !preference.model().isBlank()
+        && model.id().equals(preference.providerInstanceId()) ? preference.model() : model.model();
+    String instructions = "You write pull request titles and descriptions.\n\n"
+        + body(skills.load(PULL_REQUEST_SKILL).content());
+    ModelResponse response = clients.require(model.provider()).respond(new ModelRequest(
+        modelName, instructions, pullRequestPrompt(context), null, List.of(), List.of(),
+        1500, null, null).withCredential(new ModelCredentialRef(model.id(), actor.getId())));
+    if (!"completed".equals(response.status()) || response.text() == null
+        || response.text().isBlank()) {
+      throw new IllegalStateException("The model did not return a pull request description");
+    }
+    audit.record(actorEmail, "GIT_PULL_REQUEST_TEXT_GENERATED", "PROJECT_WORKTREE", worktreeId,
+        "Generated a pull request title and description suggestion");
+    return parsePullRequest(response.text());
+  }
+
+  static String pullRequestPrompt(WorkspaceGitService.PullRequestContext context) {
+    StringBuilder out = new StringBuilder("Write the pull request title and description.\n\n");
+    out.append("Source branch: ").append(context.sourceBranch()).append('\n')
+        .append("Target branch: ").append(context.targetBranch()).append("\n\n");
+    out.append('<').append(DELIMITER).append(">\nCommits (newest first):\n");
+    for (WorkspaceGitService.PullRequestCommit commit : context.commits()) {
+      out.append("- ").append(commit.sha()).append(' ').append(neutralize(commit.subject())).append('\n');
+    }
+    out.append("\nChanged files:\n");
+    for (WorkspaceGitService.PullRequestFile file : context.files()) {
+      out.append(file.status()).append(' ').append(file.path()).append(" (+").append(file.additions())
+          .append(" -").append(file.deletions()).append(")\n");
+    }
+    out.append("\nDiff:\n").append(neutralize(context.diff()));
+    if (context.diffTruncated()) out.append("\n[diff truncated]\n");
+    out.append("\n</").append(DELIMITER).append(">\n");
+    return out.toString();
+  }
+
+  /** First line is the title, the rest the description; tolerates fences and a "Title:" label. */
+  static PullRequestText parsePullRequest(String raw) {
+    String text = clean(raw);
+    String[] lines = text.split("\\R", -1);
+    int index = 0;
+    while (index < lines.length && lines[index].isBlank()) index++;
+    String title = index < lines.length ? lines[index].strip() : "";
+    title = title.replaceFirst("(?i)^(#+\\s*)?(title\\s*:\\s*)?", "").replaceAll("^[\"'`]+|[\"'`]+$", "").strip();
+    if (title.length() > 200) title = title.substring(0, 200).strip();
+    StringBuilder description = new StringBuilder();
+    for (int i = index + 1; i < lines.length; i++) description.append(lines[i]).append('\n');
+    String body = description.toString().strip();
+    body = body.replaceFirst("(?i)^(#+\\s*)?description\\s*:?\\s*\\n", "").strip();
+    return new PullRequestText(title, body);
   }
 
   private String instructions() {

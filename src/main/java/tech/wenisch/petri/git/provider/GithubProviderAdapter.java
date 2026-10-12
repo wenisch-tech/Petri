@@ -106,6 +106,40 @@ final class GithubProviderAdapter extends AbstractHttpGitProviderAdapter {
   }
 
   @Override
+  public CreatedPullRequest createPullRequest(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, ProviderIdentity me, CreatePullRequest request) {
+    String path = repositoryPath(fullName);
+    Map<String, Object> body = new java.util.LinkedHashMap<>();
+    body.put("title", request.title());
+    body.put("body", request.body() == null ? "" : request.body());
+    body.put("head", request.head());
+    body.put("base", request.base());
+    body.put("draft", request.draft());
+    JsonNode created = postJson(instance, "/repos/" + path + "/pulls", token, method, body);
+    long number = created.path("number").asLong();
+    if (number <= 0) throw new GitProviderException("Provider response did not contain the pull request number");
+    List<String> warnings = new ArrayList<>();
+    if (!request.labels().isEmpty()) {
+      try {
+        postJson(instance, "/repos/" + path + "/issues/" + number + "/labels", token, method,
+            Map.of("labels", request.labels()));
+      } catch (GitProviderException exception) {
+        warnings.add("Labels could not be added: " + exception.getMessage());
+      }
+    }
+    if (request.assignToMe() && me != null && me.login() != null) {
+      try {
+        postJson(instance, "/repos/" + path + "/issues/" + number + "/assignees", token, method,
+            Map.of("assignees", List.of(me.login())));
+      } catch (GitProviderException exception) {
+        warnings.add("The pull request could not be assigned to you: " + exception.getMessage());
+      }
+    }
+    return new CreatedPullRequest(number, text(created, "html_url"), warnings);
+  }
+
+  @Override
   public ProviderToken exchangeCode(
       GitProviderInstance instance, String clientSecret, String code,
       String redirectUri, String codeVerifier) {

@@ -355,6 +355,102 @@ public class WorkspaceGitService {
     return value;
   }
 
+  public record PullRequestCommit(String sha, String subject, String author, String date) {}
+
+  public record PullRequestFile(String path, String status, int additions, int deletions) {}
+
+  /**
+   * Everything a pull request dialog shows: where the branch stands (uncommitted, unpushed), the
+   * commits and files that would be added to {@code target}, and a bounded diff for generation.
+   */
+  public record PullRequestContext(
+      String sourceBranch,
+      String targetBranch,
+      String defaultBranch,
+      List<String> remoteBranches,
+      boolean published,
+      int unpushedCommits,
+      int uncommittedChanges,
+      List<PullRequestCommit> commits,
+      List<PullRequestFile> files,
+      String diff,
+      boolean diffTruncated) {}
+
+  @Transactional(readOnly = true)
+  public PullRequestContext pullRequestContext(UUID worktreeId, String requestedTarget, int maxDiffChars) {
+    ProjectWorktree record = record(worktreeId);
+    requireBranch(record);
+    Path root = locator.requireActiveWorktree(worktreeId);
+    Project project = project(record.projectId());
+    Path mirror = mirror(record.projectId());
+    List<String> remotes = refs(mirror, "refs/remotes/origin").stream()
+        .filter(value -> !"HEAD".equals(value)).toList();
+    String target = requestedTarget == null || requestedTarget.isBlank()
+        ? project.getDefaultBranch() : requestedTarget.strip();
+    if (!remotes.contains(target)) {
+      throw new IllegalArgumentException("Target branch " + target + " does not exist on the remote; fetch first");
+    }
+    if (target.equals(record.branchName())) {
+      throw new IllegalArgumentException("Choose a target branch different from " + record.branchName());
+    }
+    WorkspaceGitStatusView status = status(worktreeId);
+    java.util.Set<String> changed = new java.util.LinkedHashSet<>();
+    status.staged().forEach(value -> changed.add(value.path()));
+    status.unstaged().forEach(value -> changed.add(value.path()));
+    status.untracked().forEach(value -> changed.add(value.path()));
+    boolean published = run(root, List.of("rev-parse", "--verify", "--quiet",
+        "refs/remotes/origin/" + record.branchName() + "^{commit}")).succeeded();
+    String base = "refs/remotes/origin/" + target;
+
+    List<PullRequestCommit> commits = new ArrayList<>();
+    GitCommandResult log = run(root, List.of("log", "--max-count=100", "--no-color",
+        "--format=%h%x1f%s%x1f%an%x1f%aI", base + "..HEAD"));
+    if (log.succeeded()) {
+      for (String line : log.output().split("\\R")) {
+        String[] parts = line.split("\u001f", -1);
+        if (parts.length >= 4) commits.add(new PullRequestCommit(parts[0], parts[1], parts[2], parts[3]));
+      }
+    }
+    Map<String, int[]> counts = new java.util.LinkedHashMap<>();
+    GitCommandResult numstat = run(root, List.of(
+        "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--no-renames", "--numstat", base + "...HEAD", "--"));
+    if (numstat.succeeded()) {
+      for (String line : numstat.output().split("\\R")) {
+        String[] parts = line.split("\t", 3);
+        if (parts.length < 3) continue;
+        counts.put(parts[2], new int[] {number(parts[0]), number(parts[1])});
+      }
+    }
+    List<PullRequestFile> files = new ArrayList<>();
+    GitCommandResult names = run(root, List.of(
+        "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--no-renames", "--name-status", base + "...HEAD", "--"));
+    if (names.succeeded()) {
+      for (String line : names.output().split("\\R")) {
+        String[] parts = line.split("\t", 2);
+        if (parts.length < 2) continue;
+        int[] count = counts.getOrDefault(parts[1], new int[] {0, 0});
+        files.add(new PullRequestFile(parts[1], parts[0], count[0], count[1]));
+        if (files.size() >= 200) break;
+      }
+    }
+    GitCommandResult diff = run(root, List.of(
+        "diff", "--no-color", "--no-ext-diff", "--no-textconv", "--unified=2", base + "...HEAD", "--"));
+    String text = diff.succeeded() ? diff.output() : "";
+    boolean truncated = diff.truncated() || text.length() > maxDiffChars;
+    if (text.length() > maxDiffChars) text = text.substring(0, maxDiffChars);
+    return new PullRequestContext(record.branchName(), target, project.getDefaultBranch(), remotes,
+        published, status.ahead(), changed.size(), List.copyOf(commits), List.copyOf(files),
+        text, truncated);
+  }
+
+  private static int number(String value) {
+    try {
+      return Integer.parseInt(value.strip());
+    } catch (NumberFormatException ignored) {
+      return 0; // binary files report "-"
+    }
+  }
+
   public WorkspaceGitStatusView commit(
       UUID worktreeId, String requestedMessage, boolean stageAll, String actorEmail) {
     return operations.worktree(worktreeId, () -> {

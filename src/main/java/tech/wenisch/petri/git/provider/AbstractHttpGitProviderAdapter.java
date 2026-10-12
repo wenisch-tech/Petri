@@ -164,7 +164,8 @@ abstract class AbstractHttpGitProviderAdapter implements GitProviderAdapter {
         throw new GitProviderException("Provider response exceeded the size limit");
       }
       if (response.statusCode() < 200 || response.statusCode() >= 300) {
-        throw new GitProviderException("Provider request failed with HTTP " + response.statusCode());
+        throw new GitProviderException("Provider request failed with HTTP " + response.statusCode()
+            + providerMessage(body));
       }
       return json.readTree(body);
     } catch (InterruptedException exception) {
@@ -172,6 +173,20 @@ abstract class AbstractHttpGitProviderAdapter implements GitProviderAdapter {
       throw new GitProviderException("Provider request was interrupted", exception);
     } catch (IOException exception) {
       throw new GitProviderException("Provider request failed", exception);
+    }
+  }
+
+  /** The provider's own explanation (e.g. "No commits between main and feature"), when it is JSON. */
+  private String providerMessage(byte[] body) {
+    try {
+      JsonNode node = json.readTree(body);
+      String message = text(node, "message");
+      if (message == null || message.isBlank()) message = text(node, "error");
+      if (message == null || message.isBlank()) return "";
+      message = message.replaceAll("\\s+", " ").strip();
+      return ": " + (message.length() > 300 ? message.substring(0, 300) + "..." : message);
+    } catch (RuntimeException exception) {
+      return "";
     }
   }
 

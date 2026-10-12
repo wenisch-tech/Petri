@@ -453,6 +453,7 @@ function initializeGit(state) {
   bar.querySelector('[data-git-rebase-action]')?.addEventListener('click', () => openGitDialog(state, 'rebase'));
   const menu = bar.querySelector('[data-git-menu]');
   bar.querySelector('[data-git-more]')?.addEventListener('click', () => { menu.hidden = !menu.hidden; });
+  bar.querySelector('[data-git-pull-request]')?.addEventListener('click', () => { menu.hidden = true; openPullRequestFlow(state); });
   bar.querySelector('[data-git-new-branch]')?.addEventListener('click', () => { menu.hidden = true; openGitDialog(state, 'branch'); });
   bar.querySelector('[data-git-force-push]')?.addEventListener('click', () => { menu.hidden = true; openGitConfirmation(state, 'force-push'); });
   bar.querySelector('[data-git-delete-branch]')?.addEventListener('click', () => { menu.hidden = true; openGitConfirmation(state, 'delete-local'); });
@@ -663,6 +664,244 @@ function openGitDialog(state, kind) {
     });
   }
   dialog.showModal();
+}
+
+// ---- Pull request ---------------------------------------------------------------------------
+// Flow: check what is not on the remote yet (commit and/or push), then open the dialog, which
+// previews the commits that will be added and pre-fills title and description with the model.
+async function openPullRequestFlow(state) {
+  if (!state.api || !state.branch) {
+    showGitError(state, new Error('Open a branch worktree first: pull requests are opened for a branch.'));
+    return;
+  }
+  if (!ensureNoDrafts(state)) return;
+  try {
+    hideGitError(state);
+    const preview = await request(`${state.api}/pull-request/preview`);
+    if (preview.unavailable) { showGitError(state, new Error(preview.unavailable)); return; }
+    if (preview.uncommittedChanges > 0 || !preview.published || preview.unpushedCommits > 0) {
+      openPullRequestPreflight(state, preview);
+    } else {
+      openPullRequestDialog(state, preview);
+    }
+  } catch (error) { showGitError(state, error); }
+}
+
+function openPullRequestPreflight(state, preview) {
+  const dialog = state.root.querySelector('[data-pr-preflight-dialog]');
+  const list = dialog.querySelector('[data-pr-preflight-list]');
+  const commitBox = dialog.querySelector('[data-pr-preflight-commit]');
+  const message = dialog.querySelector('[data-pr-preflight-message]');
+  const push = dialog.querySelector('[data-pr-preflight-push]');
+  const commitPush = dialog.querySelector('[data-pr-preflight-commit-push]');
+  const proceed = dialog.querySelector('[data-pr-preflight-continue]');
+  const error = dialog.querySelector('[data-pr-preflight-error]');
+  dialog.querySelector('form').onsubmit = event => { if (event.submitter?.value !== 'cancel') event.preventDefault(); };
+  const dirty = preview.uncommittedChanges > 0;
+  const needsPush = !preview.published || preview.unpushedCommits > 0;
+  error.textContent = '';
+  list.replaceChildren();
+  const item = (icon, text) => { const li = el('li'); li.append(renderIcon(icon), el('span', '', text)); list.append(li); };
+  if (dirty) item('FilePlus2', `${preview.uncommittedChanges} uncommitted change${preview.uncommittedChanges === 1 ? '' : 's'}. They are not part of the pull request until they are committed and pushed.`);
+  if (!preview.published) item('CloudUpload', `${preview.sourceBranch} has not been pushed to the remote yet.`);
+  else if (preview.unpushedCommits > 0) item('CloudUpload', `${preview.unpushedCommits} commit${preview.unpushedCommits === 1 ? '' : 's'} on ${preview.sourceBranch} not pushed yet.`);
+  commitBox.hidden = !dirty;
+  commitPush.hidden = !dirty;
+  push.hidden = dirty || !needsPush;
+  // Leaving local changes out only works when everything committed is already on the remote.
+  proceed.hidden = !(dirty && !needsPush);
+  const generate = async () => {
+    const button = dialog.querySelector('[data-pr-preflight-generate]');
+    button.disabled = true;
+    try {
+      const result = await request(`${state.api}/git/commit-message`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body: JSON.stringify({ stageAll: true })
+      });
+      if (!message.value.trim()) message.value = result.message || '';
+    } catch (failure) { error.textContent = `Could not suggest a message: ${failure.message}`; }
+    finally { button.disabled = false; }
+  };
+  const reopen = async () => {
+    dialog.close();
+    try {
+      const refreshed = await request(`${state.api}/pull-request/preview`);
+      if (refreshed.uncommittedChanges > 0 && needsPush) openPullRequestPreflight(state, refreshed);
+      else if (!refreshed.published || refreshed.unpushedCommits > 0) openPullRequestPreflight(state, refreshed);
+      else openPullRequestDialog(state, refreshed);
+    } catch (failure) { showGitError(state, failure); }
+  };
+  const busy = value => dialog.querySelectorAll('button').forEach(button => { button.disabled = value; });
+  dialog.querySelector('[data-pr-preflight-generate]').onclick = generate;
+  push.onclick = async () => {
+    busy(true); error.textContent = '';
+    try {
+      applyGitStatus(state, await performGit(state, `${state.api}/git/push`, { forceWithLease: false }));
+      await reopen();
+    } catch (failure) { error.textContent = failure.message; }
+    finally { busy(false); }
+  };
+  commitPush.onclick = async () => {
+    if (!message.value.trim()) { error.textContent = 'Enter a commit message first.'; return; }
+    busy(true); error.textContent = '';
+    try {
+      applyGitStatus(state, await performGit(state, `${state.api}/git/commit`, { message: message.value, stageAll: true }));
+      applyGitStatus(state, await performGit(state, `${state.api}/git/push`, { forceWithLease: false }));
+      message.value = '';
+      await reopen();
+    } catch (failure) { error.textContent = failure.message; }
+    finally { busy(false); }
+  };
+  proceed.onclick = () => { dialog.close(); openPullRequestDialog(state, preview); };
+  dialog.showModal();
+  if (dirty && !message.value.trim()) generate();
+}
+
+function openPullRequestDialog(state, preview) {
+  const dialog = state.root.querySelector('[data-pr-dialog]');
+  const field = name => dialog.querySelector(`[data-pr-${name}]`);
+  const title = field('title');
+  const description = field('description');
+  const target = field('target');
+  const error = field('error');
+  const submit = field('submit');
+  const generate = field('generate');
+  let touched = false;
+  let token = 0;
+  let current = preview;
+
+  error.textContent = '';
+  field('result').hidden = true;
+  field('body').hidden = false;
+  submit.hidden = false;
+  submit.disabled = false;
+  field('source').textContent = preview.sourceBranch;
+  const gitlab = preview.provider === 'GITLAB';
+  dialog.querySelectorAll('[data-pr-gitlab]').forEach(node => { node.hidden = !gitlab; });
+  dialog.querySelector('h2').textContent = gitlab ? 'Open merge request' : 'Open pull request';
+  submit.textContent = gitlab ? 'Open merge request' : 'Open pull request';
+  field('subtitle').textContent = `${preview.repository || 'Repository'} · opened with your connected Git account.`;
+  field('draft').checked = false;
+  field('assign').checked = false;
+  field('squash').checked = false;
+  field('remove-source').checked = false;
+  field('labels').value = '';
+  title.value = '';
+  description.value = '';
+  title.oninput = () => { touched = true; };
+  description.oninput = () => { touched = true; };
+  field('close').textContent = 'Cancel';
+  // Enter in a field must not close the dialog like a form submission would.
+  dialog.querySelector('form').onsubmit = event => { if (event.submitter?.value !== 'cancel') event.preventDefault(); };
+
+  const fillTarget = () => {
+    target.replaceChildren(...current.remoteBranches.filter(name => name !== current.sourceBranch)
+      .map(name => { const option = el('option', '', name); option.value = name; option.selected = name === current.targetBranch; return option; }));
+  };
+  const renderCommits = () => {
+    const commits = field('commits');
+    commits.replaceChildren();
+    const count = current.commits.length;
+    field('commits-title').textContent = count
+      ? `${count} commit${count === 1 ? '' : 's'} will be added to ${current.targetBranch}`
+      : `No commits to add to ${current.targetBranch}`;
+    for (const commit of current.commits) {
+      const item = el('li');
+      item.append(el('span', 'workspace-change-badge', commit.sha), el('span', 'workspace-commit-file-path', commit.subject));
+      item.append(el('small', 'text-ink-500', commit.author));
+      commits.append(item);
+    }
+    const files = field('files');
+    files.replaceChildren();
+    let added = 0; let removed = 0;
+    for (const file of current.files) {
+      added += file.additions; removed += file.deletions;
+      const item = el('li');
+      const badge = el('span', `workspace-change-badge is-${({ A: 'added', D: 'deleted', M: 'modified' }[file.status] || 'modified')}`,
+        `${file.status} +${file.additions} −${file.deletions}`);
+      item.append(badge, el('span', 'workspace-commit-file-path', file.path));
+      files.append(item);
+    }
+    field('files-summary').textContent = `${current.files.length} file${current.files.length === 1 ? '' : 's'} · +${added} −${removed}`;
+    submit.disabled = count === 0;
+  };
+  const suggest = async (automatic) => {
+    const mine = ++token;
+    generate.disabled = true;
+    generate.querySelector('span').textContent = 'Generating…';
+    if (automatic) { title.placeholder = 'Generating a title…'; description.placeholder = 'Generating a description…'; }
+    try {
+      const result = await request(`${state.api}/pull-request/draft`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body: JSON.stringify({ target: current.targetBranch })
+      });
+      if (mine !== token) return;
+      if (!automatic || !touched) {
+        title.value = result.title || title.value;
+        description.value = result.description || '';
+        touched = false;
+      }
+    } catch (failure) {
+      if (mine === token) {
+        if (!title.value && current.commits.length) title.value = current.commits.length === 1 ? current.commits[0].subject : current.sourceBranch.replace(/[-_/]+/g, ' ');
+        error.textContent = `Could not suggest a description: ${failure.message}`;
+      }
+    } finally {
+      if (mine === token) {
+        generate.disabled = false;
+        generate.querySelector('span').textContent = 'Generate';
+        title.placeholder = '';
+        description.placeholder = '';
+      }
+    }
+  };
+
+  fillTarget();
+  renderCommits();
+  generate.onclick = () => { error.textContent = ''; suggest(false); };
+  target.onchange = async () => {
+    error.textContent = '';
+    try {
+      current = await request(`${state.api}/pull-request/preview?target=${encodeURIComponent(target.value)}`);
+      renderCommits();
+      if (!touched) suggest(true);
+    } catch (failure) { error.textContent = failure.message; }
+  };
+  submit.onclick = async () => {
+    error.textContent = '';
+    if (!title.value.trim()) { error.textContent = 'A title is required.'; title.focus(); return; }
+    submit.disabled = true;
+    try {
+      const created = await request(`${state.api}/pull-request`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body: JSON.stringify({
+          title: title.value, description: description.value, target: current.targetBranch,
+          draft: field('draft').checked, assignToMe: field('assign').checked,
+          labels: field('labels').value, squash: field('squash').checked,
+          removeSourceBranch: field('remove-source').checked
+        })
+      });
+      const result = field('result');
+      result.className = 'workspace-pr-result';
+      result.replaceChildren();
+      result.append(el('strong', '', `${gitlab ? 'Merge request' : 'Pull request'} #${created.number} opened`));
+      if (created.webUrl && /^https?:\/\//i.test(created.webUrl)) {
+        const link = el('a', 'underline', created.webUrl);
+        link.href = created.webUrl; link.target = '_blank'; link.rel = 'noopener noreferrer';
+        result.append(link);
+      }
+      (created.warnings || []).forEach(warning => result.append(el('small', 'text-amber-300', warning)));
+      field('body').hidden = true;
+      result.hidden = false;
+      submit.hidden = true;
+      field('close').textContent = 'Close';
+    } catch (failure) {
+      error.textContent = failure.message;
+      submit.disabled = current.commits.length === 0;
+    }
+  };
+  dialog.showModal();
+  if (current.commits.length) suggest(true);
 }
 
 // Fills the commit message with a generated Conventional Commits suggestion. `automatic` runs are
@@ -1759,12 +1998,9 @@ function workflowPin(state, workflow, timeline) {
   if (attempt) side.append(el('small', 'workspace-workflow-attempt', `Attempt ${attempt} · ${runCount} run${runCount === 1 ? '' : 's'}`));
   side.append(status);
   if (workflow.status === 'COMPLETED') {
-    const merge = el('button', 'btn-primary !min-h-7 !px-2 text-xs', 'Open merge request'); merge.type = 'button';
-    merge.title = 'Merge requests are not available yet';
-    merge.addEventListener('click', event => {
-      event.stopPropagation();
-      state.chat.querySelector('[data-chat-status]').textContent = 'Opening merge requests is not available yet.';
-    });
+    const merge = el('button', 'btn-primary !min-h-7 !px-2 text-xs', 'Open pull request'); merge.type = 'button';
+    merge.title = 'Review the commits and open a pull request for this branch';
+    merge.addEventListener('click', event => { event.stopPropagation(); openPullRequestFlow(state); });
     side.append(merge);
   } else if (!['CANCELLED', 'CANCELLING'].includes(workflow.status)) {
     const cancel = el('button', 'btn-secondary !min-h-7 !px-2 text-xs', 'Cancel task'); cancel.type = 'button';

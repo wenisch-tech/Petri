@@ -157,6 +157,20 @@ public class GitAccountConnectionService {
         connection.getAuthMethod(), repositoryId, fullName, number, webUrl, markdown);
   }
 
+  /** Opens a pull request through the connection; used by the workspace's pull request dialog. */
+  @Transactional(noRollbackFor = {GitProviderException.class, IllegalStateException.class})
+  public CreatedPullRequest createPullRequest(
+      UUID id, String repositoryId, String fullName, CreatePullRequest request) {
+    GitAccountConnection connection = connections.findLockedById(id)
+        .orElseThrow(() -> new IllegalArgumentException("Git account connection not found"));
+    refreshIfNeeded(connection);
+    ResolvedConnection resolved = resolve(connection);
+    ProviderIdentity me = new ProviderIdentity(connection.getExternalAccountId(),
+        connection.getExternalLogin(), connection.getDisplayName());
+    return resolved.adapter().createPullRequest(resolved.instance(), resolved.token(),
+        connection.getAuthMethod(), repositoryId, fullName, me, request);
+  }
+
   @Transactional(noRollbackFor = {GitProviderException.class, IllegalStateException.class})
   public void reactToPullRequest(
       UUID id, String repositoryId, String fullName, long number, String reaction) {

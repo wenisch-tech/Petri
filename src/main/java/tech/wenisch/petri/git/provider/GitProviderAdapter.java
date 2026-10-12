@@ -54,6 +54,18 @@ public interface GitProviderAdapter {
     throw new GitProviderException("This provider does not support pull request automation");
   }
 
+  /** Opens a pull request. {@code me} is the connected account, used for "assign to me". */
+  default CreatedPullRequest createPullRequest(
+      GitProviderInstance instance,
+      String token,
+      GitConnectionAuthMethod method,
+      String repositoryId,
+      String fullName,
+      ProviderIdentity me,
+      CreatePullRequest request) {
+    throw new GitProviderException("This provider does not support opening pull requests");
+  }
+
   /** Adds an emoji reaction (provider name such as {@code eyes}) to a pull request. */
   default void reactToPullRequest(
       GitProviderInstance instance,

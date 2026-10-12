@@ -142,3 +142,35 @@ The breadcrumb in the header follows the view: `Project / Workspace`, `Project /
 `Project / Runs` and `Project / Runs / Run 1a2b3c4d` while a run is open. The project name and
 *Runs* in the trail are links back. The open run is kept in the address (`?view=runs&run=<id>`).
 
+## Opening a pull request
+
+**Open pull request** appears on a completed workflow and in the git bar's *More* menu (merge
+request on GitLab). It works in three steps:
+
+1. **Preflight.** Petri checks what is not on the remote yet. Uncommitted changes offer *Commit &
+   push*: a commit message is suggested by the model (as in the commit dialog) and the changes are
+   staged, committed and pushed in one go. A branch with unpushed commits, or one that was never
+   pushed, offers *Push*. If everything committed is already pushed, *Continue without these
+   changes* leaves local edits out. Nothing is asked when the branch is clean and published.
+2. **Dialog.** It shows the source branch, a target branch selector (remote branches, default
+   branch preselected), the **commits that will be added** (short sha, subject, author) and the
+   changed files with `+/−` counts. Title and description are pre-filled by the model using the
+   `pull-request-description` skill (`skills/pull-request-description/SKILL.md`), with the workspace's
+   model, from the commits and a bounded diff. *Generate* produces a new suggestion; text you edited
+   is never overwritten automatically.
+3. **Create.** The pull request is opened with your connected Git account.
+
+| Field | GitHub | GitLab | Forgejo |
+| --- | --- | --- | --- |
+| Title, description, source, target | yes | yes | yes |
+| Open as draft | native draft | `Draft:` title prefix | `WIP:` title prefix |
+| Assign to me | assignee | `assignee_ids` | assignee |
+| Labels (names) | by name | by name | resolved to label ids; unknown names are reported |
+| Squash commits when merging | – | yes | – |
+| Delete source branch when merged | – | yes | – |
+
+Labels and the assignee are best effort: if the provider refuses them the pull request is still
+opened and the dialog lists what could not be applied. Provider validation errors (for example "No
+commits between main and feature") are shown as the provider words them. Only projects imported
+from a connected Git account whose account may write can open pull requests from Petri.
+

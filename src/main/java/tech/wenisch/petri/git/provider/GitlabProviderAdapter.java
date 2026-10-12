@@ -102,6 +102,34 @@ final class GitlabProviderAdapter extends AbstractHttpGitProviderAdapter {
   }
 
   @Override
+  public CreatedPullRequest createPullRequest(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, ProviderIdentity me, CreatePullRequest request) {
+    if (!repositoryId.matches("[0-9]+")) throw new IllegalArgumentException("Invalid repository id");
+    String title = request.draft() && !looksLikeDraft(request.title())
+        ? "Draft: " + request.title() : request.title();
+    Map<String, Object> body = new java.util.LinkedHashMap<>();
+    body.put("source_branch", request.head());
+    body.put("target_branch", request.base());
+    body.put("title", title);
+    body.put("description", request.body() == null ? "" : request.body());
+    body.put("remove_source_branch", request.removeSourceBranch());
+    body.put("squash", request.squash());
+    if (!request.labels().isEmpty()) body.put("labels", String.join(",", request.labels()));
+    List<String> warnings = new ArrayList<>();
+    if (request.assignToMe() && me != null && me.id() != null && me.id().matches("[0-9]+")) {
+      body.put("assignee_ids", List.of(Long.parseLong(me.id())));
+    } else if (request.assignToMe()) {
+      warnings.add("The merge request could not be assigned to you: your GitLab user id is unknown");
+    }
+    JsonNode created = postJson(instance, "/projects/" + repositoryId + "/merge_requests",
+        token, method, body);
+    long number = created.path("iid").asLong();
+    if (number <= 0) throw new GitProviderException("Provider response did not contain the merge request number");
+    return new CreatedPullRequest(number, text(created, "web_url"), warnings);
+  }
+
+  @Override
   public ProviderToken exchangeCode(
       GitProviderInstance instance, String clientSecret, String code,
       String redirectUri, String codeVerifier) {

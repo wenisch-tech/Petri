@@ -15,6 +15,8 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import tech.wenisch.petri.git.CommitMessageService;
+import tech.wenisch.petri.git.PullRequestService;
+import tech.wenisch.petri.git.provider.CreatedPullRequest;
 import tech.wenisch.petri.git.GitBranchKind;
 import tech.wenisch.petri.git.GitBranchView;
 import tech.wenisch.petri.git.GitOperationException;
@@ -34,10 +36,12 @@ public class WorkspaceGitController {
   private final WorkspaceGitDiffService diffs;
   private final ProjectAccessService access;
   private final CommitMessageService commitMessages;
+  private final PullRequestService pullRequests;
 
   public WorkspaceGitController(
       WorkspaceGitService git, WorkspaceGitDiffService diffs, ProjectAccessService access,
-      CommitMessageService commitMessages) {
+      CommitMessageService commitMessages, PullRequestService pullRequests) {
+    this.pullRequests = pullRequests;
     this.commitMessages = commitMessages;
     this.git = git;
     this.diffs = diffs;
@@ -130,6 +134,30 @@ public class WorkspaceGitController {
         commitMessages.generate(worktreeId, request.stageAll(), principal.getName()));
   }
 
+  @GetMapping("/worktrees/{worktreeId}/pull-request/preview")
+  public PullRequestService.Preview pullRequestPreview(
+      @PathVariable UUID worktreeId,
+      @RequestParam(required = false) String target,
+      Principal principal) {
+    access.requireWorktree(worktreeId, principal.getName());
+    return pullRequests.preview(worktreeId, target);
+  }
+
+  @PostMapping("/worktrees/{worktreeId}/pull-request/draft")
+  public CommitMessageService.PullRequestText pullRequestDraft(
+      @PathVariable UUID worktreeId, @RequestBody PullRequestDraftRequest request, Principal principal) {
+    access.requireWorktree(worktreeId, principal.getName());
+    return commitMessages.generatePullRequest(worktreeId, request.target(), principal.getName());
+  }
+
+  @PostMapping("/worktrees/{worktreeId}/pull-request")
+  public CreatedPullRequest openPullRequest(
+      @PathVariable UUID worktreeId, @RequestBody PullRequestService.Command request,
+      Principal principal) {
+    access.requireWorktree(worktreeId, principal.getName());
+    return pullRequests.create(worktreeId, request, principal.getName());
+  }
+
   @PostMapping("/worktrees/{worktreeId}/git/pull")
   public WorkspaceGitStatusView pull(@PathVariable UUID worktreeId, Principal principal) {
     access.requireWorktree(worktreeId, principal.getName());
@@ -183,6 +211,7 @@ public class WorkspaceGitController {
   public record PathsRequest(List<String> paths) {}
   public record CommitRequest(String message, boolean stageAll) {}
   public record CommitMessageRequest(boolean stageAll) {}
+  public record PullRequestDraftRequest(String target) {}
   public record CommitMessageResponse(String message) {}
   public record RebaseRequest(String target) {}
   public record PushRequest(boolean forceWithLease) {}

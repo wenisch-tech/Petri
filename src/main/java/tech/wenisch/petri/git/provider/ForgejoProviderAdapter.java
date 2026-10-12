@@ -102,6 +102,49 @@ final class ForgejoProviderAdapter extends AbstractHttpGitProviderAdapter {
   }
 
   @Override
+  public CreatedPullRequest createPullRequest(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, ProviderIdentity me, CreatePullRequest request) {
+    String path = repositoryPath(fullName);
+    String title = request.draft() && !looksLikeDraft(request.title())
+        ? "WIP: " + request.title() : request.title();
+    Map<String, Object> body = new java.util.LinkedHashMap<>();
+    body.put("title", title);
+    body.put("body", request.body() == null ? "" : request.body());
+    body.put("head", request.head());
+    body.put("base", request.base());
+    if (request.assignToMe() && me != null && me.login() != null) {
+      body.put("assignees", List.of(me.login()));
+    }
+    JsonNode created = postJson(instance, "/repos/" + path + "/pulls", token, method, body);
+    long number = created.path("number").asLong();
+    if (number <= 0) throw new GitProviderException("Provider response did not contain the pull request number");
+    List<String> warnings = new ArrayList<>();
+    if (!request.labels().isEmpty()) {
+      try {
+        // Forgejo takes label ids; resolve the names the author typed.
+        JsonNode known = get(instance, "/repos/" + path + "/labels?limit=100", token, method);
+        List<Long> ids = new ArrayList<>();
+        for (String name : request.labels()) {
+          Long id = null;
+          for (JsonNode label : known) {
+            if (name.equalsIgnoreCase(text(label, "name"))) id = label.path("id").asLong();
+          }
+          if (id == null) warnings.add("Label \"" + name + "\" does not exist in the repository");
+          else ids.add(id);
+        }
+        if (!ids.isEmpty()) {
+          postJson(instance, "/repos/" + path + "/issues/" + number + "/labels", token, method,
+              Map.of("labels", ids));
+        }
+      } catch (GitProviderException exception) {
+        warnings.add("Labels could not be added: " + exception.getMessage());
+      }
+    }
+    return new CreatedPullRequest(number, text(created, "html_url"), warnings);
+  }
+
+  @Override
   public ProviderToken exchangeCode(
       GitProviderInstance instance, String clientSecret, String code,
       String redirectUri, String codeVerifier) {
