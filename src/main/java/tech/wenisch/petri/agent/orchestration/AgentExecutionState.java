@@ -31,7 +31,8 @@ record AgentExecutionState(
     AgentWorkflowRole workflowRole,
     AgentWorkflowStage workflowPhase,
     String instructionsSnapshot,
-    UUID automationRunId) {
+    UUID automationRunId,
+    int repetitionStrikes) {
 
   boolean terminal() {
     return switch (status) {

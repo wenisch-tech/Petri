@@ -97,6 +97,15 @@ public class AgentRunExecutor {
                 "Agent run started tool " + call.name());
             chatStream.toolLifecycle(state.chatId(), runId, call.name(), "started");
             try {
+              if (state.repetitionStrikes() >= LoopGuard.WITHDRAW_TOOLS_AT) {
+                // Tools were withdrawn for a looping model; answer its call without running it.
+                stateService.recordToolFailure(runId, claimId, call, LoopGuard.skippedToolMessage());
+                events.record(
+                    state.worktreeId(), runId, AgentRunEventType.TOOL_FAILED, call.name(), runActor,
+                    "Loop guard skipped tool " + call.name());
+                chatStream.toolLifecycle(state.chatId(), runId, call.name(), "failed");
+                continue;
+              }
               String toolOutput = stateService.executeTool(runId, claimId, call);
               approvalGate.detect(call.name(), call.callId(), toolOutput).ifPresent(gated::add);
               events.record(
@@ -241,6 +250,10 @@ public class AgentRunExecutor {
         ? tools.definitions(AutomationToolPolicy.allowed())
         : role == null
             ? tools.definitions() : tools.definitions(AgentWorkflowToolPolicy.allowed(role));
+    if (state.repetitionStrikes() > 0) {
+      instructions = instructions + LoopGuard.guidance(state.repetitionStrikes());
+      if (state.repetitionStrikes() >= LoopGuard.WITHDRAW_TOOLS_AT) definitions = java.util.List.of();
+    }
     if (state.initialModelRequest()) {
       return new ModelRequest(
           state.model(), instructions, state.prompt(), null, null, definitions,

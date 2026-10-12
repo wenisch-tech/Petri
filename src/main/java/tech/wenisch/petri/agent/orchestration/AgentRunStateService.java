@@ -339,7 +339,7 @@ class AgentRunStateService {
         run.modelTurnCount(), latestResponseId,
         List.copyOf(pending), List.copyOf(outputs), conversationForChat(run, history),
         run.workflowId(), run.workflowRole(), run.workflowPhase(), run.instructionsSnapshot(),
-        run.automationRunId());
+        run.automationRunId(), LoopGuard.strikes(history));
   }
 
   private List<ModelConversationMessage> conversationForChat(AgentRun run, List<AgentTurn> current) {

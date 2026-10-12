@@ -77,3 +77,20 @@ unless enabled in the project settings.
 While a terminal command, package install or test is running its output streams into its card
 (refreshed about every 1.5 s, tail only) and the newest step's output stays expanded at full size
 until the next step follows.
+
+## Loop guard
+
+Weak models sometimes cannot make up their mind and repeat themselves: they re-read the same diff or
+file and re-write the same assessment until the turn budget runs out. Petri compares every model
+response with the previous ones. A response is a *repetition* when it requests the same tool calls
+as the response before it, or when its text (200+ characters) is at least 80 % word-for-word
+similar to one of the last three responses.
+
+| Consecutive repetitions | What happens |
+| --- | --- |
+| 1 | The next request carries a loop-guard instruction: read your own last message, decide from it how to continue, do not repeat it, and answer now if it already has what is needed. |
+| 2 or more | Tools are withdrawn. Tool calls the model still makes are answered with a "skipped by the loop guard" result without running, and the model must give its final response with what it has gathered. |
+
+A model that makes progress (different calls, different text) is never affected, and one step in a
+different direction resets the count. The turn budget still applies as the last resort.
+
