@@ -1,5 +1,20 @@
 # Changelog
 
+## v0.8.1 - 2026-10-12
+
+### [0.8.1](https://github.com/wenisch-tech/Petri/compare/v0.8.0...v0.8.1) (2026-10-12)
+
+
+### Bug Fixes
+
+* ensured duplicate port binds are automatically resolved ([d2b0cb5](https://github.com/wenisch-tech/Petri/commit/d2b0cb592713b6021974c377135f38cd57742b75))
+* unclear test results go back to the user for confirmation ([44f89c2](https://github.com/wenisch-tech/Petri/commit/44f89c297aac8e114db992250502e3dd20d03358))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.8.1
+
+
 ## v0.8.0 - 2026-10-12
 
 ## [0.8.0](https://github.com/wenisch-tech/Petri/compare/v0.7.0...v0.8.0) (2026-10-12)
