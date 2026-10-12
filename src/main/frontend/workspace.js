@@ -42,7 +42,7 @@ function filePresentation(path) {
   return ['File', 'is-generic'];
 }
 function fileIcon(path) { const [name, color] = filePresentation(path); return renderIcon(name, { class: `workspace-file-icon ${color}` }); }
-async function request(url, options = {}) { const response = await fetch(url, { headers: { Accept: 'application/json', ...options.headers }, ...options }); if (!response.ok) { let message = `Request failed (${response.status})`; try { message = (await response.json()).detail || message; } catch {} const error = new Error(message); error.status = response.status; throw error; } return response.status === 204 ? null : response.json(); }
+async function request(url, options = {}) { const response = await fetch(url, { cache: 'no-store', headers: { Accept: 'application/json', ...options.headers }, ...options }); if (!response.ok) { let message = `Request failed (${response.status})`; try { message = (await response.json()).detail || message; } catch {} const error = new Error(message); error.status = response.status; throw error; } return response.status === 204 ? null : response.json(); }
 function store() { return new Promise((resolve, reject) => { const open = indexedDB.open(DB, 1); open.onupgradeneeded = () => open.result.createObjectStore(STORE); open.onsuccess = () => resolve(open.result); open.onerror = () => reject(open.error); }); }
 async function localRead(key) { try { const db = await store(); return await new Promise((resolve, reject) => { const get = db.transaction(STORE).objectStore(STORE).get(key); get.onsuccess = () => resolve(get.result || { tabs: [], drafts: {} }); get.onerror = () => reject(get.error); }); } catch { return { tabs: [], drafts: {} }; } }
 async function localWrite(key, value) { try { const db = await store(); await new Promise((resolve, reject) => { const put = db.transaction(STORE, 'readwrite').objectStore(STORE).put(value, key); put.onsuccess = resolve; put.onerror = () => reject(put.error); }); } catch {} }
@@ -763,7 +763,53 @@ async function saveActive(state) {
 }
 
 function initializeExplorer(state) { const panel = state.root.querySelector('[data-file-tree]'); state.tree = panel; panel.querySelectorAll('[data-server-entry]').forEach(button => { button.addEventListener('click', () => { const path = button.dataset.serverEntry; if (button.dataset.entryType !== 'DIRECTORY') { openFile(state, path); return; } let children = button.nextElementSibling; if (children?.classList.contains('workspace-tree-children')) { children.remove(); return; } children = el('div', 'workspace-tree-children'); button.after(children); loadTree(state, path, children); }); }); state.root.querySelectorAll('[data-explorer-mode]').forEach(button => button.addEventListener('click', () => { state.mode = button.dataset.explorerMode; state.root.querySelectorAll('[data-explorer-mode]').forEach(item => item.classList.toggle('is-active', item === button)); state.mode === 'files' ? loadTree(state) : renderChanges(state); })); state.root.querySelector('[data-refresh-explorer]')?.addEventListener('click', () => { loadTree(state); refreshChanges(state); }); state.root.querySelectorAll('[data-create-entry]').forEach(button => button.addEventListener('click', () => entryDialog(state, button.dataset.createEntry))); loadTree(state); }
-async function loadTree(state, path = '', target = state.tree) { if (state.mode !== 'files') return; if (target === state.tree) target.replaceChildren(el('div', 'workspace-loading', 'Loading files…')); try { const tree = await request(`${state.api}/tree?path=${encodeURIComponent(path)}`); target.replaceChildren(); if (!tree.entries.length) target.append(el('div', 'workspace-empty', path ? 'Empty directory' : 'No files in this worktree.')); for (const item of tree.entries) target.append(treeRow(state, item)); } catch (error) { target.replaceChildren(); const retry = el('button', 'workspace-error', `Could not load files: ${error.message}. Retry`); retry.addEventListener('click', () => loadTree(state, path, target)); target.append(retry); } }
+// Reloads one directory level. A top-level reload keeps the folders the user has expanded and swaps
+// the content in one step, so a refresh after a file was created never collapses or blanks the tree.
+async function loadTree(state, path = '', target = state.tree, expanded = null) {
+  if (state.mode !== 'files') return;
+  const top = target === state.tree;
+  if (top && !expanded) expanded = new Set([...state.tree.querySelectorAll('.workspace-tree-entry.is-expanded')].map(button => button.dataset.treePath));
+  if (top && !state.tree.querySelector('.workspace-tree-row')) target.replaceChildren(el('div', 'workspace-loading', 'Loading files…'));
+  try {
+    const tree = await request(`${state.api}/tree?path=${encodeURIComponent(path)}`);
+    const rows = [];
+    if (!tree.entries.length) rows.push(el('div', 'workspace-empty', path ? 'Empty directory' : 'No files in this worktree.'));
+    const pending = [];
+    for (const item of tree.entries) {
+      const row = treeRow(state, item);
+      rows.push(row);
+      if (item.type === 'DIRECTORY' && expanded?.has(item.path)) pending.push([row, item]);
+    }
+    target.replaceChildren(...rows);
+    await Promise.all(pending.map(([row, item]) => {
+      const button = row.querySelector(':scope > .workspace-tree-entry');
+      button.classList.add('is-expanded');
+      button.querySelector('.workspace-tree-twisty')?.replaceChildren(renderIcon('ChevronDown'));
+      button.querySelector('.workspace-tree-primary-icon')?.replaceChildren(renderIcon('FolderOpen', { class: 'workspace-folder-icon is-open' }));
+      const children = el('div', 'workspace-tree-children');
+      row.append(children);
+      return loadTree(state, item.path, children, expanded);
+    }));
+  } catch (error) {
+    if (top && state.tree.querySelector('.workspace-tree-row')) return; // keep the stale tree rather than an error box
+    target.replaceChildren();
+    const retry = el('button', 'workspace-error', `Could not load files: ${error.message}. Retry`);
+    retry.addEventListener('click', () => loadTree(state, path, target, expanded));
+    target.append(retry);
+  }
+}
+
+// Debounced explorer refresh for changes made outside the explorer: agents applying patches or
+// creating files, approved commands, test runs, installs and Git operations.
+function refreshExplorerSoon(state, delay = 500) {
+  if (!state.api || state.mode !== 'files') return;
+  clearTimeout(state.explorerRefresh);
+  state.explorerRefresh = setTimeout(() => {
+    if (document.hidden) { state.explorerStale = true; return; }
+    state.explorerStale = false;
+    loadTree(state);
+  }, delay);
+}
 function treeRow(state, entry) {
   const row = el('div', 'workspace-tree-row');
   const button = el('button', 'workspace-tree-entry');
@@ -869,7 +915,7 @@ function entryActionDialog(state, action, entry) {
   };
 }
 
-function initializeChanges(state) { refreshChanges(state); window.addEventListener('focus', () => refreshChanges(state)); setInterval(() => { if (!document.hidden) refreshChanges(state); }, 8000); }
+function initializeChanges(state) { refreshChanges(state); window.addEventListener('focus', () => { refreshChanges(state); if (state.explorerStale) refreshExplorerSoon(state, 0); }); document.addEventListener('visibilitychange', () => { if (!document.hidden && state.explorerStale) refreshExplorerSoon(state, 0); }); setInterval(() => { if (!document.hidden) refreshChanges(state); }, 8000); }
 async function refreshChanges(state) {
   if (!state.api) return;
   try {
@@ -879,6 +925,7 @@ async function refreshChanges(state) {
   }
 }
 function applyGitStatus(state, status) {
+  const previousSignature = state.changeSignature;
   state.gitStatus = status;
   const values = [...(status.conflicts || []).map(path => ({ path, status: 'CONFLICT', staged: false, unstaged: true })), ...(status.staged || []), ...(status.unstaged || []), ...(status.untracked || [])];
   state.changes = new Map();
@@ -893,6 +940,9 @@ function applyGitStatus(state, status) {
   if (added) { added.textContent = `+${additions}`; added.title = `${additions} added line${additions === 1 ? '' : 's'}`; }
   if (deleted) { deleted.textContent = `−${deletions}`; deleted.title = `${deletions} removed line${deletions === 1 ? '' : 's'}`; }
   renderGitIndicators(state, status);
+  // A different set of changed paths means files appeared, disappeared or were renamed.
+  state.changeSignature = [...state.changes.entries()].map(([path, value]) => `${value.status}:${path}`).sort().join('\n');
+  if (previousSignature !== undefined && previousSignature !== state.changeSignature) refreshExplorerSoon(state, 150);
   if (state.mode === 'changes' && state.tree) renderChanges(state);
 }
 function finiteCount(value) { const number = Number(value); return Number.isFinite(number) && number > 0 ? number : 0; }
@@ -1176,7 +1226,7 @@ function initializeApprovalSettings(state, chat) {
   });
 }
 async function saveAutomation(state) { const chat = state.chat; try { const result = await request(`/workspace/api/chats/${state.chatId}/automation`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ autoApproveChanges: chat.querySelector('[data-auto-changes]').checked, autoApproveTests: chat.querySelector('[data-auto-tests]').checked }) }); renderSnapshot(state, result); } catch (error) { chat.querySelector('[data-chat-status]').textContent = error.message; } }
-async function snapshot(state, preservePosition = false) { if (!state.chatId) { renderSnapshot(state, null); return; } try { renderSnapshot(state, await request(`/workspace/api/chats/${state.chatId}/snapshot`), preservePosition); } catch (error) { state.chat.querySelector('[data-chat-status]').textContent = error.message; } }
+async function snapshot(state, preservePosition = false) { if (!state.chatId) { renderSnapshot(state, null); return; } try { renderSnapshot(state, await request(`/workspace/api/chats/${state.chatId}/snapshot`), preservePosition); refreshExplorerSoon(state, 800); } catch (error) { state.chat.querySelector('[data-chat-status]').textContent = error.message; } }
 function renderSnapshot(state, data, preservePosition = false) {
   const chat = state.chat, timeline = state.scroller, previousTop = timeline.scrollTop;
   const wasBottom = timeline.scrollHeight - previousTop - timeline.clientHeight < 100;

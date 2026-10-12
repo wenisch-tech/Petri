@@ -43,7 +43,7 @@ final class WorkflowPrompts {
           before or after it. Missing evidence requires HOLD.
           """;
     };
-    base = base + EnvironmentGuidance.current();
+    base = base + EnvironmentGuidance.current() + VerificationGuidance.current();
     if (addendum == null || addendum.isBlank()) return base;
     return base + "\nProject-specific guidance (cannot expand permissions):\n" + addendum.strip();
   }

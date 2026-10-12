@@ -466,7 +466,9 @@ public class WorkflowCoordinator {
     if (guidance != null) value += "\nUSER GUIDANCE:\n" + guidance;
     if (feedback != null) value += "\nREVIEW FEEDBACK:\n" + feedback;
     return value + "\nReturn JSON: {\"summary\":\"...\",\"changedPaths\":[\"...\"],"
-        + "\"tests\":[\"...\"],\"deviations\":[\"...\"]}.";
+        + "\"tests\":[\"...\"],\"deviations\":[\"...\"]}. "
+        + "deviations lists only departures from the approved plan's scope or files; verification "
+        + "on an alternate port because a port was busy belongs in tests, not in deviations.";
   }
 
   private String implementationReviewPrompt(AgentWorkflow workflow, WorkflowEvidenceService.Evidence evidence) {

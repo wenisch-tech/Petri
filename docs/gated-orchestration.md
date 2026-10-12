@@ -144,3 +144,21 @@ gap between a committed stage result and launching the next stage idempotently.
 Cancellation never reverts applied changes. Running work first enters `CANCELLING`; the reservation
 is released only after the stage reaches a safe terminal boundary. Petri then removes the temporary
 baseline ref and starts the next queued task.
+
+## Verification guidance skill
+
+Environment rules that every role should follow live in one editable skill,
+`skills/workflow-verification/SKILL.md`, and are added automatically to the instructions of the
+orchestrator, planner, implementer and reviewer (and to direct runs). Today it covers:
+
+- **Busy ports.** `Address already in use` and similar are environmental, not defects. The
+  implementer verifies on another port and keeps the application's default unchanged; the planner
+  writes endpoint criteria independent of the port; reviewers and gates do not request changes, hold
+  or mark a criterion not met because of a busy port or an alternate-port check.
+- Alternate-port verification is reported under `tests`, never under `deviations`.
+- Stopping servers started for verification, retrying transient downloads once, and building
+  without a wrapper using an installed `mvn`/`gradle`.
+
+Edit the file to add further tweaks; no code change is needed. Workflows snapshot role instructions
+when they start, so a change applies to workflows started afterwards.
+
