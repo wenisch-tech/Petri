@@ -209,7 +209,7 @@ public class WorkspaceGitService {
     String head = output(root, List.of("rev-parse", "HEAD"));
     String upstream = record.upstreamBranch();
     if (upstream == null && record.branchName() != null) upstream = upstream(root, record.branchName());
-    int[] distance = upstream == null ? new int[] {0, 0} : distance(root, "HEAD", upstream);
+    BranchDistance distance = BranchDistance.of(git, root, upstream);
     List<WorkspaceChangeView> all = diffs.changes(worktreeId);
     List<String> conflicts = all.stream()
         .filter(value -> value.status() == WorkspaceChangeStatus.CONFLICT)
@@ -228,7 +228,7 @@ public class WorkspaceGitService {
     boolean rebase = operations.rebaseInProgress(worktreeId);
     return new WorkspaceGitStatusView(
         worktreeId, record.branchName(), upstream, head, record.detached(),
-        distance[0], distance[1], all.isEmpty(),
+        distance.ahead(), distance.behind(), all.isEmpty(),
         rebase ? WorkspaceGitOperationState.REBASE_IN_PROGRESS : WorkspaceGitOperationState.IDLE,
         conflicts, staged, unstaged, untracked);
   }

@@ -323,6 +323,15 @@ function renderGitIndicators(state, status) {
   const bar = state.gitBar;
   if (!bar || !status) return;
   bar.querySelector('[data-git-sync]').textContent = `↑${status.ahead} ↓${status.behind}`;
+  // Also next to the branch name in the worktree selector, where it is easy to see.
+  const selected = state.root.querySelector('[data-worktree-selector]')?.selectedOptions?.[0];
+  if (selected && selected.value) {
+    if (selected.dataset.baseLabel === undefined) selected.dataset.baseLabel = selected.textContent;
+    const parts = [];
+    if (status.ahead > 0) parts.push(`↑${status.ahead}`);
+    if (status.behind > 0) parts.push(`↓${status.behind}`);
+    selected.textContent = parts.length ? `${selected.dataset.baseLabel}  ${parts.join(' ')}` : selected.dataset.baseLabel;
+  }
   const dirty = bar.querySelector('[data-git-dirty]');
   dirty.textContent = status.clean ? 'Clean' : 'Changes';
   dirty.classList.toggle('is-dirty', !status.clean);

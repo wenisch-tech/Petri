@@ -93,3 +93,10 @@ a suggestion that was not edited. **Generate** produces a fresh one at any time.
 only text in the field to review and edit; the commit happens when you press *Commit*. Edit the
 skill file to change the convention.
 
+## Ahead and behind indicator
+
+The git bar shows `↑ahead ↓behind` for the active worktree, and the same counts appear next to the
+branch name in the worktree selector (only the non-zero ones). They are measured against the
+branch's upstream. A branch that was never pushed has no upstream branch to compare with, so *ahead*
+counts the commits that exist on no remote branch yet: a first commit on a new branch shows `↑1`.
+
