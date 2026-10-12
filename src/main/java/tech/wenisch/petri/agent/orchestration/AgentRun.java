@@ -45,6 +45,12 @@ class AgentRun {
   @Column(name = "automation_run_id")
   private UUID automationRunId;
 
+  @Column(name = "loop_guard_nudges", nullable = false)
+  private int loopGuardNudges;
+
+  @Column(name = "loop_guard_withdrawals", nullable = false)
+  private int loopGuardWithdrawals;
+
   @Column(name = "worktree_id", nullable = false)
   private UUID worktreeId;
 
@@ -323,6 +329,14 @@ class AgentRun {
   }
 
   UUID automationRunId() { return automationRunId; }
+
+  void loopGuardIntervened(boolean toolsWithdrawn) {
+    if (toolsWithdrawn) loopGuardWithdrawals++;
+    else loopGuardNudges++;
+  }
+
+  int loopGuardNudges() { return loopGuardNudges; }
+  int loopGuardWithdrawals() { return loopGuardWithdrawals; }
   String model() { return model; }
   String prompt() { return prompt; }
   AgentRunStatus status() { return status; }

@@ -119,6 +119,32 @@ public class WorkflowCoordinator {
     launch(workflowId, phase, role, promptFor(workflow, phase), actor);
   }
 
+  /**
+   * Lets the user finish a held workflow whose implementation already ran. The hold is the
+   * system's guess that something is wrong; once there is an implementation to look at, the user
+   * may overrule it. Holds before an approved plan and an implementation report stay retry-only.
+   */
+  public void acceptHeld(UUID workflowId, String actor) {
+    synchronized (lock(workflowId)) {
+      AgentWorkflow workflow = ledger.require(workflowId);
+      if (workflow.currentStage() != AgentWorkflowStage.HUMAN_HOLD) {
+        throw new IllegalStateException("Only a held workflow can be accepted");
+      }
+      if (!canAcceptHeld(workflow.approvedPlanRevision() != null,
+          latestOptional(workflowId, WorkflowArtifactKind.IMPLEMENTATION_REPORT) != null)) {
+        throw new IllegalStateException(
+            "The workflow can only be accepted after its plan was approved and implemented");
+      }
+      String reason = workflow.holdReason();
+      complete(workflow, "Accepted by the user" + (reason == null || reason.isBlank() ? ""
+          : " despite: " + reason), actor, WorkflowGateOutcome.USER_APPROVED);
+    }
+  }
+
+  static boolean canAcceptHeld(boolean planApproved, boolean implemented) {
+    return planApproved && implemented;
+  }
+
   @EventListener
   void stageFinished(AgentRunTerminalEvent event) {
     AgentRunView run = runs.get(event.runId());

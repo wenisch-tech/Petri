@@ -75,4 +75,12 @@ class WorkflowGateRoutingTest {
         .doesNotContain(other.id().toString());
     assertThat(WorkflowEvidenceService.historyNotes(List.of(passed))).isEmpty();
   }
+
+  @Test
+  void aHeldWorkflowCanBeAcceptedOnlyOnceItsPlanWasApprovedAndImplemented() {
+    assertThat(WorkflowCoordinator.canAcceptHeld(true, true)).isTrue();
+    assertThat(WorkflowCoordinator.canAcceptHeld(true, false)).isFalse();
+    assertThat(WorkflowCoordinator.canAcceptHeld(false, true)).isFalse();
+    assertThat(WorkflowCoordinator.canAcceptHeld(false, false)).isFalse();
+  }
 }

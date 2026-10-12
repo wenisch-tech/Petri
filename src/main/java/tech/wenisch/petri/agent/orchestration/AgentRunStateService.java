@@ -222,6 +222,31 @@ class AgentRunStateService {
     run.refreshExecutionClaim(claimId, now);
   }
 
+  /** Stores one loop guard intervention as a turn (shown like a tool call) and in the run counters. */
+  @Transactional
+  void recordLoopGuard(UUID runId, UUID claimId, int strikes, boolean toolsWithdrawn) {
+    AgentRun run = locked(runId);
+    requireActiveClaim(run, claimId);
+    String content;
+    try {
+      content = objectMapper.writeValueAsString(Map.of(
+          "action", toolsWithdrawn ? "TOOLS_WITHDRAWN" : "NUDGE",
+          "strikes", strikes,
+          "message", toolsWithdrawn
+              ? "The model kept repeating itself; tools were withdrawn and it was told to answer."
+              : "The model repeated its previous response; it was told to read its last message "
+                  + "and not repeat it."));
+    } catch (JacksonException exception) {
+      throw new IllegalStateException("Loop guard record could not be encoded", exception);
+    }
+    Instant now = Instant.now(clock);
+    turns.save(new AgentTurn(
+        UUID.randomUUID(), run.id(), run.nextTurnIndex(), AgentTurnKind.LOOP_GUARD,
+        null, null, "loop_guard", content, now));
+    run.loopGuardIntervened(toolsWithdrawn);
+    run.refreshExecutionClaim(claimId, now);
+  }
+
   /** Keeps the execution lease alive while the run waits for a human decision. */
   @Transactional
   void heartbeat(UUID runId, UUID claimId) {

@@ -35,6 +35,7 @@ public class AgentRunExecutor {
       """;
 
   private final AgentRunStateService stateService;
+  private final LoopGuardMetrics loopGuardMetrics;
   private final AgentRunService runService;
   private final ModelClientRegistry modelClients;
   private final AgentToolRegistry tools;
@@ -55,6 +56,7 @@ public class AgentRunExecutor {
       AgentChatSummaryService summaries,
       AgentChatStream chatStream,
       ApprovalGate approvalGate,
+      LoopGuardMetrics loopGuardMetrics,
       @org.springframework.beans.factory.annotation.Value("${petri.agent.approval-wait:${PETRI_AGENT_APPROVAL_WAIT:12h}}")
           java.time.Duration approvalWait) {
     this.stateService = stateService;
@@ -66,6 +68,7 @@ public class AgentRunExecutor {
     this.summaries = summaries;
     this.chatStream = chatStream;
     this.approvalGate = approvalGate;
+    this.loopGuardMetrics = loopGuardMetrics;
     this.approvalWait = approvalWait;
   }
 
@@ -170,6 +173,12 @@ public class AgentRunExecutor {
         }
         if (!partial.isEmpty()) stateService.recordPartialOutput(runId, claimId, partial.toString());
         state = stateService.recordModelResponse(runId, claimId, response, actor);
+        if (!state.terminal() && state.repetitionStrikes() > 0) {
+          boolean withdrawn = state.repetitionStrikes() >= LoopGuard.WITHDRAW_TOOLS_AT;
+          stateService.recordLoopGuard(runId, claimId, state.repetitionStrikes(), withdrawn);
+          loopGuardMetrics.record(withdrawn, workflowRole);
+          chatStream.toolLifecycle(chatId, runId, "loop_guard", "failed");
+        }
       }
     } catch (RuntimeException exception) {
       stateService.failExecution(runId, claimId, safeExecutionMessage(exception), actor);

@@ -157,6 +157,12 @@ public class AgentWorkflowService {
     return ledger.view(workflowId, actorId);
   }
 
+  public AgentWorkflowView accept(UUID workflowId, UUID actorId, String actor) {
+    ledger.requireOwned(workflowId, actorId);
+    coordinator.acceptHeld(workflowId, actor);
+    return ledger.view(workflowId, actorId);
+  }
+
   public AgentWorkflowView cancel(UUID workflowId, UUID actorId, String actor) {
     AgentWorkflow workflow = ledger.requireOwned(workflowId, actorId);
     if (workflow.terminal()) return ledger.view(workflowId, actorId);

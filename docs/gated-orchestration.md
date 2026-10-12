@@ -82,6 +82,13 @@ completing on its own.
   by confirmed evidence or no passing test was executed. Concrete requests for changes
   (`CHANGES_REQUIRED`, `REVISION_REQUIRED`) still go back to the implementer.
 
+### Accepting a held workflow
+
+A held workflow offers **Retry** (highlighted) and, once its plan was approved and an implementation
+exists, **Accept anyway**. Accepting completes the workflow with the current result and records the
+hold reason in the history (`POST /workflows/{id}/accept`). Holds before an approved, implemented
+plan stay retry-only.
+
 ### Retry and attempt budgets
 
 The per-role attempt limit counts attempts since the last manual retry. A manual **Retry** on a held

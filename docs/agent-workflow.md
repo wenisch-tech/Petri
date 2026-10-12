@@ -91,6 +91,14 @@ similar to one of the last three responses.
 | 1 | The next request carries a loop-guard instruction: read your own last message, decide from it how to continue, do not repeat it, and answer now if it already has what is needed. |
 | 2 or more | Tools are withdrawn. Tool calls the model still makes are answered with a "skipped by the loop guard" result without running, and the model must give its final response with what it has gathered. |
 
+Every intervention is visible and measurable:
+
+- The workflow activity feed shows a *Loop guard intervention* entry, styled like a tool call, with
+  the action (repeat blocked, or tools withdrawn) and the role.
+- The intervention is stored as a `LOOP_GUARD` turn of the run, and the run keeps counters
+  (`loopGuardNudges`, `loopGuardWithdrawals` on the run view; columns on `agent_run`).
+- Prometheus exposes `petri_agent_loop_guard_interventions_total{action,role}`.
+
 A model that makes progress (different calls, different text) is never affected, and one step in a
 different direction resets the count. The turn budget still applies as the last resort.
 

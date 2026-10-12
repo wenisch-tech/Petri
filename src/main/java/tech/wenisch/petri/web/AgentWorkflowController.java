@@ -112,6 +112,12 @@ public class AgentWorkflowController {
     return workflows.retry(workflowId, actor.getId(), actor.getEmail());
   }
 
+  @PostMapping("/workflows/{workflowId}/accept")
+  public AgentWorkflowView accept(@PathVariable UUID workflowId, Principal principal) {
+    AppUser actor = actor(principal);
+    return workflows.accept(workflowId, actor.getId(), actor.getEmail());
+  }
+
   @PostMapping("/workflows/{workflowId}/cancel")
   public AgentWorkflowView cancel(@PathVariable UUID workflowId, Principal principal) {
     AppUser actor = actor(principal);

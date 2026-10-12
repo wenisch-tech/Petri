@@ -1545,6 +1545,15 @@ function workflowFeed(workflow) {
     }
     if (run.partialOutput) events.push({ kind: 'message', role: roleLabel(run.workflowRole), text: run.partialOutput, live: true, runId: run.id, time: '9999', order: 0 });
   }
+  for (const run of workflow.stageRuns || []) {
+    for (const turn of run.turns || []) {
+      if (turn.kind !== 'LOOP_GUARD') continue;
+      const info = parsedObject(turn.content);
+      const withdrawn = info.action === 'TOOLS_WITHDRAWN';
+      events.push({ kind: 'tool', icon: 'TriangleAlert', text: withdrawn ? 'Loop guard intervention: tools withdrawn' : 'Loop guard intervention: repeat blocked',
+        detail: roleLabel(run.workflowRole), state: 'interrupted', time: turn.createdAt, order: turn.index });
+    }
+  }
   for (const action of workflowToolActivities(workflow.stageRuns || [])) {
     events.push({ kind: 'tool', icon: action.icon, text: action.detail ? `${action.label}: ${action.detail}` : action.label, detail: action.role, state: action.state, time: action.createdAt, order: action.index });
   }
@@ -1799,6 +1808,16 @@ function workflowControls(state, workflow) {
   if (workflow.status === 'HUMAN_HOLD') {
     const retry = el('button', 'btn-primary !min-h-8 !px-3 text-xs', 'Retry'); retry.type = 'button'; retry.addEventListener('click', () => workflowAction(state, retry, workflow.id, 'retry'));
     controls.append(retry);
+    // Once something was implemented the user may overrule the hold and finish the workflow.
+    const implemented = (workflow.artifacts || []).some(artifact => artifact.kind === 'IMPLEMENTATION_REPORT');
+    if (workflow.approvedPlanRevision != null && implemented) {
+      const accept = el('button', 'btn-secondary !min-h-8 !px-3 text-xs', 'Accept anyway'); accept.type = 'button';
+      accept.title = 'Complete this workflow with the current result, despite the hold';
+      accept.addEventListener('click', () => {
+        if (confirm('Complete this workflow with the current result? The reason it was held stays in the history.')) workflowAction(state, accept, workflow.id, 'accept');
+      });
+      controls.append(accept);
+    }
   }
   return controls;
 }
