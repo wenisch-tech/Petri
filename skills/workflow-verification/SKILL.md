@@ -43,6 +43,15 @@ A port conflict is a property of the environment, never a defect of the code und
   whatever port it ran. A test or command that failed only because a port was occupied is
   environmental: ask for a rerun on another port rather than rejecting the work.
 
+## Failed runs that were fixed
+
+- A test run that failed and was followed by a passing run of the same command is fixed history.
+  Judge the work by the latest run of each command. An earlier failure caused by a mistake the
+  implementer then corrected (a wrong import, a missing dependency, a busy port) is not a defect
+  and not a reason to request changes, hold, or mark a criterion not met.
+- Petri lists such runs under "TEST HISTORY" in the evidence. Cite the passing run as evidence.
+- Only a command whose most recent finished run failed is a current failure.
+
 ## Temporary files
 
 - Commands run confined; the system `/tmp` is not writable. Use `$TMPDIR` (also `TMP`, `TEMP`):

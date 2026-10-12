@@ -71,6 +71,10 @@ completing on its own.
   the same command (the implementer fixed the problem, or the failure was an environment hiccup) is
   history and no longer sends the workflow back to the implementer. A command whose most recent
   finished run failed still does.
+- **The models are told.** Gate and review prompts carry a *TEST HISTORY* note naming failed runs
+  that a later passing run of the same command superseded, with the instruction to judge the work by
+  the latest run and not to request changes or hold because of them. The same rule is in the
+  `workflow-verification` skill.
 - **Unclear outcomes go to the user.** When the review is approved (or held for missing evidence)
   but the final gate does not pass and nobody asked for concrete changes, Petri neither guesses a
   rework nor holds the workflow. It waits at the final gate with the reasons, and the user decides:

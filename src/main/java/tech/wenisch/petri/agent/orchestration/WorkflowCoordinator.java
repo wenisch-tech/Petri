@@ -498,6 +498,7 @@ public class WorkflowCoordinator {
         + "\nIMPLEMENTATION REPORT:\n"
         + ledger.latest(workflow.id(), WorkflowArtifactKind.IMPLEMENTATION_REPORT).contentJson()
         + "\nCANONICAL TASK DIFF:\n" + evidence.diff() + "\nTESTS:\n" + json(evidence.tests())
+        + WorkflowEvidenceService.historyNotes(evidence.tests())
         + verdictContract();
   }
 
@@ -506,6 +507,7 @@ public class WorkflowCoordinator {
         + "\nPLAN:\n" + ledger.latest(workflow.id(), WorkflowArtifactKind.PLAN).contentJson()
         + "\nTASK DIFF:\n" + ledger.latest(workflow.id(), WorkflowArtifactKind.TASK_DIFF).contentJson()
         + "\nEVIDENCE CATALOGUE (cite only these ids and paths):\n" + evidenceCatalogue(workflow)
+        + WorkflowEvidenceService.historyNotes(evidence.collect(workflow).tests())
         + "\nReturn JSON: {\"decision\":\"APPROVED|CHANGES_REQUIRED|HOLD\","
         + "\"summary\":\"...\",\"findings\":[{\"severity\":\"...\",\"path\":\"...\","
         + "\"line\":1,\"issue\":\"...\",\"requiredChange\":\"...\"}],"
@@ -546,6 +548,7 @@ public class WorkflowCoordinator {
         + "\nREVIEW:\n" + ledger.latest(workflow.id(), WorkflowArtifactKind.REVIEW).contentJson()
         + "\nACCEPTANCE CRITERIA VERIFICATION (checked by Petri against real test runs and files):\n"
         + json(ledger.goals(workflow.id()))
+        + WorkflowEvidenceService.historyNotes(evidence.collect(workflow).tests())
         + verdictContract()
         + " Also add \"summary\": a concise Markdown summary for the user of what was done: the "
         + "changes made, the files touched, the test evidence and any caveats such as tests not executed.";

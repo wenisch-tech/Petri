@@ -61,4 +61,18 @@ class WorkflowGateRoutingTest {
     assertThat(WorkflowCoordinator.unclear("HOLD", "CHANGES_REQUIRED")).isFalse();
     assertThat(WorkflowCoordinator.unclear("PASS", "APPROVED")).isFalse();
   }
+
+  @Test
+  void supersededFailuresAreNamedForTheModelsSoTheyAreNotRejectedOverAFixedRun() {
+    TestRunView failed = run("mvn test", TestRunStatus.FAILED, 1);
+    TestRunView passed = run("mvn test", TestRunStatus.PASSED, 5);
+    TestRunView other = run("./gradlew test", TestRunStatus.FAILED, 2);
+
+    assertThat(WorkflowEvidenceService.supersededFailures(List.of(failed, passed, other)))
+        .containsExactly(failed.id());
+    String notes = WorkflowEvidenceService.historyNotes(List.of(failed, passed, other));
+    assertThat(notes).contains("fixed history", failed.id().toString(), "mvn test")
+        .doesNotContain(other.id().toString());
+    assertThat(WorkflowEvidenceService.historyNotes(List.of(passed))).isEmpty();
+  }
 }

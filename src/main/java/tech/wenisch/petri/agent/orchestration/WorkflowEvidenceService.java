@@ -79,6 +79,49 @@ class WorkflowEvidenceService {
     return latest.values().stream().anyMatch(value -> value.status() != TestRunStatus.PASSED);
   }
 
+  /** Ids of failed runs that a later passing run of the same command superseded. */
+  static java.util.Set<UUID> supersededFailures(List<TestRunView> testRuns) {
+    List<TestRunView> ordered = testRuns.stream()
+        .filter(value -> finished(value.status()))
+        .sorted(java.util.Comparator.comparing(
+            (TestRunView value) -> value.completedAt() != null ? value.completedAt() : value.requestedAt(),
+            java.util.Comparator.nullsFirst(java.util.Comparator.naturalOrder())))
+        .toList();
+    java.util.Set<UUID> superseded = new LinkedHashSet<>();
+    for (int index = 0; index < ordered.size(); index++) {
+      TestRunView run = ordered.get(index);
+      if (run.status() == TestRunStatus.PASSED) continue;
+      for (int later = index + 1; later < ordered.size(); later++) {
+        TestRunView candidate = ordered.get(later);
+        if (candidate.status() == TestRunStatus.PASSED
+            && String.valueOf(candidate.command()).equals(String.valueOf(run.command()))) {
+          superseded.add(run.id());
+          break;
+        }
+      }
+    }
+    return superseded;
+  }
+
+  /**
+   * Text for gate and review prompts that tells the model which failed runs are fixed history.
+   * Without it a model sees "FAILED" in the evidence and rejects work whose latest runs pass.
+   */
+  static String historyNotes(List<TestRunView> testRuns) {
+    java.util.Set<UUID> superseded = supersededFailures(testRuns);
+    if (superseded.isEmpty()) return "";
+    StringBuilder notes = new StringBuilder(
+        "\nTEST HISTORY: these failed runs were followed by a passing run of the same command, so "
+            + "they are fixed history and not a defect. Judge the work by the latest run of each "
+            + "command; do not request changes or hold because of them:\n");
+    for (TestRunView run : testRuns) {
+      if (!superseded.contains(run.id())) continue;
+      notes.append("- run ").append(run.id()).append(" (").append(run.command()).append(", ")
+          .append(run.status()).append(") superseded by a later PASSED run\n");
+    }
+    return notes.toString();
+  }
+
   private static boolean finished(TestRunStatus status) {
     return status == TestRunStatus.PASSED || status == TestRunStatus.FAILED
         || status == TestRunStatus.ERROR || status == TestRunStatus.TIMED_OUT;
