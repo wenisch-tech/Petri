@@ -20,6 +20,15 @@ environment.**
 Petri is written in Java 25 on Spring Boot, runs on a single node with an embedded H2 database or on
 PostgreSQL, and works with OpenAI, LiteLLM, Ollama and any OpenAI-compatible endpoint.
 
+<p align="center">
+  <img src="docs/images/petri-workflow-demo.gif" alt="A gated Petri workflow: the prompt is sent, the plan is approved, files are applied, the evidence gate sends the work back once, and the Petri net shows every acceptance criterion verified" width="900">
+</p>
+
+<p align="center"><sub>
+  One gated workflow, start to finish: plan, approval, implementation, a rework loop at the evidence
+  gate, and the Petri net verifying each acceptance criterion against real changes.
+</sub></p>
+
 ## Features
 
 ### Agentic orchestration
