@@ -138,6 +138,7 @@ function initializeEmbeddedViews(state) {
   };
   const pagePath = () => (detail ? `/runs/${detail}` : urls[current]);
   const close = () => {
+    clearTimeout(liveTimer);
     current = null;
     detail = null;
     currentSearch = '';
@@ -160,18 +161,43 @@ function initializeEmbeddedViews(state) {
       if (dialog.querySelector('.field-error, .alert-error')) dialog.showModal();
     });
   };
-  const load = async () => {
+  let liveTimer = null;
+  // A page that marks itself live (an agent run, automation runs in progress) reloads in place
+  // every few seconds, keeping scroll position and open sections, unless the user is editing.
+  const scheduleLive = () => {
+    clearTimeout(liveTimer);
+    if (!current || !content.querySelector('[data-live-refresh]')) return;
     const token = `${current}|${detail}`;
-    content.setAttribute('aria-busy', 'true');
+    liveTimer = setTimeout(async () => {
+      if (token !== `${current}|${detail}` || document.hidden
+          || content.querySelector('dialog[open]') || content.contains(document.activeElement)
+          && /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement.tagName)) {
+        scheduleLive();
+        return;
+      }
+      const scroll = content.scrollTop;
+      const open = [...content.querySelectorAll('details')].map(node => node.open);
+      await load(true);
+      if (token !== `${current}|${detail}`) return;
+      content.querySelectorAll('details').forEach((node, index) => { if (open[index]) node.open = true; });
+      content.scrollTop = scroll;
+    }, 3000);
+  };
+  const load = async (silent = false) => {
+    const token = `${current}|${detail}`;
+    if (!silent) content.setAttribute('aria-busy', 'true');
     try {
       const extra = currentSearch ? `&${currentSearch.replace(/^\?/, '')}` : '';
       const response = await fetch(`${pagePath()}?embedded=true${extra}`,
         { headers: { Accept: 'text/html' }, cache: 'no-store', credentials: 'same-origin' });
       if (!response.ok) throw new Error(`The page could not be loaded (HTTP ${response.status})`);
       const html = await response.text();
-      if (token === `${current}|${detail}`) render(html);
+      if (token === `${current}|${detail}`) { render(html); scheduleLive(); }
     } catch (error) {
-      if (token === `${current}|${detail}`) content.replaceChildren(el('div', 'workspace-error', error.message));
+      if (token === `${current}|${detail}`) {
+        if (silent) scheduleLive();
+        else content.replaceChildren(el('div', 'workspace-error', error.message));
+      }
     } finally { content.removeAttribute('aria-busy'); }
   };
   const show = (name, runId = null, search = '') => {

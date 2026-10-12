@@ -5,7 +5,7 @@
 <header th:replace="~{fragments/layout :: topbar('projects')}"></header>
 
 <th:block th:fragment="content">
-<main class="page-narrow">
+<main class="page-narrow" th:attr="data-live-refresh=${#lists.size(runs.?[status.active()]) > 0 ? 'true' : null}">
   <a class="back-link" th:href="@{/projects/{id}/settings(id=${project.id})}"><i data-lucide="ArrowLeft"></i> Project settings</a>
   <div class="page-header">
     <div>
@@ -76,6 +76,11 @@
           </span>
         </div>
         <span class="badge" th:classappend="${run.status.name() == 'FAILED'} ? 'badge-neutral' : ''" th:text="${run.status}">POSTED</span>
+        <div class="list-actions" th:if="${run.agentRunId != null}">
+          <a class="btn-ghost" th:href="@{/runs/{id}(id=${run.agentRunId})}"
+             th:title="${run.status.active()} ? 'Follow the agent run while it works' : 'Open the agent run'"><i data-lucide="Workflow"></i>
+            <span th:text="${run.status.active()} ? 'Follow live' : 'View run'">View run</span></a>
+        </div>
         <div class="list-actions" th:if="${run.status.name() == 'AWAITING_APPROVAL'}">
           <button class="btn-ghost" type="button" th:attr="data-dialog-open=|review-${run.id}|"><i data-lucide="Eye"></i> Review</button>
           <dialog class="dialog dialog-wide" th:id="|review-${run.id}|">

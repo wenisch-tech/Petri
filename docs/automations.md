@@ -83,6 +83,14 @@ severity (`BLOCKER`, `MAJOR`, `MINOR`, `NIT`), body and optional suggested code.
 that finding paths are files changed by the pull request and renders the comment itself: HTML is
 escaped and `@mentions` are defused, so a review cannot ping people or inject markup.
 
+### Following a review live
+
+Every automation run in the *Recent runs* list links to the agent run that performs it (*Follow
+live* while it works, *View run* afterwards). The run page shows the live output of the model, its
+turns and tool calls, and refreshes itself every few seconds while the run is active; in the
+workspace it opens inside the *Runs* tab. The automations page refreshes while a review is queued
+or running, and neither page refreshes while a dialog is open or a field is being edited.
+
 ### Posting
 
 | Mode | Behavior |

@@ -148,4 +148,30 @@ class AutomationPageFlowTest {
         .andExpect(content().string(containsString("Repository mirror")))
         .andExpect(content().string(org.hamcrest.Matchers.not(containsString("<html"))));
   }
+
+  @Autowired AutomationRunRepository automationRuns;
+
+  @Test
+  void aRunningReviewLinksToItsAgentRunSoItCanBeFollowedLive() throws Exception {
+    UUID agentRunId = UUID.randomUUID();
+    AutomationRun run = new AutomationRun(UUID.randomUUID(), projectId, AutomationKind.CODE_REVIEW,
+        AutomationTrigger.PULL_REQUEST, "9", "abc12345", "Add feature", null,
+        AutomationPostMode.AUTO, Instant.now());
+    run.agentRun(agentRunId, Instant.now());
+    run.running(Instant.now());
+    automationRuns.saveAndFlush(run);
+
+    mockMvc.perform(asAdmin(get("/projects/{id}/automations", projectId).param("embedded", "true")))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("/runs/" + agentRunId)))
+        .andExpect(content().string(containsString("Follow live")))
+        .andExpect(content().string(containsString("data-live-refresh=\"true\"")));
+
+    run.posted("https://git.test/pr/9#c1", Instant.now());
+    automationRuns.saveAndFlush(run);
+
+    mockMvc.perform(asAdmin(get("/projects/{id}/automations", projectId).param("embedded", "true")))
+        .andExpect(content().string(containsString("View run")))
+        .andExpect(content().string(org.hamcrest.Matchers.not(containsString("data-live-refresh"))));
+  }
 }

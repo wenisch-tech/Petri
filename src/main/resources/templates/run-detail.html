@@ -5,7 +5,7 @@
 <header th:replace="~{fragments/layout :: topbar('runs')}"></header>
 
 <th:block th:fragment="content">
-<main class="page">
+<main class="page" th:attr="data-live-refresh=${run.status.name() == 'PENDING' or run.status.name() == 'RUNNING' or run.status.name() == 'CANCELLATION_REQUESTED'} ? 'true' : null">
   <a class="back-link" href="/runs"><i data-lucide="ArrowLeft"></i> Runs</a>
   <div class="page-header">
     <div class="min-w-0">
@@ -33,6 +33,10 @@
   <section class="section">
     <h2 class="section-title mb-3">Prompt</h2>
     <pre class="card max-h-96 overflow-auto whitespace-pre-wrap break-words p-4 text-sm text-ink-300" th:text="${run.prompt}">prompt</pre>
+  </section>
+  <section th:if="${run.finalOutput == null and run.partialOutput != null and !#strings.isEmpty(run.partialOutput)}" class="section">
+    <h2 class="section-title mb-3">Live output</h2>
+    <pre class="card max-h-96 overflow-auto whitespace-pre-wrap break-words p-4 text-sm text-ink-300" th:text="${run.partialOutput}">partial output</pre>
   </section>
   <section th:if="${run.finalOutput != null}" class="section">
     <h2 class="section-title mb-3">Final output</h2>

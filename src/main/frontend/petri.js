@@ -68,6 +68,15 @@ function localizeTimes(scope = document) {
 function bootPetri() {
   hydrateIcons();
   initializeDialogs();
+  // Pages that follow something in progress (an agent run) reload themselves until it ends.
+  if (document.querySelector('[data-live-refresh]') && !document.querySelector('[data-workspace]')) {
+    const tick = () => {
+      if (document.hidden || document.querySelector('dialog[open]')
+          || /^(INPUT|TEXTAREA|SELECT)$/.test(document.activeElement?.tagName || '')) { setTimeout(tick, 3000); return; }
+      location.reload();
+    };
+    setTimeout(tick, 4000);
+  }
   localizeTimes();
   hydrateMarkdown(document);
 
