@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.7.0 - 2026-10-12
+
+## [0.7.0](https://github.com/wenisch-tech/Petri/compare/v0.6.0...v0.7.0) (2026-10-12)
+
+
+### Features
+
+* introduced support for custom env variables ([4fa707a](https://github.com/wenisch-tech/Petri/commit/4fa707ab3315cdc1be5ed2b74ad8bbc2460f5c78))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.7.0
+
+
 ## v0.6.0 - 2026-10-12
 
 ## [0.6.0](https://github.com/wenisch-tech/Petri/compare/v0.5.0...v0.6.0) (2026-10-12)

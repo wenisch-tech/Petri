@@ -13,7 +13,7 @@
 
     <groupId>tech.wenisch</groupId>
     <artifactId>petri</artifactId>
-    <version>0.6.0</version>
+    <version>0.7.0</version>
     <name>Petri</name>
     <description>Self-hosted Java coding agent</description>
 
