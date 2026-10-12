@@ -9,8 +9,8 @@
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
   <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
-  <link rel="stylesheet" href="/css/petri.css?v=25">
-  <script defer src="/js/petri.js?v=26"></script>
+  <link rel="stylesheet" href="/css/petri.css?v=26">
+  <script defer src="/js/petri.js?v=27"></script>
 </head>
 <body class="workspace-body">
   <header class="topbar workspace-topbar relative z-40">
@@ -198,6 +198,15 @@
     </aside>
 
     <dialog class="workspace-dialog" data-workspace-dialog><form method="dialog" data-dialog-form><h2 data-dialog-title>Workspace action</h2><p data-dialog-description></p><label data-dialog-path-label>Path<input class="field" data-dialog-path required></label><label data-dialog-confirmation-label hidden>Type the exact path to confirm<input class="field" data-dialog-confirmation></label><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm" data-dialog-confirm>Continue</button></div></form></dialog>
+    <dialog class="dialog petrinet-dialog" data-petrinet-dialog aria-label="Workflow Petri net">
+      <div class="dialog-panel">
+        <div class="dialog-header">
+          <div><h2>Workflow net</h2><p data-petrinet-subtitle></p></div>
+          <form method="dialog"><button class="icon-button" aria-label="Close"><i data-lucide="X"></i></button></form>
+        </div>
+        <div class="dialog-body" data-petrinet-body></div>
+      </div>
+    </dialog>
     <dialog class="workspace-dialog" data-git-branch-dialog><form method="dialog"><h2>New branch</h2><p>Create a local branch and its dedicated worktree.</p><label>Branch name<input class="field" data-git-branch-name required autocomplete="off" placeholder="feature/my-change"></label><label>Start from<select class="field" data-git-branch-start><option th:each="branch : ${branches}" th:value="${branch.kind.name() == 'REMOTE' ? 'origin/' + branch.name : branch.name}" th:text="${branch.kind.name() == 'REMOTE' ? 'origin/' + branch.name : branch.name}">main</option></select></label><div class="workspace-dialog-error" data-git-dialog-error></div><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm">Create branch</button></div></form></dialog>
     <dialog class="workspace-dialog" data-git-commit-dialog><form method="dialog"><h2>Commit changes</h2><p>Commit staged changes, or stage every visible worktree change first.</p><label>Commit message<textarea class="field" data-git-commit-message required maxlength="10000" rows="4"></textarea></label><label class="workspace-check"><input type="checkbox" data-git-stage-all> Stage all changes before committing</label><div class="workspace-dialog-error" data-git-dialog-error></div><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm">Commit</button></div></form></dialog>
     <dialog class="workspace-dialog" data-git-rebase-dialog><form method="dialog"><h2>Rebase branch</h2><p>The worktree must be clean. Conflicts remain in the editor for manual resolution.</p><label>Rebase onto<select class="field" data-git-rebase-target><option value="">Configured upstream</option><option th:each="branch : ${branches}" th:value="${branch.kind.name() == 'REMOTE' ? 'origin/' + branch.name : branch.name}" th:text="${branch.kind.name() == 'REMOTE' ? 'origin/' + branch.name : branch.name}">origin/main</option></select></label><div class="workspace-dialog-error" data-git-dialog-error></div><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm">Start rebase</button></div></form></dialog>

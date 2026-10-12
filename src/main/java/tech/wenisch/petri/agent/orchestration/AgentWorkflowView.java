@@ -29,4 +29,5 @@ public record AgentWorkflowView(
     List<ChangeProposalView> proposals,
     List<TestRunView> tests,
     List<PackageInstallView> packageInstalls,
-    List<tech.wenisch.petri.agent.run.TerminalCommandView> terminalCommands) {}
+    List<tech.wenisch.petri.agent.run.TerminalCommandView> terminalCommands,
+    List<GoalVerificationView> goals) {}

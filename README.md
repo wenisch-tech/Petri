@@ -48,7 +48,7 @@ PostgreSQL, and works with OpenAI, LiteLLM, Ollama and any OpenAI-compatible end
   conflict-safe reloads, side-by-side or inline diffs.
 - **Terminal panel** below the editor; agents get an approval-gated `run_command` tool (per-project
   auto-approve) whose commands run as an OS-level user confined to the worktree.
-- **Live workflow panel** with stage rail, status, attempts and cancel; it stays on *Done* until the
+- **Live workflow panel** shown as a Petri net with per-goal verification, status, attempts and cancel; it stays on *Done* until the
   next workflow starts.
 - **Streaming chat** with timestamped tool calls, agent messages and artifacts, reconnect recovery
   and a "guide active task" toggle to steer the running task or queue a new one.

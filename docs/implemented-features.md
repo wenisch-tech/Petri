@@ -50,7 +50,7 @@
 - Local Monaco language workers and native responsive side-by-side/inline Git and proposal diffs.
 - Persistent browser drafts, cursor/view state, optimistic SHA saves and conflict-safe reload behavior.
 - Files/Changes navigator with Git decorations and staged, unstaged, untracked and conflict groups, with stage/unstage and revert per file, section or all.
-- Workflow panel above the chat (stage rail, attempts, cancel / open-merge-request placeholder) that stays on *Done* until the next workflow; chat shows live tool calls, agent messages and artifacts with timestamps.
+- Workflow panel above the chat (Petri net with per-goal verification, attempts, cancel / open-merge-request placeholder) that stays on *Done* until the next workflow; chat shows live tool calls, agent messages and artifacts with timestamps.
 - Embedded durable streaming chat, persistent project model selection and inline/pinned approvals.
 - Git bar with branch before worktree selection and non-reloading Git status/actions.
 

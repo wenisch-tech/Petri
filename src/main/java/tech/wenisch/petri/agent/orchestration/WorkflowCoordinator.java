@@ -302,9 +302,17 @@ public class WorkflowCoordinator {
     JsonNode review = read(ledger.latest(workflow.id(), WorkflowArtifactKind.REVIEW).contentJson());
     String decision = verdict.path("decision").asText();
     boolean reviewApproved = "APPROVED".equals(review.path("decision").asText());
-    if ("PASS".equals(decision) && reviewApproved) {
+    List<GoalVerificationView> goals = ledger.goals(workflow.id());
+    if ("PASS".equals(decision) && reviewApproved && WorkflowGoalVerifier.allVerified(goals)) {
       complete(workflow, verdict.path("reason").asText("Workflow reviewed and completed"), "orchestrator",
           WorkflowGateOutcome.PASS);
+    } else if ("PASS".equals(decision) && reviewApproved) {
+      // Everything passed, but not every acceptance criterion is backed by evidence Petri confirmed.
+      // A model's claim is not enough to finish on its own, so the user decides.
+      List<String> open = WorkflowGoalVerifier.unverifiedIds(goals);
+      waitForUser(workflow, AgentWorkflowStage.ORCHESTRATOR_FINAL_REVIEW,
+          open.size() + " of " + goals.size() + " acceptance criteria are not backed by confirmed "
+              + "evidence (" + String.join(", ", open) + "). " + verdict.path("reason").asText(""));
     } else if (reviewApproved && !hasPassedTest(workflow)) {
       // Everything else passed review; only executed test evidence is missing. Let the user decide.
       waitForUser(workflow, AgentWorkflowStage.ORCHESTRATOR_FINAL_REVIEW,
@@ -323,7 +331,7 @@ public class WorkflowCoordinator {
         .anyMatch(test -> test.status() == tech.wenisch.petri.agent.run.TestRunStatus.PASSED);
   }
 
-  /** Lets the user finish a workflow whose final gate only lacked executed test evidence. */
+  /** Lets the user finish a workflow whose final gate lacked executed tests or verified goals. */
   public void finalApproved(UUID workflowId, String actor) {
     synchronized (lock(workflowId)) {
       AgentWorkflow workflow = ledger.require(workflowId);
@@ -331,7 +339,7 @@ public class WorkflowCoordinator {
           || workflow.status() != AgentWorkflowStatus.WAITING_FOR_USER) {
         throw new IllegalStateException("Workflow is not waiting for final approval");
       }
-      complete(workflow, "Approved by the user without executed tests", actor,
+      complete(workflow, "Approved by the user", actor,
           WorkflowGateOutcome.USER_APPROVED);
     }
   }
@@ -421,11 +429,16 @@ public class WorkflowCoordinator {
     appendOptional(prompt, workflow.id(), WorkflowArtifactKind.USER_GUIDANCE, "User guidance");
     appendOptional(prompt, workflow.id(), WorkflowArtifactKind.PLAN_VERDICT,
         "Orchestrator feedback on the previous plan");
+    appendOptional(prompt, workflow.id(), WorkflowArtifactKind.PLAN,
+        "Previous plan (keep the id of every acceptance criterion whose meaning is unchanged)");
     prompt.append("\nReturn either {\"kind\":\"QUESTIONS\",\"questions\":[{\"id\":\"q1\","
         + "\"type\":\"SINGLE_SELECT|MULTI_SELECT|FREE_TEXT\",\"prompt\":\"...\","
         + "\"options\":[\"...\"]}]} or {\"kind\":\"PLAN\",\"title\":\"...\","
         + "\"objective\":\"...\",\"assumptions\":[],\"steps\":[\"...\"],"
-        + "\"files\":[],\"tests\":[],\"risks\":[],\"acceptanceCriteria\":[\"...\"]}.");
+        + "\"files\":[],\"tests\":[],\"risks\":[],"
+        + "\"acceptanceCriteria\":[{\"id\":\"AC1\",\"text\":\"...\"}]}. "
+        + "Give every acceptance criterion a stable id (AC1, AC2, ...) and make each one independently "
+        + "verifiable by a passing test or by a changed file. Petri tracks each criterion by its id.");
     return prompt.toString();
   }
 
@@ -469,9 +482,38 @@ public class WorkflowCoordinator {
     return "Review the implementation against the approved plan.\nREQUEST:\n" + workflow.prompt()
         + "\nPLAN:\n" + ledger.latest(workflow.id(), WorkflowArtifactKind.PLAN).contentJson()
         + "\nTASK DIFF:\n" + ledger.latest(workflow.id(), WorkflowArtifactKind.TASK_DIFF).contentJson()
+        + "\nEVIDENCE CATALOGUE (cite only these ids and paths):\n" + evidenceCatalogue(workflow)
         + "\nReturn JSON: {\"decision\":\"APPROVED|CHANGES_REQUIRED|HOLD\","
         + "\"summary\":\"...\",\"findings\":[{\"severity\":\"...\",\"path\":\"...\","
-        + "\"line\":1,\"issue\":\"...\",\"requiredChange\":\"...\"}],\"planCoverage\":[]}.";
+        + "\"line\":1,\"issue\":\"...\",\"requiredChange\":\"...\"}],"
+        + "\"planCoverage\":[{\"criterionId\":\"AC1\",\"status\":\"MET|PARTIAL|NOT_MET\","
+        + "\"evidence\":[{\"type\":\"TEST\",\"ref\":\"<test run id>\"},"
+        + "{\"type\":\"FILE\",\"ref\":\"<changed file path>\"}],\"note\":\"...\"}]}. "
+        + "Include exactly one planCoverage entry for every acceptance criterion id of the plan. "
+        + "Petri verifies each citation: a criterion is only accepted as met when a cited test run "
+        + "passed or a cited file was really changed, so never cite evidence that is not listed.";
+  }
+
+  /** Test runs and changed files of this workflow, which a review may cite as evidence. */
+  private String evidenceCatalogue(AgentWorkflow workflow) {
+    JsonNode diff = read(ledger.latest(workflow.id(), WorkflowArtifactKind.TASK_DIFF).contentJson());
+    StringBuilder value = new StringBuilder("Test runs:\n");
+    int tests = 0;
+    for (JsonNode test : diff.path("tests")) {
+      tests++;
+      value.append("- id=").append(test.path("id").asText()).append(" status=")
+          .append(test.path("status").asText()).append(" command=")
+          .append(test.path("command").asText()).append('\n');
+    }
+    if (tests == 0) value.append("- (none)\n");
+    value.append("Changed files:\n");
+    int files = 0;
+    for (JsonNode path : diff.path("paths")) {
+      files++;
+      value.append("- ").append(path.asText()).append('\n');
+    }
+    if (files == 0) value.append("- (none)\n");
+    return value.toString();
   }
 
   private String finalReviewPrompt(AgentWorkflow workflow) {
@@ -479,6 +521,8 @@ public class WorkflowCoordinator {
         + ledger.latest(workflow.id(), WorkflowArtifactKind.PLAN).contentJson()
         + "\nTASK DIFF:\n" + ledger.latest(workflow.id(), WorkflowArtifactKind.TASK_DIFF).contentJson()
         + "\nREVIEW:\n" + ledger.latest(workflow.id(), WorkflowArtifactKind.REVIEW).contentJson()
+        + "\nACCEPTANCE CRITERIA VERIFICATION (checked by Petri against real test runs and files):\n"
+        + json(ledger.goals(workflow.id()))
         + verdictContract()
         + " Also add \"summary\": a concise Markdown summary for the user of what was done: the "
         + "changes made, the files touched, the test evidence and any caveats such as tests not executed.";

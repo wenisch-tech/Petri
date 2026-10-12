@@ -6,7 +6,7 @@
   --color-ink-900: #0d1420;
   --color-ink-800: #172235;
   --color-ink-700: #263650;
-  --color-ink-500: #71809a;
+  --color-ink-500: #8a99b2;
   --color-ink-300: #aebbd0;
   --color-ink-100: #edf3fb;
   --color-brand-600: #4f46e5;
@@ -36,13 +36,26 @@
     --color-ink-900: #ffffff;
     --color-ink-800: #edf1f7;
     --color-ink-700: #d4dce8;
-    --color-ink-500: #64748b;
+    --color-ink-500: #55657a;
     --color-ink-300: #334155;
     --color-ink-100: #111827;
-    --color-good-400: #047857;
-    --color-warn-400: #b45309;
+    /* Status and accent colours are text on tinted surfaces. The dark palette is too pale on
+       white, so every shade used for text is remapped to a deeper one with >= 4.5:1 contrast. */
+    --color-brand-400: #4338ca;
+    --color-brand-500: #4f46e5;
+    --color-good-500: #065f46;
+    --color-good-400: #065f46;
+    --color-warn-400: #92400e;
     --color-danger-400: #b91c1c;
-    --color-admin-400: #b45309;
+    --color-admin-400: #92400e;
+    --color-red-200: #7f1d1d;
+    --color-red-300: #b91c1c;
+    --color-red-400: #dc2626;
+    --color-amber-100: #78350f;
+    --color-amber-200: #92400e;
+    --color-amber-300: #92400e;
+    --color-amber-400: #d97706;
+    --color-cyan-500: #0e7490;
   }
   html.light body, html[data-theme="light"] body { background-image: radial-gradient(circle at 15% -10%, rgba(99, 102, 241, .10), transparent 32rem); }
   [x-cloak] { display: none !important; }
@@ -362,7 +375,6 @@
   .workspace-workflow-pin-heading span:not(.workspace-workflow-status) { @apply grid min-w-0; }
   .workspace-workflow-pin-heading small { @apply text-[9px] font-bold uppercase tracking-wider text-brand-400; }
   .workspace-workflow-pin-heading strong { @apply truncate text-sm; }
-  .workspace-workflow-pin .workspace-stage-rail { @apply border-b-0 px-0 py-1; }
   .workspace-workflow-pin-heading { @apply px-0; }
   .workspace-workflow-pin-side { @apply flex shrink-0 items-center gap-2; }
   .workspace-workflow-attempt { @apply text-[10px] font-medium text-ink-500; }
@@ -377,6 +389,65 @@
   .workspace-workflow-activity-state:not(.is-completed):not(.is-failed):not(.is-interrupted) { @apply animate-pulse; }
   .workspace-workflow-activity-state.is-completed { @apply bg-good-500; }
   .workspace-workflow-activity-state.is-failed, .workspace-workflow-activity-state.is-interrupted { @apply bg-red-300; }
+  /* Petri net of the gated workflow */
+  .workspace-net { @apply h-full min-h-0 flex-1 cursor-pointer overflow-hidden rounded-md px-1 transition hover:bg-ink-800/40; }
+  .petrinet { display: block; width: 100%; height: 100%; overflow: visible; }
+  .petrinet .pn-shape { fill: var(--color-ink-900); stroke: var(--color-ink-700); stroke-width: 1.5; }
+  .petrinet .pn-transition .pn-shape { fill: var(--color-ink-800); }
+  .petrinet .pn-arc { fill: none; stroke: var(--color-ink-700); stroke-width: 1.2; }
+  .petrinet .pn-arc.is-back { stroke-dasharray: 3 3; }
+  .petrinet .pn-arc.is-used { stroke: var(--color-ink-500); }
+  .petrinet .pn-arc.is-back.is-used { stroke: var(--color-warn-400); }
+  .petrinet .pn-label { fill: var(--color-ink-500); font-size: 9.5px; paint-order: stroke; stroke: var(--color-ink-900); stroke-width: 3px; stroke-linejoin: round; }
+  .petrinet.is-compact .pn-label { font-size: 7.5px; }
+  .petrinet .pn-count { fill: var(--color-ink-300); font-size: 8px; font-weight: 700; }
+  .petrinet .pn-goal-text { fill: var(--color-ink-300); font-size: 10px; }
+  .petrinet .pn-goals { font-size: 9px; font-weight: 700; fill: var(--color-ink-500); }
+  .petrinet .pn-goals.is-done { fill: var(--color-good-400); }
+  .petrinet .pn-goals.is-hold { fill: var(--color-danger-400); }
+  .petrinet .pn-goals.is-waiting { fill: var(--color-warn-400); }
+  .petrinet .pn-place.is-visited .pn-shape, .petrinet .pn-transition.is-fired .pn-shape { stroke: var(--color-good-500); }
+  .petrinet .pn-place.is-draft .pn-shape { stroke-dasharray: 3 2; }
+  .petrinet .pn-place.is-running .pn-shape, .petrinet .pn-transition.is-running .pn-shape { stroke: var(--color-brand-400); }
+  .petrinet .pn-place.is-running .pn-shape { fill: color-mix(in srgb, var(--color-brand-500) 22%, var(--color-ink-900)); }
+  .petrinet .pn-transition.is-running .pn-shape { animation: pn-pulse 1.4s ease-in-out infinite; }
+  .petrinet .pn-place.is-waiting .pn-shape, .petrinet .pn-transition.is-waiting .pn-shape { stroke: var(--color-warn-400); }
+  .petrinet .pn-place.is-waiting .pn-shape { fill: color-mix(in srgb, var(--color-warn-400) 16%, var(--color-ink-900)); }
+  .petrinet .pn-place.is-hold .pn-shape, .petrinet .pn-transition.is-hold .pn-shape { stroke: var(--color-danger-400); }
+  .petrinet .pn-place.is-hold .pn-shape { fill: color-mix(in srgb, var(--color-danger-500) 18%, var(--color-ink-900)); }
+  .petrinet .pn-place.is-done .pn-shape { stroke: var(--color-good-500); fill: color-mix(in srgb, var(--color-good-500) 20%, var(--color-ink-900)); }
+  .petrinet .pn-place.is-pending .pn-shape, .petrinet .pn-transition.is-pending .pn-shape { stroke-dasharray: 3 2; stroke: var(--color-ink-500); }
+  .petrinet .pn-place.is-cancelled .pn-shape { stroke: var(--color-ink-500); }
+  .petrinet .pn-transition.is-user .pn-shape { stroke-dasharray: 0; }
+  .petrinet .pn-token { fill: var(--color-brand-400); }
+  .petrinet.tone-waiting .pn-token { fill: var(--color-warn-400); }
+  .petrinet.tone-hold .pn-token { fill: var(--color-danger-400); }
+  .petrinet.tone-done .pn-token, .petrinet .pn-token.is-goal-ok { fill: var(--color-good-500); }
+  .petrinet.tone-cancelled .pn-token { fill: var(--color-ink-500); }
+  .petrinet .pn-token.is-arriving { transform-box: fill-box; transform-origin: center; animation: pn-arrive .8s ease-out; }
+  .petrinet .pn-goal-token circle, .petrinet .pn-goal-token path { fill: var(--color-ink-300); }
+  .petrinet .pn-goal-token.is-claimed circle { fill: none; stroke: var(--color-good-500); stroke-width: 1.6; }
+  .petrinet .pn-goal-token.is-partial path { fill: var(--color-warn-400); }
+  .petrinet .pn-goal-token.is-partial .ring { fill: none; stroke: var(--color-warn-400); stroke-width: 1.4; }
+  .petrinet .pn-goal-token.is-not_met path { fill: none; stroke: var(--color-danger-400); stroke-width: 2; stroke-linecap: round; }
+  .petrinet-dialog { @apply w-[min(76rem,calc(100vw-2rem))]; }
+  .petrinet-canvas { min-width: 980px; }
+  .petrinet-history { @apply mt-3 space-y-1.5 text-xs text-ink-300; }
+  .petrinet-history li { @apply flex flex-wrap items-center gap-x-3 gap-y-1; }
+  .petrinet-history time { @apply w-40 shrink-0 tabular-nums text-ink-500; }
+  .workspace-workflow-panel .workspace-goal-list, .workspace-goal-list { @apply ml-0 list-none space-y-1.5; }
+  .workspace-goal-list code { @apply rounded bg-ink-800 px-1 py-0.5 text-[10px] text-ink-300; }
+  .workspace-goal-badge { @apply ml-2 align-middle !px-2 !py-0.5 text-[10px]; }
+  .workspace-goal-reason { @apply mt-1 block text-[11px] leading-4 text-ink-500; }
+  .petrinet-legend { @apply flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-ink-500; }
+  .petrinet-legend span { @apply inline-flex items-center gap-1.5; }
+  .petrinet-legend i { @apply inline-block size-2.5 rounded-full border border-ink-700; }
+  .petrinet-legend i.is-square { @apply rounded-[2px]; }
+  @keyframes pn-pulse { 50% { opacity: .45; } }
+  @keyframes pn-arrive { from { transform: scale(2.6); opacity: .25; } to { transform: scale(1); opacity: 1; } }
+  @media (prefers-reduced-motion: reduce) {
+    .petrinet .pn-transition.is-running .pn-shape, .petrinet .pn-token.is-arriving { animation: none; }
+  }
   .workspace-guide-toggle { @apply flex items-center gap-2 text-xs text-ink-300; }
   .workspace-guide-toggle[hidden] { @apply hidden; }
   .workspace-workflow-event { @apply mb-1.5 mr-5 flex min-w-0 items-center gap-2 rounded-md border border-ink-700/60 px-2.5 py-1.5 text-[11px] text-ink-300; }
@@ -392,14 +463,6 @@
   .workspace-workflow-status.is-human_hold { @apply bg-red-400/15 text-red-300; }
   .workspace-workflow-status.is-cancelling { @apply bg-amber-400/15 text-amber-200; }
   .workspace-workflow-status.is-completed { @apply bg-good-500/15 text-good-500; }
-  .workspace-stage-rail { @apply flex overflow-x-auto border-b border-ink-700/60 px-3 py-2; }
-  .workspace-stage { @apply relative flex min-w-14 flex-1 flex-col items-center gap-1 text-center text-[9px] text-ink-500; }
-  .workspace-stage:not(:last-child)::after { content: ''; @apply absolute left-[55%] right-[-45%] top-1.5 h-px bg-ink-700; }
-  .workspace-stage i { @apply relative z-10 block size-3 rounded-full border-2 border-ink-700 bg-ink-900; }
-  .workspace-stage.is-complete { @apply text-good-500; }
-  .workspace-stage.is-complete i { @apply border-good-500 bg-good-500; }
-  .workspace-stage.is-current { @apply font-semibold text-brand-400; }
-  .workspace-stage.is-current i { @apply border-brand-400 bg-brand-500; }
   .workspace-workflow-panel { @apply m-3 rounded-lg border border-ink-700/70 bg-ink-950/40 p-3 text-xs text-ink-300; }
   .workspace-workflow-panel h3 { @apply mb-2 text-sm font-semibold text-ink-100; }
   .workspace-workflow-panel h4 { @apply mb-1 mt-3 text-[10px] font-bold uppercase tracking-wide text-ink-500; }
@@ -468,8 +531,6 @@
     .workspace-gitbar { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
     .workspace-git-button span { @apply hidden; }
     .workspace-workflow-pin-heading strong { @apply max-w-32; }
-    .workspace-stage { @apply min-w-10; }
-    .workspace-stage small { @apply hidden; }
   }
 }
 @layer base {
