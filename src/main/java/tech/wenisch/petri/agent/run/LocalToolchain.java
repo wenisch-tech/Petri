@@ -2,8 +2,10 @@ package tech.wenisch.petri.agent.run;
 
 import java.io.IOException;
 import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
@@ -39,6 +41,47 @@ public class LocalToolchain {
 
   void ensureRoot() throws IOException {
     Files.createDirectories(root);
+  }
+
+  private static final List<String> EXECUTABLE_DIRECTORIES = List.of(
+      "bin", "sbin", "usr/bin", "usr/sbin", "usr/local/bin");
+
+  /**
+   * apk installs into a prefix, but package symlinks are absolute: {@code /usr/bin/mvn} points at
+   * {@code /usr/share/java/maven-3/bin/mvn}, which does not exist outside the prefix, so the tool
+   * is "installed" yet cannot be found or run. Absolute links whose target is missing on the real
+   * filesystem but present inside the prefix are rewritten as relative links. Returns the number of
+   * links repaired.
+   */
+  int repairLinks() throws IOException {
+    int repaired = 0;
+    for (String directory : EXECUTABLE_DIRECTORIES) {
+      Path base = root.resolve(directory);
+      if (!Files.isDirectory(base, LinkOption.NOFOLLOW_LINKS)) continue;
+      try (var entries = Files.newDirectoryStream(base)) {
+        for (Path link : entries) {
+          if (!Files.isSymbolicLink(link)) continue;
+          Path target = Files.readSymbolicLink(link);
+          if (!target.isAbsolute() || Files.exists(target)) continue;
+          Path inside = root.resolve(target.toString().substring(1)).normalize();
+          if (!inside.startsWith(root) || !Files.exists(inside)) continue;
+          Path relative = link.getParent().relativize(inside);
+          Files.delete(link);
+          Files.createSymbolicLink(link, relative);
+          repaired++;
+        }
+      }
+    }
+    return repaired;
+  }
+
+  /** Whether a runnable tool of that name is installed in the toolchain prefix. */
+  boolean hasTool(String name) {
+    for (String directory : EXECUTABLE_DIRECTORIES) {
+      Path candidate = root.resolve(directory).resolve(name);
+      if (Files.isRegularFile(candidate) && Files.isExecutable(candidate)) return true;
+    }
+    return false;
   }
 
   /** Clean environment for tests and installs; {@code extra} entries override the defaults. */

@@ -48,6 +48,10 @@ class EnvironmentGuidance {
         root as an unprivileged user confined to that worktree; it needs user approval unless the
         project auto-approves, and its result carries the exit code and output. Prefer file tools
         for reading and editing files.
+        Installed tools are on the PATH of run_command and run_tests. For a Maven or Gradle project
+        without a wrapper, install maven or gradle and run_tests uses mvn/gradle directly; a
+        wrapper in the worktree takes precedence. If a tool reports "not found" after an install,
+        look in the toolchain's usr/bin rather than reinstalling it.
         """.formatted(installed.isEmpty() ? "none" : String.join(", ", installed));
   }
 }

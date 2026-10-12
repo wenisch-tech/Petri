@@ -77,8 +77,15 @@ class TerminalRunner {
     if (!confinement.available()) throw new IllegalStateException(unavailableReason());
     Path home = Files.createTempDirectory(paths.temporaryDirectory(), "petri-term-");
     try {
-      Map<String, String> env = toolchain.environment(home, Map.of(), profiles.environmentFor(projectId));
-      List<String> argv = confinement.wrap(List.of(worktree, home), List.of("/bin/sh", "-c", command));
+      // The same per-project build caches as test runs, so dependencies downloaded by a terminal
+      // build are reused and the confined shell has somewhere durable to write them.
+      Path cache = paths.directory("test-caches", projectId.toString());
+      Map<String, String> env = toolchain.environment(home,
+          Map.of("MAVEN_OPTS", "-Dmaven.repo.local=" + cache.resolve("maven"),
+              "GRADLE_USER_HOME", cache.resolve("gradle").toString()),
+          profiles.environmentFor(projectId));
+      List<String> argv = confinement.wrap(
+          List.of(worktree, home, cache), List.of("/bin/sh", "-c", command));
       return BoundedProcess.run(argv, worktree, env, timeout, outputLimit, "terminal-landlock", progress);
     } finally {
       deleteQuietly(home);

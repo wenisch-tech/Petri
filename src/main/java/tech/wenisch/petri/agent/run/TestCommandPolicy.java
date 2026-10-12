@@ -4,27 +4,54 @@ import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.List;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
 
 @Component
 class TestCommandPolicy {
+  private final LocalToolchain toolchain;
+  private final boolean local;
+
+  TestCommandPolicy() {
+    this(null, "podman");
+  }
+
+  @Autowired
+  TestCommandPolicy(
+      LocalToolchain toolchain, @Value("${petri.tests.executor:podman}") String executor) {
+    this.toolchain = toolchain;
+    this.local = "local".equalsIgnoreCase(executor);
+  }
+
   TestCommand detect(Path worktree) {
-    boolean maven = regular(worktree.resolve("pom.xml")) && executable(worktree.resolve("mvnw"));
-    boolean gradle = (regular(worktree.resolve("build.gradle"))
-        || regular(worktree.resolve("build.gradle.kts")))
-        && executable(worktree.resolve("gradlew"));
+    boolean mavenBuild = regular(worktree.resolve("pom.xml"));
+    boolean gradleBuild = regular(worktree.resolve("build.gradle"))
+        || regular(worktree.resolve("build.gradle.kts"));
+    boolean maven = mavenBuild && (executable(worktree.resolve("mvnw")) || installed("mvn"));
+    boolean gradle = gradleBuild && (executable(worktree.resolve("gradlew")) || installed("gradle"));
     if (maven == gradle) {
       throw new IllegalArgumentException(maven
           ? "Worktree has ambiguous Maven and Gradle test entry points"
-          : "Worktree needs an executable Maven or Gradle wrapper and matching build file");
+          : "Worktree needs a Maven or Gradle wrapper (or an installed mvn/gradle) "
+              + "and a matching build file");
     }
     return command(worktree, maven ? TestBuildSystem.MAVEN : TestBuildSystem.GRADLE);
+  }
+
+  /** A build tool installed with install_packages; only meaningful for the local executor. */
+  private boolean installed(String tool) {
+    return local && toolchain != null && toolchain.hasTool(tool);
   }
 
   TestCommand command(Path worktree, TestBuildSystem buildSystem) {
     return switch (buildSystem) {
       case MAVEN -> {
         requireRegular(worktree.resolve("pom.xml"), "pom.xml");
+        if (!executable(worktree.resolve("mvnw")) && installed("mvn")) {
+          yield new TestCommand(
+              TestBuildSystem.MAVEN, List.of("mvn", "--batch-mode", "--no-transfer-progress", "test"));
+        }
         requireExecutable(worktree.resolve("mvnw"), "mvnw");
         yield new TestCommand(
             TestBuildSystem.MAVEN,
@@ -34,6 +61,9 @@ class TestCommandPolicy {
         if (!regular(worktree.resolve("build.gradle"))
             && !regular(worktree.resolve("build.gradle.kts"))) {
           throw new IllegalArgumentException("Gradle build file is missing or unsafe");
+        }
+        if (!executable(worktree.resolve("gradlew")) && installed("gradle")) {
+          yield new TestCommand(TestBuildSystem.GRADLE, List.of("gradle", "--no-daemon", "test"));
         }
         requireExecutable(worktree.resolve("gradlew"), "gradlew");
         yield new TestCommand(

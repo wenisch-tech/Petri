@@ -103,9 +103,20 @@ public class PackageInstallService {
     }
   }
 
+  private void repairToolchainLinks() {
+    try {
+      int repaired = toolchain.repairLinks();
+      if (repaired > 0) log.info("Repaired {} absolute symlinks in the toolchain", repaired);
+    } catch (IOException | RuntimeException exception) {
+      log.warn("Could not repair toolchain symlinks", exception);
+    }
+  }
+
   /** Re-installs recorded packages when this container's toolchain is empty (e.g. no volume). */
   @EventListener(ApplicationReadyEvent.class)
   void reconcile() {
+    // Toolchains installed before links were repaired keep their broken tools until fixed here.
+    repairToolchainLinks();
     try {
       Set<String> recorded = state.installedPackages();
       if (recorded.isEmpty() || java.nio.file.Files.exists(toolchain.root().resolve("lib/apk/db/installed"))) {
@@ -142,6 +153,7 @@ public class PackageInstallService {
           toolchain.environment(home, Map.of(), variables), timeout, MAX_OUTPUT_BYTES, "apk", progress);
       if (result.exitCode() == 0 && !result.timedOut()) {
         java.nio.file.Files.writeString(toolchain.root().resolve(SCRIPTLESS_MARKER), "1\n");
+        repairToolchainLinks();
       }
       return result;
     } finally {

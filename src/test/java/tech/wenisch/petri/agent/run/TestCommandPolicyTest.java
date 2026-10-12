@@ -57,6 +57,29 @@ class TestCommandPolicyTest {
     assertThatIllegalArgumentException().isThrownBy(() -> policy.detect(symlinked));
   }
 
+  @Test
+  void usesAnInstalledMavenWhenTheProjectHasNoWrapperButOnlyForTheLocalExecutor() throws Exception {
+    Path root = Files.createDirectories(temporaryDirectory.resolve("toolchain/usr/bin"));
+    executable(root.resolve("mvn"), "#!/bin/sh\nexit 0\n");
+    LocalToolchain toolchain = new LocalToolchain(
+        temporaryDirectory.resolve("toolchain").toString(), "apk");
+    Path project = Files.createDirectory(temporaryDirectory.resolve("no-wrapper"));
+    Files.writeString(project.resolve("pom.xml"), "<project/>");
+
+    TestCommand local = new TestCommandPolicy(toolchain, "local").detect(project);
+    assertThat(local.buildSystem()).isEqualTo(TestBuildSystem.MAVEN);
+    assertThat(local.arguments()).containsExactly(
+        "mvn", "--batch-mode", "--no-transfer-progress", "test");
+
+    assertThatIllegalArgumentException()
+        .isThrownBy(() -> new TestCommandPolicy(toolchain, "podman").detect(project));
+
+    // A wrapper still wins over the installed tool.
+    executable(project.resolve("mvnw"), "#!/bin/sh\nexit 0\n");
+    assertThat(new TestCommandPolicy(toolchain, "local").detect(project).arguments().get(0))
+        .isEqualTo("./mvnw");
+  }
+
   private static void executable(Path path, String content) throws Exception {
     Files.writeString(path, content);
     if (!path.toFile().setExecutable(true)) throw new AssertionError("Could not mark script executable");

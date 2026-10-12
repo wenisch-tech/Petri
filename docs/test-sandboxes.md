@@ -29,6 +29,16 @@ Agents can request extra tooling with the `install_packages` tool:
   (`PETRI_TOOLCHAIN_ROOT`, default `./data/toolchain`, on the data volume). No root, `sudo` or
   setuid is used. The prefix is prepended to `PATH`/`LD_LIBRARY_PATH` for later tests.
 - Approved packages are recorded and restored on start-up if the toolchain volume is empty.
+- apk's package symlinks are absolute (`/usr/bin/mvn -> /usr/share/java/maven-3/bin/mvn`), which
+  would not resolve inside the prefix. After every install, and once at start-up, Petri rewrites
+  absolute links in the toolchain's `bin` directories whose target only exists inside the prefix into
+  relative links, so installed tools such as `mvn` are found on the `PATH` of terminal commands and
+  tests.
+- A Maven or Gradle project **without a wrapper** is tested with an installed `mvn`/`gradle`
+  (`mvn --batch-mode --no-transfer-progress test`); a `mvnw`/`gradlew` in the worktree takes
+  precedence. This applies to the local executor only.
+- Terminal commands share the project's build cache (`MAVEN_OPTS=-Dmaven.repo.local=...`,
+  `GRADLE_USER_HOME`) with test runs, so downloaded dependencies are reused.
 
 Prompts for every role tell the model it runs on Alpine, how to request installs and which extra
 packages are already present. With the Podman executor the tool is disabled and prompts say so.
