@@ -1,6 +1,8 @@
 package tech.wenisch.petri.git;
 
 import java.io.IOException;
+import java.nio.file.Files;
+import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -283,6 +285,74 @@ public class WorkspaceGitService {
       audit(actorEmail, "GIT_CHANGES_DISCARDED", worktreeId, "Discarded " + paths.size() + " paths");
       return status(worktreeId);
     });
+  }
+
+  /**
+   * What a commit would contain, for message generation: changed files with their status, a bounded
+   * diff and recent commit subjects. With {@code includeUnstaged} it covers everything that
+   * "stage all" would add.
+   */
+  public record CommitContext(
+      List<WorkspaceChangeView> files, String diff, boolean truncated, List<String> recentSubjects) {}
+
+  public CommitContext commitContext(UUID worktreeId, boolean includeUnstaged, int maxChars) {
+    return operations.worktree(worktreeId, () -> {
+      Path root = locator.requireActiveWorktree(worktreeId);
+      WorkspaceGitStatusView status = status(worktreeId);
+      List<WorkspaceChangeView> files = new ArrayList<>(status.staged());
+      if (includeUnstaged) {
+        for (WorkspaceChangeView change : status.unstaged()) {
+          if (files.stream().noneMatch(value -> value.path().equals(change.path()))) files.add(change);
+        }
+        for (WorkspaceChangeView change : status.untracked()) {
+          if (files.stream().noneMatch(value -> value.path().equals(change.path()))) files.add(change);
+        }
+      }
+      StringBuilder diff = new StringBuilder();
+      List<String> base = List.of("--no-pager", "diff", "--no-color", "--no-ext-diff", "--no-textconv",
+          "--unified=2");
+      if (includeUnstaged) {
+        GitCommandResult head = run(root, withTail(base, "HEAD", "--"));
+        if (head.succeeded()) diff.append(head.output());
+        else {
+          diff.append(run(root, withTail(base, "--cached", "--")).output());
+          diff.append(run(root, withTail(base, "--")).output());
+        }
+      } else {
+        diff.append(run(root, withTail(base, "--cached", "--")).output());
+      }
+      if (includeUnstaged) {
+        int shown = 0;
+        for (WorkspaceChangeView change : status.untracked()) {
+          if (shown++ >= 10 || change.binary()) continue;
+          Path file = root.resolve(change.path()).normalize();
+          try {
+            if (!file.startsWith(root) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)
+                || Files.size(file) > 200_000) continue;
+            String text = new String(Files.readAllBytes(file), java.nio.charset.StandardCharsets.UTF_8);
+            if (text.indexOf('\0') >= 0) continue;
+            diff.append("\nnew file: ").append(change.path()).append('\n')
+                .append(text.length() > 3_000 ? text.substring(0, 3_000) + "\n[...]" : text).append('\n');
+          } catch (IOException ignored) {
+            // an unreadable new file just has no preview
+          }
+        }
+      }
+      boolean truncated = diff.length() > maxChars;
+      String bounded = truncated ? diff.substring(0, maxChars) : diff.toString();
+      List<String> subjects = new ArrayList<>();
+      GitCommandResult log = run(root, List.of("log", "-8", "--format=%s"));
+      if (log.succeeded()) {
+        for (String line : log.output().split("\\R")) if (!line.isBlank()) subjects.add(line.strip());
+      }
+      return new CommitContext(List.copyOf(files), bounded, truncated, List.copyOf(subjects));
+    });
+  }
+
+  private static List<String> withTail(List<String> base, String... tail) {
+    List<String> value = new ArrayList<>(base);
+    value.addAll(List.of(tail));
+    return value;
   }
 
   public WorkspaceGitStatusView commit(

@@ -69,3 +69,27 @@ Verify the revision exists after synchronization. Automatic mirror-`HEAD` fallba
 ### Private clone fails
 
 Confirm the URL uses HTTPS when using stored credentials, then replace the credential and synchronize again. Petri redacts stored secret values and URL user information from captured Git output.
+
+## Commit dialog and generated messages
+
+The commit dialog lists every file the commit will contain with a change indicator (status and
+`+added −removed` line counts). It shows the **staged** changes; ticking *Stage all changes before
+committing* adds the unstaged and untracked changes under *Will be staged*, and unticking it shows
+how many changes stay out of the commit.
+
+**Generate** (the sparkles button above the message) asks the model for a message from those changes.
+The generation follows the `conventional-commit` skill (`skills/conventional-commit/SKILL.md`), which
+encodes the [Conventional Commits 1.0.0](https://www.conventionalcommits.org/en/v1.0.0/)
+specification: type, optional scope, imperative description up to 72 characters, optional body and
+breaking-change footer. The model receives the file list, a bounded diff (30,000 characters; new
+untracked files contribute a short preview) and the last eight commit subjects for style and scopes.
+It uses the model the workspace chat uses: the user's saved choice for the project (the model
+selector of the chat) while it is still usable, otherwise the same fallback as the chat. It returns
+text only and never commits.
+
+The message is previewed automatically: opening the commit dialog pre-fills the message field with a
+suggestion (unless text is already there), and ticking or unticking *Stage all changes* regenerates
+a suggestion that was not edited. **Generate** produces a fresh one at any time. The suggestion is
+only text in the field to review and edit; the commit happens when you press *Commit*. Edit the
+skill file to change the convention.
+

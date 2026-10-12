@@ -14,6 +14,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import tech.wenisch.petri.git.CommitMessageService;
 import tech.wenisch.petri.git.GitBranchKind;
 import tech.wenisch.petri.git.GitBranchView;
 import tech.wenisch.petri.git.GitOperationException;
@@ -32,9 +33,12 @@ public class WorkspaceGitController {
   private final WorkspaceGitService git;
   private final WorkspaceGitDiffService diffs;
   private final ProjectAccessService access;
+  private final CommitMessageService commitMessages;
 
   public WorkspaceGitController(
-      WorkspaceGitService git, WorkspaceGitDiffService diffs, ProjectAccessService access) {
+      WorkspaceGitService git, WorkspaceGitDiffService diffs, ProjectAccessService access,
+      CommitMessageService commitMessages) {
+    this.commitMessages = commitMessages;
     this.git = git;
     this.diffs = diffs;
     this.access = access;
@@ -118,6 +122,14 @@ public class WorkspaceGitController {
     return git.commit(worktreeId, request.message(), request.stageAll(), principal.getName());
   }
 
+  @PostMapping("/worktrees/{worktreeId}/git/commit-message")
+  public CommitMessageResponse commitMessage(
+      @PathVariable UUID worktreeId, @RequestBody CommitMessageRequest request, Principal principal) {
+    access.requireWorktree(worktreeId, principal.getName());
+    return new CommitMessageResponse(
+        commitMessages.generate(worktreeId, request.stageAll(), principal.getName()));
+  }
+
   @PostMapping("/worktrees/{worktreeId}/git/pull")
   public WorkspaceGitStatusView pull(@PathVariable UUID worktreeId, Principal principal) {
     access.requireWorktree(worktreeId, principal.getName());
@@ -170,6 +182,8 @@ public class WorkspaceGitController {
       String name, GitBranchKind kind, boolean force, String confirmation) {}
   public record PathsRequest(List<String> paths) {}
   public record CommitRequest(String message, boolean stageAll) {}
+  public record CommitMessageRequest(boolean stageAll) {}
+  public record CommitMessageResponse(String message) {}
   public record RebaseRequest(String target) {}
   public record PushRequest(boolean forceWithLease) {}
 }

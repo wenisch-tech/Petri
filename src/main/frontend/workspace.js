@@ -396,6 +396,14 @@ function wireGitDialogs(state) {
     } catch (error) { dialogError(branch, error); }
   });
   const commit = state.root.querySelector('[data-git-commit-dialog]');
+  commit.querySelector('[data-git-stage-all]').addEventListener('change', () => {
+    renderCommitFiles(state, commit);
+    // An untouched generated message follows the choice of what goes into the commit.
+    const area = commit.querySelector('[data-git-commit-message]');
+    if (!area.value.trim() || commit.dataset.generated === '1') generateCommitMessage(state, commit, true);
+  });
+  commit.querySelector('[data-git-commit-message]').addEventListener('input', () => { commit.dataset.generated = ''; });
+  commit.querySelector('[data-git-generate-message]').addEventListener('click', () => generateCommitMessage(state, commit, false));
   commit.querySelector('form').addEventListener('submit', async event => {
     if (event.submitter?.value !== 'confirm') return;
     event.preventDefault();
@@ -408,6 +416,7 @@ function wireGitDialogs(state) {
       commit.close();
       applyGitStatus(state, status);
       commit.querySelector('[data-git-commit-message]').value = '';
+      commit.dataset.generated = '';
     } catch (error) { dialogError(commit, error); }
   });
   const rebase = state.root.querySelector('[data-git-rebase-dialog]');
@@ -451,7 +460,101 @@ function openGitDialog(state, kind) {
   const dialog = state.root.querySelector(`[data-git-${kind}-dialog]`);
   clearDialogError(dialog);
   if (kind === 'branch') dialog.querySelector('[data-git-branch-name]').value = '';
+  if (kind === 'commit') {
+    renderCommitFiles(state, dialog);
+    // Preview a suggested message as soon as the dialog opens; the user can edit or replace it.
+    refreshChanges(state).then(() => {
+      if (!dialog.open) return;
+      renderCommitFiles(state, dialog);
+      if (!dialog.querySelector('[data-git-commit-message]').value.trim()) generateCommitMessage(state, dialog, true);
+    });
+  }
   dialog.showModal();
+}
+
+// Fills the commit message with a generated Conventional Commits suggestion. `automatic` runs are
+// silent about "nothing to describe" and never overwrite text the user typed in the meantime.
+let commitMessageRequest = 0;
+async function generateCommitMessage(state, dialog, automatic) {
+  const area = dialog.querySelector('[data-git-commit-message]');
+  const button = dialog.querySelector('[data-git-generate-message]');
+  const label = button.querySelector('span');
+  const stageAll = dialog.querySelector('[data-git-stage-all]').checked;
+  const status = state.gitStatus || {};
+  const hasChanges = (status.staged || []).length > 0
+    || (stageAll && ((status.unstaged || []).length > 0 || (status.untracked || []).length > 0));
+  if (!hasChanges) {
+    if (!automatic) dialogError(dialog, new Error('There are no changes to describe. Stage changes or tick “Stage all changes”.'));
+    return;
+  }
+  const token = ++commitMessageRequest;
+  const previousPlaceholder = area.placeholder;
+  clearDialogError(dialog);
+  button.disabled = true;
+  label.textContent = 'Generating…';
+  if (automatic) area.placeholder = 'Generating a commit message…';
+  try {
+    const result = await request(`${state.api}/git/commit-message`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+      body: JSON.stringify({ stageAll })
+    });
+    if (token !== commitMessageRequest) return;
+    const untouched = !area.value.trim() || dialog.dataset.generated === '1';
+    if (!automatic || untouched) {
+      area.value = result.message || '';
+      dialog.dataset.generated = '1';
+      if (!automatic) area.focus();
+    }
+  } catch (error) {
+    if (token === commitMessageRequest && !automatic) dialogError(dialog, error);
+    else if (token === commitMessageRequest) dialogError(dialog, new Error(`Could not suggest a message: ${error.message}`));
+  } finally {
+    if (token === commitMessageRequest) {
+      button.disabled = false;
+      label.textContent = 'Generate';
+      area.placeholder = previousPlaceholder;
+    }
+  }
+}
+
+// Lists what the commit will contain: staged changes, plus unstaged and untracked ones when
+// "stage all" is ticked.
+function renderCommitFiles(state, dialog) {
+  const target = dialog.querySelector('[data-git-commit-files]');
+  const stageAll = dialog.querySelector('[data-git-stage-all]').checked;
+  const status = state.gitStatus || {};
+  const staged = status.staged || [];
+  const stagedPaths = new Set(staged.map(change => change.path));
+  const extra = stageAll
+    ? [...(status.unstaged || []), ...(status.untracked || [])].filter((change, index, all) =>
+        !stagedPaths.has(change.path) && all.findIndex(other => other.path === change.path) === index)
+    : [];
+  const hidden = stageAll ? 0 : new Set([...(status.unstaged || []), ...(status.untracked || [])]
+    .map(change => change.path).filter(path => !stagedPaths.has(path))).size;
+  target.replaceChildren();
+  const section = (title, changes, note) => {
+    const heading = el('div', 'workspace-commit-files-title');
+    heading.append(el('strong', '', title), el('small', '', `${changes.length}`));
+    target.append(heading);
+    if (note) target.append(el('div', 'workspace-empty', note));
+    const list = el('ul', 'workspace-commit-file-list');
+    for (const change of changes) {
+      const item = el('li');
+      item.append(changeBadge(change), el('span', 'workspace-commit-file-path',
+        change.previousPath ? `${change.previousPath} → ${change.path}` : change.path));
+      list.append(item);
+    }
+    if (changes.length) target.append(list);
+  };
+  if (!staged.length && !extra.length) {
+    target.append(el('div', 'workspace-empty', hidden
+      ? `Nothing is staged. Tick “Stage all changes” to include ${hidden} change${hidden === 1 ? '' : 's'}.`
+      : 'There are no changes to commit.'));
+    return;
+  }
+  if (staged.length) section('Staged', staged);
+  if (extra.length) section('Will be staged', extra);
+  if (hidden) target.append(el('div', 'workspace-empty', `${hidden} more change${hidden === 1 ? ' is' : 's are'} not staged and will stay out of this commit.`));
 }
 
 function openGitConfirmation(state, mode) {
