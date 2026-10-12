@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.10.0 - 2026-10-12
+
+## [0.10.0](https://github.com/wenisch-tech/Petri/compare/v0.9.0...v0.10.0) (2026-10-12)
+
+
+### Features
+
+* Introduced pull request action ([6aeff43](https://github.com/wenisch-tech/Petri/commit/6aeff43f064a2b7c1951d5cf76461bcdc11438a4))
+
+
+### Bug Fixes
+
+* convenience features for restarting failed automation runs + minor improvements for loopguard handling. Also fixed problem leading to unsuccessfl tool calls on submit review ([34e488d](https://github.com/wenisch-tech/Petri/commit/34e488d5a83a126f5bf1f8d2dc3a25b54bc99874))
+* ensure only pull request of the current project are reviewed ([f98d318](https://github.com/wenisch-tech/Petri/commit/f98d3189ab2d2b784721e0a6e10025275a8e86e8))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.10.0
+
+
 ## v0.9.0 - 2026-10-12
 
 ## [0.9.0](https://github.com/wenisch-tech/Petri/compare/v0.8.1...v0.9.0) (2026-10-12)
