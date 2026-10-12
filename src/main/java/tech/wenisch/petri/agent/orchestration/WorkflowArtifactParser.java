@@ -69,8 +69,40 @@ class WorkflowArtifactParser {
     }
     if (!"PLAN".equals(kind)) throw new IllegalArgumentException("Planner kind must be QUESTIONS or PLAN");
     text(root, "title"); text(root, "objective"); array(root, "steps", 1, 100);
-    array(root, "acceptanceCriteria", 1, 100);
+    normalizeCriteria(root, array(root, "acceptanceCriteria", 1, 100));
     return WorkflowArtifactKind.PLAN;
+  }
+
+  /**
+   * Gives every acceptance criterion a stable id. Strings become {"id":"ACn","text":...}; objects
+   * keep their id. The stored plan always has the object form so later stages can refer to ids.
+   */
+  private void normalizeCriteria(JsonNode root, JsonNode criteria) {
+    if (!(root instanceof tools.jackson.databind.node.ObjectNode object)) return;
+    tools.jackson.databind.node.ArrayNode normalized = mapper.createArrayNode();
+    Set<String> seen = new LinkedHashSet<>();
+    int position = 0;
+    for (JsonNode item : criteria) {
+      position++;
+      String id = "AC" + position;
+      String text;
+      if (item.isTextual()) {
+        text = item.asText();
+      } else if (item.isObject()) {
+        String given = item.path("id").asText("").strip();
+        if (!given.isEmpty()) id = given;
+        text = item.path("text").asText("");
+      } else {
+        throw new IllegalArgumentException("Acceptance criteria must be text or {id, text}");
+      }
+      if (text.isBlank()) throw new IllegalArgumentException("Acceptance criterion " + id + " has no text");
+      if (id.length() > 64 || !id.matches("[A-Za-z0-9_.-]+")) {
+        throw new IllegalArgumentException("Acceptance criterion id is invalid: " + id);
+      }
+      if (!seen.add(id)) throw new IllegalArgumentException("Duplicate acceptance criterion id: " + id);
+      normalized.addObject().put("id", id).put("text", text.strip());
+    }
+    object.set("acceptanceCriteria", normalized);
   }
 
   private WorkflowArtifactKind validateVerdict(JsonNode root, WorkflowArtifactKind kind) {
@@ -117,6 +149,20 @@ class WorkflowArtifactParser {
       throw new IllegalArgumentException("Review decision is invalid");
     }
     text(root, "summary"); array(root, "findings", 0, 200);
+    for (JsonNode entry : array(root, "planCoverage", 0, 100)) {
+      text(entry, "criterionId");
+      String status = text(entry, "status");
+      if (!java.util.Set.of("MET", "PARTIAL", "NOT_MET").contains(status)) {
+        throw new IllegalArgumentException("planCoverage status must be MET, PARTIAL, or NOT_MET");
+      }
+      for (JsonNode evidence : array(entry, "evidence", 0, 20)) {
+        String type = text(evidence, "type");
+        if (!java.util.Set.of("TEST", "FILE").contains(type)) {
+          throw new IllegalArgumentException("planCoverage evidence type must be TEST or FILE");
+        }
+        text(evidence, "ref");
+      }
+    }
     return WorkflowArtifactKind.REVIEW;
   }
 

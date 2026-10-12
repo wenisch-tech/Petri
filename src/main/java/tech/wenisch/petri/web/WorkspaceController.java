@@ -114,22 +114,20 @@ public class WorkspaceController {
         summaries = runs.chatSummaries(selectedChat.id());
       }
     }
-    List<ModelCredentialStatus> configuredModels = java.util.Arrays.stream(ModelProvider.values())
-        .map(modelCredentials::status).filter(ModelCredentialStatus::configured).toList();
+    List<ModelCredentialStatus> configuredModels = modelCredentials.usable(actor.getId());
     ModelCredentialStatus preferredModel = configuredModels.stream()
         .filter(value -> value.provider() == ModelProvider.OLLAMA).findFirst()
         .orElseGet(() -> configuredModels.isEmpty()
             ? modelCredentials.status(ModelProvider.OLLAMA) : configuredModels.getFirst());
     WorkspaceModelPreferenceView savedPreference = preferences.get(projectId, actor.getId());
-    ModelCredentialStatus selectedModel = savedPreference != null
-        ? configuredModels.stream().filter(value -> value.provider() == savedPreference.provider())
-            .findFirst().orElse(preferredModel)
-        : preferredModel;
-    String selectedModelName = savedPreference != null
-        && selectedModel.provider() == savedPreference.provider()
-        ? savedPreference.model() : selectedModel.model();
-    boolean savedModelUnavailable = savedPreference != null
-        && configuredModels.stream().noneMatch(value -> value.provider() == savedPreference.provider());
+    ModelCredentialStatus savedMatch = savedPreference == null ? null : configuredModels.stream()
+        .filter(value -> savedPreference.providerInstanceId() != null
+            ? value.id().equals(savedPreference.providerInstanceId())
+            : value.provider() == savedPreference.provider())
+        .findFirst().orElse(null);
+    ModelCredentialStatus selectedModel = savedMatch != null ? savedMatch : preferredModel;
+    String selectedModelName = savedMatch != null ? savedPreference.model() : selectedModel.model();
+    boolean savedModelUnavailable = savedPreference != null && savedMatch == null;
     List<GitBranchView> branches = gitData(() -> git.branches(projectId), List.of());
     WorkspaceGitStatusView gitStatus = selectedWorktree == null ? null
         : gitData(() -> git.status(selectedWorktree.id()), null);

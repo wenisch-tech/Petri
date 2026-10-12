@@ -1,60 +1,36 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="_csrf" th:content="${_csrf.token}">
-  <meta name="_csrf_header" th:content="${_csrf.headerName}">
-  <title>Audit · Petri</title>
-  <link rel="stylesheet" href="/css/petri.css">
-  <script defer src="/js/petri.js"></script>
-</head>
+<head th:replace="~{fragments/layout :: head('Audit log')}"></head>
 <body>
-  <header class="topbar">
-    <div class="page flex items-center justify-between py-4">
-      <a href="/" class="flex items-center gap-3 font-semibold">
-        <span class="grid size-9 place-items-center rounded-xl bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span>
-        <span>Petri</span>
-      </a>
-      <nav class="hidden items-center gap-1 sm:flex" aria-label="Primary navigation">
-        <a class="nav-link" href="/chat">Chat</a>
-        <a class="nav-link" href="/projects">Projects</a>
-        <a class="nav-link" href="/runs">Runs</a>
-        <a class="nav-link" href="/model-settings">Models</a>
-        <a class="nav-link bg-ink-800 text-ink-100" href="/audit">Audit</a>
-        <a class="nav-link" href="/api-keys">API keys</a>
-      </nav>
-      <div class="flex items-center gap-2">
-        <button class="btn-secondary" type="button" x-data @click="$store.theme.toggle()" aria-label="Toggle theme"><i data-lucide="Sun"></i></button>
-        <form method="post" action="/logout">
-          <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-          <button class="btn-secondary" type="submit"><i data-lucide="LogOut"></i> Sign out</button>
-        </form>
+<header th:replace="~{fragments/layout :: topbar('admin')}"></header>
+<div th:replace="~{fragments/layout :: adminBanner}"></div>
+
+<div class="area-layout">
+  <nav th:replace="~{fragments/layout :: adminNav('audit')}"></nav>
+
+  <main class="min-w-0">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Audit log</h1>
+        <p class="page-description">The latest 100 security- and project-relevant actions recorded by Petri.</p>
       </div>
     </div>
-  </header>
 
-  <main class="page">
-    <section class="panel p-6 sm:p-8">
-      <p class="text-xs font-bold uppercase tracking-[.2em] text-brand-400">Accountability</p>
-      <h1 class="mt-2 flex items-center gap-3 text-3xl font-semibold tracking-tight"><i data-lucide="History"></i> Audit log</h1>
-      <p class="mt-2 text-ink-500">The latest security- and project-relevant actions recorded by Petri.</p>
-
-      <p th:if="${#lists.isEmpty(events)}" class="mt-8 rounded-xl border border-dashed border-ink-700 p-8 text-center text-sm text-ink-500">No audit events have been recorded.</p>
-      <div th:unless="${#lists.isEmpty(events)}" class="table-shell mt-8">
-        <table class="data-table">
-          <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Summary</th></tr></thead>
-          <tbody>
-            <tr th:each="event : ${events}">
-              <td class="whitespace-nowrap font-mono text-xs" th:text="${event.occurredAt}">time</td>
-              <td th:text="${event.actorEmail}">actor</td>
-              <td><code th:text="${event.action}">ACTION</code></td>
-              <td th:text="${event.summary}">Summary</td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
+    <div th:if="${#lists.isEmpty(events)}" class="empty-state"><i data-lucide="ScrollText"></i><h2>No audit events yet</h2></div>
+    <div th:unless="${#lists.isEmpty(events)}" class="table-shell bg-ink-900">
+      <table class="data-table">
+        <thead><tr><th>Time</th><th>Actor</th><th>Action</th><th>Summary</th></tr></thead>
+        <tbody>
+          <tr th:each="event : ${events}">
+            <td class="whitespace-nowrap text-xs"><time data-local th:attr="datetime=${event.occurredAt}" th:text="${event.occurredAt}">time</time></td>
+            <td class="whitespace-nowrap" th:text="${event.actorEmail}">actor</td>
+            <td><code class="text-xs" th:text="${event.action}">ACTION</code></td>
+            <td th:text="${event.summary}">Summary</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
   </main>
+</div>
 </body>
 </html>

@@ -25,6 +25,7 @@ class AgentWorkflowLedger {
   private final TestRunService tests;
   private final tech.wenisch.petri.agent.run.PackageInstallService packageInstalls;
   private final tech.wenisch.petri.agent.run.TerminalService terminalCommands;
+  private final WorkflowGoalVerifier goalVerifier;
 
   AgentWorkflowLedger(
       AgentWorkflowRepository workflows,
@@ -39,11 +40,13 @@ class AgentWorkflowLedger {
       ChangeProposalService changes,
       TestRunService tests,
       tech.wenisch.petri.agent.run.PackageInstallService packageInstalls,
-      tech.wenisch.petri.agent.run.TerminalService terminalCommands) {
+      tech.wenisch.petri.agent.run.TerminalService terminalCommands,
+      WorkflowGoalVerifier goalVerifier) {
     this.workflows = workflows; this.artifacts = artifacts; this.transitions = transitions;
     this.snapshots = snapshots; this.reservations = reservations; this.chats = chats;
     this.runs = runs; this.profiles = profiles; this.audit = audit;
     this.changes = changes; this.tests = tests; this.packageInstalls = packageInstalls; this.terminalCommands = terminalCommands;
+    this.goalVerifier = goalVerifier;
   }
 
   @Transactional
@@ -267,15 +270,45 @@ class AgentWorkflowLedger {
         .findByWorkflowIdOrderByCreatedAtAsc(workflow.id()).stream()
         .map(value -> new AgentWorkflowTransitionView(value.id(), value.fromStage(), value.toStage(),
             value.outcome(), value.actor(), value.reason(), value.createdAt())).toList();
+    List<tech.wenisch.petri.agent.run.TestRunView> testViews =
+        stageRuns.stream().flatMap(run -> tests.listForAgentRun(run.id()).stream()).toList();
     return new AgentWorkflowView(workflow.id(), workflow.chatId(), workflow.chatMessageIndex(),
         workflow.executionWorktreeId(), workflow.prompt(), workflow.status(), workflow.currentStage(),
         workflow.baselineHead(), workflow.currentPlanRevision(), workflow.approvedPlanRevision(),
         workflow.holdReason(), workflow.createdBy(), workflow.createdAt(), workflow.updatedAt(),
         workflow.completedAt(), artifactViews, transitionViews, stageRuns,
         stageRuns.stream().flatMap(run -> changes.listForAgentRun(run.id()).stream()).toList(),
-        stageRuns.stream().flatMap(run -> tests.listForAgentRun(run.id()).stream()).toList(),
+        testViews,
         stageRuns.stream().flatMap(run -> packageInstalls.listForAgentRun(run.id()).stream()).toList(),
-        stageRuns.stream().flatMap(run -> terminalCommands.listForAgentRun(run.id()).stream()).toList());
+        stageRuns.stream().flatMap(run -> terminalCommands.listForAgentRun(run.id()).stream()).toList(),
+        goals(workflow.id(), testViews));
+  }
+
+  /** Verification state of the plan's acceptance criteria, computed from the current artifacts. */
+  @Transactional(readOnly = true)
+  List<GoalVerificationView> goals(UUID workflowId) {
+    List<tech.wenisch.petri.agent.run.TestRunView> testViews = runs.workflowRuns(workflowId).stream()
+        .flatMap(run -> tests.listForAgentRun(run.id()).stream()).toList();
+    return goals(workflowId, testViews);
+  }
+
+  private List<GoalVerificationView> goals(
+      UUID workflowId, List<tech.wenisch.petri.agent.run.TestRunView> testViews) {
+    AgentWorkflowArtifact plan = newest(workflowId, WorkflowArtifactKind.PLAN);
+    if (plan == null) return List.of();
+    AgentWorkflowArtifact review = newest(workflowId, WorkflowArtifactKind.REVIEW);
+    AgentWorkflowArtifact diff = newest(workflowId, WorkflowArtifactKind.TASK_DIFF);
+    // A review only speaks for the plan and the changes that existed when it was written.
+    boolean stale = review != null
+        && ((diff != null && diff.createdAt().isAfter(review.createdAt()))
+            || plan.createdAt().isAfter(review.createdAt()));
+    return goalVerifier.verify(
+        plan.contentJson(), review == null ? null : review.contentJson(), stale,
+        diff == null ? null : diff.contentJson(), testViews);
+  }
+
+  private AgentWorkflowArtifact newest(UUID workflowId, WorkflowArtifactKind kind) {
+    return artifacts.findFirstByWorkflowIdAndKindOrderByRevisionDesc(workflowId, kind).orElse(null);
   }
 
   private AgentWorkflow locked(UUID id) {

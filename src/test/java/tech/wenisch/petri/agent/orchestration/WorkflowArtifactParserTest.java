@@ -81,4 +81,58 @@ class WorkflowArtifactParserTest {
         .isInstanceOf(IllegalArgumentException.class)
         .hasMessageContaining("HOLD");
   }
+
+  @Test
+  void numbersLegacyCriteriaAndKeepsGivenIds() {
+    var legacy = parser.parse(AgentWorkflowStage.PLANNING, """
+        {"kind":"PLAN","title":"t","objective":"o","steps":["s"],\
+        "acceptanceCriteria":["tests pass","docs updated"]}
+        """);
+    var criteria = legacy.value().path("acceptanceCriteria");
+    assertThat(criteria.get(0).path("id").asText()).isEqualTo("AC1");
+    assertThat(criteria.get(1).path("text").asText()).isEqualTo("docs updated");
+    assertThat(legacy.json()).contains("\"id\":\"AC2\"");
+
+    var explicit = parser.parse(AgentWorkflowStage.PLANNING, """
+        {"kind":"PLAN","title":"t","objective":"o","steps":["s"],\
+        "acceptanceCriteria":[{"id":"LOGIN","text":"login works"},"second"]}
+        """);
+    assertThat(explicit.value().path("acceptanceCriteria").get(0).path("id").asText())
+        .isEqualTo("LOGIN");
+    assertThat(explicit.value().path("acceptanceCriteria").get(1).path("id").asText())
+        .isEqualTo("AC2");
+  }
+
+  @Test
+  void rejectsDuplicateOrBlankCriteria() {
+    assertThatThrownBy(() -> parser.parse(AgentWorkflowStage.PLANNING, """
+        {"kind":"PLAN","title":"t","objective":"o","steps":["s"],\
+        "acceptanceCriteria":[{"id":"A","text":"x"},{"id":"A","text":"y"}]}
+        """)).isInstanceOf(IllegalArgumentException.class).hasMessageContaining("Duplicate");
+    assertThatThrownBy(() -> parser.parse(AgentWorkflowStage.PLANNING, """
+        {"kind":"PLAN","title":"t","objective":"o","steps":["s"],\
+        "acceptanceCriteria":[{"id":"A","text":"  "}]}
+        """)).isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void requiresWellFormedPlanCoverageInReviews() {
+    var review = parser.parse(AgentWorkflowStage.REVIEWING, """
+        {"decision":"APPROVED","summary":"ok","findings":[],"planCoverage":[\
+        {"criterionId":"AC1","status":"MET","evidence":[{"type":"TEST","ref":"abc"}],"note":"n"}]}
+        """);
+    assertThat(review.kind()).isEqualTo(WorkflowArtifactKind.REVIEW);
+
+    assertThatThrownBy(() -> parser.parse(AgentWorkflowStage.REVIEWING,
+        "{\"decision\":\"APPROVED\",\"summary\":\"ok\",\"findings\":[]}"))
+        .isInstanceOf(IllegalArgumentException.class).hasMessageContaining("planCoverage");
+    assertThatThrownBy(() -> parser.parse(AgentWorkflowStage.REVIEWING, """
+        {"decision":"APPROVED","summary":"ok","findings":[],"planCoverage":[\
+        {"criterionId":"AC1","status":"DONE","evidence":[]}]}
+        """)).isInstanceOf(IllegalArgumentException.class);
+    assertThatThrownBy(() -> parser.parse(AgentWorkflowStage.REVIEWING, """
+        {"decision":"APPROVED","summary":"ok","findings":[],"planCoverage":[\
+        {"criterionId":"AC1","status":"MET","evidence":[{"type":"URL","ref":"x"}]}]}
+        """)).isInstanceOf(IllegalArgumentException.class);
+  }
 }

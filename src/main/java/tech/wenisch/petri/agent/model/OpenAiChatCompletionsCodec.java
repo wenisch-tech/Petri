@@ -74,7 +74,7 @@ final class OpenAiChatCompletionsCodec {
     String[] responseId = {null};
     String[] finish = {null};
     int[] usage = {0, 0};
-    transport.postSse(provider, "/chat/completions", encodeStreaming(request), data -> {
+    transport.postSse(provider, request.credential(), "/chat/completions", encodeStreaming(request), data -> {
       if ("[DONE]".equals(data)) return;
       try {
         JsonNode root = objectMapper.readTree(data);

@@ -6,6 +6,7 @@ import org.springframework.stereotype.Service;
 import tech.wenisch.petri.agent.event.AgentRunEventService;
 import tech.wenisch.petri.agent.event.AgentRunEventType;
 import tech.wenisch.petri.agent.model.ModelClient;
+import tech.wenisch.petri.agent.model.ModelCredentialRef;
 import tech.wenisch.petri.agent.model.ModelClientException;
 import tech.wenisch.petri.agent.model.ModelClientRegistry;
 import tech.wenisch.petri.agent.model.ModelRequest;
@@ -134,7 +135,7 @@ public class AgentRunExecutor {
           continue;
         }
 
-        ModelRequest request = request(state);
+        ModelRequest request = request(state).withCredential(credentialOf(state));
         ModelClient client = modelClients.require(state.provider());
         UUID chatId = state.chatId();
         UUID workflowId = state.workflowId();
@@ -213,6 +214,13 @@ public class AgentRunExecutor {
       }
     }
     return stateService.cancelIfRequested(runId, claimId, actor);
+  }
+
+  /** Runs that predate provider instances resolve by kind inside the transport. */
+  private static ModelCredentialRef credentialOf(AgentExecutionState state) {
+    return state.providerInstanceId() == null
+        ? null
+        : new ModelCredentialRef(state.providerInstanceId(), state.createdBy());
   }
 
   private ModelRequest request(AgentExecutionState state) {

@@ -1,97 +1,112 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title th:text="|${project.name} settings · Petri|">Project settings · Petri</title>
-  <link rel="stylesheet" href="/css/petri.css">
-  <script defer src="/js/petri.js"></script>
-</head>
+<head th:replace="~{fragments/layout :: head(|${project.name} settings|)}"></head>
 <body>
-  <header class="topbar">
-    <div class="page flex items-center justify-between py-4">
-      <a href="/" class="flex items-center gap-3 font-semibold">
-        <span class="grid size-9 place-items-center rounded-xl bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span>
-        <span>Petri</span>
-      </a>
-      <button class="btn-secondary" type="button" x-data @click="$store.theme.toggle()" aria-label="Toggle theme"><i data-lucide="Sun"></i></button>
+<header th:replace="~{fragments/layout :: topbar('projects')}"></header>
+
+<main class="page-narrow">
+  <a class="back-link" href="/projects"><i data-lucide="ArrowLeft"></i> Projects</a>
+  <div class="page-header">
+    <div>
+      <h1 class="page-title" th:text="${project.name}">Project</h1>
+      <p class="page-description">Repository source, mirror and credentials for this project.</p>
     </div>
-  </header>
+    <div class="page-actions">
+      <a class="btn-secondary" th:href="@{/workspace/projects/{id}(id=${project.id})}"><i data-lucide="FileCode2"></i> Open workspace</a>
+    </div>
+  </div>
 
-  <main class="page max-w-3xl">
-    <a class="mb-5 inline-flex items-center gap-2 text-sm text-ink-500 hover:text-ink-100" href="/projects"><i data-lucide="ArrowLeft"></i> Back to projects</a>
-    <section class="panel p-6 sm:p-8">
-      <p class="text-xs font-bold uppercase tracking-[.2em] text-brand-400">Project settings</p>
-      <h1 class="mt-2 text-3xl font-semibold tracking-tight" th:text="${project.name}">Project</h1>
-      <p class="mt-2 text-ink-500">Configure HTTPS credentials for future mirror and worktree operations.</p>
+  <div th:replace="~{fragments/layout :: alert('success', ${credentialSaved} ? 'Git credentials were encrypted and saved.' : null)}"></div>
+  <div th:replace="~{fragments/layout :: alert('success', ${credentialRemoved} ? 'Git credentials were removed.' : null)}"></div>
+  <div th:replace="~{fragments/layout :: alert('success', ${mirrorSynchronized} ? 'Repository mirror synchronized.' : null)}"></div>
+  <div th:replace="~{fragments/layout :: alert('error', ${mirrorError})}"></div>
 
-      <div th:if="${credentialSaved}" class="mt-6 rounded-xl border border-good-500/30 bg-good-500/10 p-4 text-sm text-good-500">Git credentials were encrypted and saved.</div>
-      <div th:if="${credentialRemoved}" class="mt-6 rounded-xl border border-good-500/30 bg-good-500/10 p-4 text-sm text-good-500">Git credentials were removed.</div>
-
-      <div th:if="${providerSource != null}" class="mt-6 rounded-xl border border-brand-500/30 bg-brand-500/10 p-4 text-sm">
-        <strong>Connected account source:</strong> <span th:text="${providerSource.fullName}">owner/repository</span>
-        <span class="ml-2 badge" th:text="${providerSource.credentialMode}">CONNECTION</span>
-        <p class="mt-2 text-ink-500">A disconnected or expired account blocks remote Git operations. Petri never falls back silently.</p>
-        <form th:if="${providerSource.credentialMode.name() == 'CONNECTION'}" class="mt-3" method="post" th:action="@{/projects/{id}/credential/use-simple(id=${project.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-secondary" type="submit"><i data-lucide="KeyRound"></i> Explicitly use Simple Git credentials</button></form>
-      </div>
-      <div class="mt-8 rounded-xl border border-ink-700 p-5">
-        <div class="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <h2 class="font-semibold">Repository mirror</h2>
-            <p class="mt-1 text-sm text-ink-500" th:text="${mirror.initialized} ? 'Mirror initialized. Synchronize to fetch and prune remote refs.' : 'No mirror initialized yet.'">No mirror initialized yet.</p>
-          </div>
-          <form method="post" th:action="@{/projects/{id}/mirror/sync(id=${project.id})}">
-            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-            <button class="btn-primary" type="submit"><i data-lucide="RefreshCw"></i> <span th:text="${mirror.initialized} ? 'Synchronize' : 'Clone mirror'">Clone mirror</span></button>
-          </form>
-        </div>
-        <p th:if="${mirrorSynchronized}" class="mt-4 text-sm text-good-500">Repository mirror synchronized.</p>
-        <p th:if="${mirrorError}" class="mt-4 break-words text-sm text-red-300" th:text="${mirrorError}">Mirror synchronization failed.</p>
-      </div>
-
-      <div class="mt-8 rounded-xl border border-ink-700 p-5">
-        <div class="flex flex-wrap items-start justify-between gap-3">
-          <div>
-            <h2 class="font-semibold">Stored credential</h2>
-            <p th:if="${credential.configured}" class="mt-1 text-sm text-ink-500">
-              <span th:text="${credential.authenticationType.label}">Access token</span>
-              <span th:if="${credential.username}" th:text="| · ${credential.username}|"> · user</span>
-            </p>
-            <p th:unless="${credential.configured}" class="mt-1 text-sm text-ink-500">No credential configured.</p>
-          </div>
-          <form th:if="${credential.configured}" method="post" th:action="@{/projects/{id}/credential/delete(id=${project.id})}">
-            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-            <button class="btn-secondary" type="submit"><i data-lucide="Trash2"></i> Remove</button>
-          </form>
-        </div>
-      </div>
-
-      <form class="mt-8 space-y-6" method="post" th:action="@{/projects/{id}/credential(id=${project.id})}" th:object="${gitCredentialForm}">
+  <section class="card">
+    <div class="card-body">
+      <h2 class="section-title">Source</h2>
+      <dl class="dl-grid mt-4">
+        <div><dt>Repository</dt><dd class="font-mono text-xs" th:text="${project.repositoryUri}">uri</dd></div>
+        <div><dt>Default branch</dt><dd th:text="${project.defaultBranch}">main</dd></div>
+        <div th:if="${providerSource != null}"><dt>Connected repository</dt><dd th:text="${providerSource.fullName}">owner/repository</dd></div>
+        <div th:if="${providerSource != null}"><dt>Credential mode</dt><dd th:text="${providerSource.credentialMode.name() == 'CONNECTION'} ? 'Connected Git account' : 'Project credential'">CONNECTION</dd></div>
+      </dl>
+      <p th:if="${providerSource != null}" class="mt-4 text-xs text-ink-500">If the connected account is disconnected or expires, remote Git operations stop. Petri never falls back to another credential silently.</p>
+    </div>
+    <div class="card-footer" th:if="${providerSource != null && providerSource.credentialMode.name() == 'CONNECTION'}">
+      <form method="post" th:action="@{/projects/{id}/credential/use-simple(id=${project.id})}" data-confirm="Switch this project to its own credential instead of the connected account?">
         <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-        <p th:if="${formError}" class="rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300" th:text="${formError}">Unable to save credential.</p>
-        <label class="block">
-          <span class="mb-2 block text-sm font-medium">Authentication type</span>
-          <select class="field" th:field="*{authenticationType}">
-            <option th:each="type : ${authenticationTypes}" th:value="${type}" th:text="${type.label}">Access token</option>
-          </select>
-          <span class="field-error" th:if="${#fields.hasErrors('authenticationType')}" th:errors="*{authenticationType}">Invalid type</span>
-        </label>
-        <label class="block">
-          <span class="mb-2 block text-sm font-medium">Username <span class="text-ink-500">(optional)</span></span>
-          <input class="field" type="text" th:field="*{username}" maxlength="320" autocomplete="username" placeholder="git">
-          <span class="field-error" th:if="${#fields.hasErrors('username')}" th:errors="*{username}">Invalid username</span>
-        </label>
-        <label class="block">
-          <span class="mb-2 block text-sm font-medium">Secret</span>
-          <input class="field" type="password" name="secret" maxlength="12000" autocomplete="new-password" required>
-          <span class="mt-1.5 block text-xs text-ink-500">The current secret is never displayed. Saving replaces it completely.</span>
-          <span class="field-error" th:if="${#fields.hasErrors('secret')}" th:errors="*{secret}">Invalid secret</span>
-        </label>
-        <div class="flex justify-end border-t border-ink-700 pt-6">
-          <button class="btn-primary" type="submit"><i data-lucide="LockKeyhole"></i> Encrypt and save</button>
-        </div>
+        <button class="btn-ghost" type="submit"><i data-lucide="KeyRound"></i> Use a project credential instead</button>
       </form>
-    </section>
-  </main>
+    </div>
+  </section>
+
+  <section class="card mt-4">
+    <div class="card-body flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <h2 class="section-title">Repository mirror</h2>
+        <p class="section-description" th:text="${mirror.initialized} ? 'Initialized. Synchronize to fetch and prune remote refs.' : 'Not initialized yet.'">Not initialized yet.</p>
+      </div>
+      <form method="post" th:action="@{/projects/{id}/mirror/sync(id=${project.id})}">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        <button class="btn-secondary" type="submit"><i data-lucide="RefreshCw"></i> <span th:text="${mirror.initialized} ? 'Synchronize' : 'Clone mirror'">Clone mirror</span></button>
+      </form>
+    </div>
+  </section>
+
+  <section class="card mt-4">
+    <div class="card-body flex flex-wrap items-center justify-between gap-4">
+      <div>
+        <h2 class="section-title">Project credential</h2>
+        <p th:if="${credential.configured}" class="section-description">
+          <span th:text="${credential.authenticationType.label}">Access token</span><span th:if="${credential.username}" th:text="| · ${credential.username}|"> · user</span>
+        </p>
+        <p th:unless="${credential.configured}" class="section-description">No credential stored. Public repositories and connected accounts don't need one.</p>
+      </div>
+      <div class="flex gap-2">
+        <form th:if="${credential.configured}" method="post" th:action="@{/projects/{id}/credential/delete(id=${project.id})}" data-confirm="Remove the stored credential?">
+          <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+          <button class="btn-ghost" type="submit"><i data-lucide="Trash2"></i> Remove</button>
+        </form>
+        <button class="btn-secondary" type="button" data-dialog-open="credential-dialog">
+          <i data-lucide="LockKeyhole"></i> <span th:text="${credential.configured} ? 'Replace' : 'Add credential'">Add credential</span>
+        </button>
+      </div>
+    </div>
+  </section>
+</main>
+
+<dialog id="credential-dialog" class="dialog">
+  <form class="dialog-panel" method="post" th:action="@{/projects/{id}/credential(id=${project.id})}" th:object="${gitCredentialForm}">
+    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+    <div class="dialog-header">
+      <div><h2>Project credential</h2><p>Encrypted at rest and never displayed again. Saving replaces any stored secret.</p></div>
+      <button class="icon-button" formmethod="dialog" formnovalidate aria-label="Close"><i data-lucide="X"></i></button>
+    </div>
+    <div class="dialog-body">
+      <div th:replace="~{fragments/layout :: alert('error', ${formError})}"></div>
+      <div>
+        <label class="label" for="authenticationType">Authentication type</label>
+        <select class="field" th:field="*{authenticationType}">
+          <option th:each="type : ${authenticationTypes}" th:value="${type}" th:text="${type.label}">Access token</option>
+        </select>
+        <span class="field-error" th:if="${#fields.hasErrors('authenticationType')}" th:errors="*{authenticationType}">Invalid type</span>
+      </div>
+      <div>
+        <label class="label" for="username">Username <span class="label-optional">(optional)</span></label>
+        <input class="field" type="text" th:field="*{username}" maxlength="320" autocomplete="username" placeholder="git">
+        <span class="field-error" th:if="${#fields.hasErrors('username')}" th:errors="*{username}">Invalid username</span>
+      </div>
+      <div>
+        <label class="label" for="credential-secret">Secret</label>
+        <input id="credential-secret" class="field" type="password" name="secret" maxlength="12000" autocomplete="new-password" required>
+        <span class="field-error" th:if="${#fields.hasErrors('secret')}" th:errors="*{secret}">Invalid secret</span>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn-secondary" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn-primary" type="submit"><i data-lucide="LockKeyhole"></i> Encrypt and save</button>
+    </div>
+  </form>
+</dialog>
 </body>
 </html>

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:fragment="head(title)">
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="_csrf" th:if="${_csrf != null}" th:content="${_csrf.token}">
+  <meta name="_csrf_header" th:if="${_csrf != null}" th:content="${_csrf.headerName}">
+  <title th:text="${title != null} ? |${title} · Petri| : 'Petri'">Petri</title>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
+  <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+  <link rel="stylesheet" href="/css/petri.css">
+  <script defer src="/js/petri.js"></script>
+</head>
+<body>
+
+<!-- Theme toggle with an icon that reflects the current mode. -->
+<button th:fragment="themeToggle" class="icon-button" type="button" x-data @click="$store.theme.toggle()" title="Toggle theme" aria-label="Toggle theme">
+  <span x-show="$store.theme.mode === 'dark'"><i data-lucide="Sun"></i></span>
+  <span x-show="$store.theme.mode !== 'dark'" x-cloak><i data-lucide="Moon"></i></span>
+</button>
+
+<!-- Account menu: personal settings live here, administration is a separate destination. -->
+<div th:fragment="userMenu" class="relative" x-data="{ open: false }" @keydown.escape.window="open = false" @click.outside="open = false">
+  <button class="app-avatar" type="button" @click="open = !open" :aria-expanded="open" aria-haspopup="menu" aria-label="Account menu"
+          th:text="${currentUserEmail != null && !#strings.isEmpty(currentUserEmail)} ? ${#strings.substring(currentUserEmail, 0, 1)} : '?'">U</button>
+  <div class="app-menu" x-show="open" x-cloak x-transition.origin.top.right role="menu">
+    <div class="app-menu-header">
+      <strong th:text="${currentUserEmail}">user@example.com</strong>
+      <span th:text="${isInstanceAdmin} ? 'Instance administrator' : 'Member'">Member</span>
+    </div>
+    <p class="app-menu-label">Your settings</p>
+    <a href="/git-accounts" role="menuitem"><i data-lucide="PlugZap"></i> Git accounts</a>
+    <a th:unless="${isInstanceAdmin}" href="/git-provider-instances" role="menuitem"><i data-lucide="Server"></i> Self-hosted Git</a>
+    <a href="/model-providers" role="menuitem"><i data-lucide="Cpu"></i> Model providers</a>
+    <a href="/api-keys" role="menuitem"><i data-lucide="KeyRound"></i> API keys</a>
+    <th:block th:if="${isInstanceAdmin}">
+      <div class="app-menu-separator"></div>
+      <a class="is-admin" href="/admin" role="menuitem"><i data-lucide="ShieldCheck"></i> Administration</a>
+    </th:block>
+    <div class="app-menu-separator"></div>
+    <form method="post" action="/logout">
+      <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+      <button type="submit" role="menuitem"><i data-lucide="LogOut"></i> Sign out</button>
+    </form>
+  </div>
+</div>
+
+<!-- Primary application header. `active` is one of: home, projects, runs, settings, admin. -->
+<header th:fragment="topbar(active)" class="app-topbar">
+  <div class="app-topbar-inner">
+    <a href="/" class="app-brand"><img class="app-logo" src="/img/petri-logo-64.png" alt="" width="36" height="36"><span class="hidden sm:inline">Petri</span></a>
+    <nav class="app-nav" aria-label="Primary navigation">
+      <a href="/" th:classappend="${active == 'home'} ? 'is-active'" th:attr="aria-current=${active == 'home'} ? 'page'">Dashboard</a>
+      <a href="/projects" th:classappend="${active == 'projects'} ? 'is-active'" th:attr="aria-current=${active == 'projects'} ? 'page'">Projects</a>
+      <a href="/runs" th:classappend="${active == 'runs'} ? 'is-active'" th:attr="aria-current=${active == 'runs'} ? 'page'">Runs</a>
+    </nav>
+    <div class="app-topbar-actions">
+      <a th:if="${isInstanceAdmin}" href="/admin" class="app-admin-link" th:classappend="${active == 'admin'} ? 'is-active'" title="Instance administration">
+        <i data-lucide="ShieldCheck"></i><span class="hidden sm:inline">Admin</span>
+      </a>
+      <button th:replace="~{fragments/layout :: themeToggle}"></button>
+      <div th:replace="~{fragments/layout :: userMenu}"></div>
+    </div>
+  </div>
+</header>
+
+<!-- Marks every administration page so instance-wide changes are never mistaken for personal ones. -->
+<div th:fragment="adminBanner" class="admin-banner">
+  <div class="admin-banner-inner">
+    <i data-lucide="ShieldCheck"></i>
+    <strong>Administration</strong>
+    <span>Changes here apply to every Petri user.</span>
+  </div>
+</div>
+
+<!-- Personal settings navigation. -->
+<nav th:fragment="settingsNav(active)" class="side-nav" aria-label="Settings">
+  <p class="side-nav-label">Your settings</p>
+  <a href="/git-accounts" th:classappend="${active == 'git-accounts'} ? 'is-active'"><i data-lucide="PlugZap"></i> Git accounts</a>
+  <a th:unless="${isInstanceAdmin}" href="/git-provider-instances" th:classappend="${active == 'git-instances'} ? 'is-active'"><i data-lucide="Server"></i> Self-hosted Git</a>
+  <a href="/model-providers" th:classappend="${active == 'model-providers'} ? 'is-active'"><i data-lucide="Cpu"></i> Model providers</a>
+  <a href="/api-keys" th:classappend="${active == 'api-keys'} ? 'is-active'"><i data-lucide="KeyRound"></i> API keys</a>
+</nav>
+
+<!-- Instance administration navigation. -->
+<nav th:fragment="adminNav(active)" class="side-nav is-admin" aria-label="Administration">
+  <p class="side-nav-label">Administration</p>
+  <a href="/model-settings" th:classappend="${active == 'models'} ? 'is-active'"><i data-lucide="Cpu"></i> Model providers</a>
+  <a href="/sandbox-profiles" th:classappend="${active == 'sandboxes'} ? 'is-active'"><i data-lucide="Box"></i> Test sandboxes</a>
+  <a href="/git-provider-instances" th:classappend="${active == 'git-instances'} ? 'is-active'"><i data-lucide="ServerCog"></i> Git providers</a>
+  <a href="/audit" th:classappend="${active == 'audit'} ? 'is-active'"><i data-lucide="ScrollText"></i> Audit log</a>
+</nav>
+
+<!-- Status pill with a colour that reflects the meaning of a run, test or proposal state. -->
+<span th:fragment="statusBadge(status)" class="badge whitespace-nowrap"
+      th:with="value=${status == null ? '' : status.toString()}"
+      th:classappend="${ {'FAILED','ERROR','REJECTED'}.contains(value) } ? 'badge-danger'
+        : (${ {'PROPOSED','BUDGET_EXHAUSTED','CONFLICT','TIMED_OUT','CANCELLATION_REQUESTED'}.contains(value) } ? 'badge-warn'
+        : (${ {'PENDING','RUNNING','APPROVED'}.contains(value) } ? 'badge-brand'
+        : (${ {'COMPLETED','APPLIED','PASSED','ACTIVE'}.contains(value) } ? '' : 'badge-neutral')))"
+      th:text="${#strings.capitalize(#strings.toLowerCase(#strings.replace(value, '_', ' ')))}">Status</span>
+
+<!-- Flash message. `kind` is success, error, warning or info. -->
+<div th:fragment="alert(kind, message)" th:if="${message != null && message != ''}" class="alert" th:classappend="|alert-${kind}|" th:attr="role=${kind == 'error'} ? 'alert' : 'status'">
+  <i th:attr="data-lucide=${kind == 'error'} ? 'CircleAlert' : (${kind == 'success'} ? 'CircleCheck' : 'Info')"></i>
+  <span th:text="${message}">Message</span>
+</div>
+
+</body>
+</html>

@@ -1,119 +1,109 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="_csrf" th:content="${_csrf.token}">
-  <meta name="_csrf_header" th:content="${_csrf.headerName}">
-  <title>Agent run · Petri</title>
-  <link rel="stylesheet" href="/css/petri.css">
-  <script defer src="/js/petri.js"></script>
-</head>
+<head th:replace="~{fragments/layout :: head('Agent run')}"></head>
 <body>
-  <header class="topbar">
-    <div class="page flex items-center justify-between py-4">
-      <a href="/" class="flex items-center gap-3 font-semibold">
-        <span class="grid size-9 place-items-center rounded-xl bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span>
-        <span>Petri</span>
-      </a>
-      <nav class="hidden items-center gap-1 sm:flex" aria-label="Primary navigation">
-        <a class="nav-link" href="/chat">Chat</a>
-        <a class="nav-link" href="/projects">Projects</a>
-        <a class="nav-link bg-ink-800 text-ink-100" href="/runs">Runs</a>
-        <a th:if="${isInstanceAdmin}" class="nav-link" href="/model-settings">Models</a>
-        <a th:if="${isInstanceAdmin}" class="nav-link" href="/audit">Audit</a>
-        <a class="nav-link" href="/api-keys">API keys</a>
-        <a class="nav-link" href="/git-accounts">Git accounts</a>
-      </nav>
-      <a class="btn-secondary" href="/runs"><i data-lucide="ArrowLeft"></i> All runs</a>
+<header th:replace="~{fragments/layout :: topbar('runs')}"></header>
+
+<main class="page">
+  <a class="back-link" href="/runs"><i data-lucide="ArrowLeft"></i> Runs</a>
+  <div class="page-header">
+    <div class="min-w-0">
+      <div class="flex items-center gap-3">
+        <h1 class="page-title">Agent run</h1>
+        <span th:replace="~{fragments/layout :: statusBadge(${run.status})}"></span>
+      </div>
+      <p class="mt-1.5 font-mono text-xs text-ink-500" th:text="${run.id}">run id</p>
     </div>
-  </header>
+    <div class="page-actions" th:if="${run.chatId != null}">
+      <a class="btn-secondary" th:href="@{/chat(chat=${run.chatId})}"><i data-lucide="MessageSquare"></i> Open chat</a>
+    </div>
+  </div>
 
-  <main class="page space-y-6">
-    <section class="panel p-6 sm:p-8">
-      <div class="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <p class="text-xs font-bold uppercase tracking-[.2em] text-brand-400">Agent run</p>
-          <h1 class="mt-2 text-2xl font-semibold tracking-tight" th:text="${run.id}">run id</h1>
-          <p class="mt-2 text-sm text-ink-500">Worktree <code th:text="${run.worktreeId}">worktree</code></p>
+  <div th:replace="~{fragments/layout :: alert('success', ${operationMessage})}"></div>
+  <div th:replace="~{fragments/layout :: alert('error', ${operationError})}"></div>
+
+  <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+    <div class="stat"><span class="stat-label"><i data-lucide="Cpu"></i> Model</span><span class="mt-2 block break-words font-mono text-sm" th:text="${run.model}">model</span><span class="text-xs text-ink-500" th:text="${run.provider.displayName()}">provider</span></div>
+    <div class="stat"><span class="stat-label"><i data-lucide="RefreshCw"></i> Model turns</span><span class="stat-value" th:text="|${run.modelTurnCount} / ${run.maxModelTurns}|">0 / 20</span></div>
+    <div class="stat"><span class="stat-label"><i data-lucide="Clock"></i> Created</span><span class="mt-2 block text-sm"><time data-local th:attr="datetime=${run.createdAt}" th:text="${run.createdAt}">time</time></span></div>
+    <div class="stat"><span class="stat-label"><i data-lucide="Settings2"></i> Generation</span><span class="mt-2 block text-sm" th:text="|${run.maxOutputTokens} tokens|">tokens</span><span class="text-xs text-ink-500" th:text="|reasoning ${run.reasoningEffort ?: 'default'} · verbosity ${run.textVerbosity ?: 'default'}|">settings</span></div>
+  </div>
+
+  <section class="section">
+    <h2 class="section-title mb-3">Prompt</h2>
+    <pre class="card max-h-96 overflow-auto whitespace-pre-wrap break-words p-4 text-sm text-ink-300" th:text="${run.prompt}">prompt</pre>
+  </section>
+  <section th:if="${run.finalOutput != null}" class="section">
+    <h2 class="section-title mb-3">Final output</h2>
+    <div class="card petri-md max-h-[32rem] overflow-auto border-good-500/30 p-4 text-sm leading-6 text-ink-300" data-markdown th:text="${run.finalOutput}">output</div>
+  </section>
+  <div th:if="${run.errorMessage != null}" class="section"><div th:replace="~{fragments/layout :: alert('error', ${run.errorMessage})}"></div></div>
+
+  <section class="section">
+    <div class="section-header"><div><h2 class="section-title">Change approvals</h2><p class="section-description">File changes the agent proposed in this run.</p></div></div>
+    <p th:if="${#lists.isEmpty(changeProposals)}" class="text-sm text-ink-500">No change proposals.</p>
+    <div class="space-y-3" th:unless="${#lists.isEmpty(changeProposals)}">
+      <article th:each="proposal : ${changeProposals}" class="card overflow-hidden">
+        <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <div class="flex min-w-0 items-center gap-2">
+            <i data-lucide="FileDiff"></i>
+            <strong class="truncate font-mono text-sm" th:text="${proposal.filePath}">file</strong>
+            <span th:if="${proposal.changeType.name() == 'CREATE'}" class="badge badge-neutral">New file</span>
+            <span th:replace="~{fragments/layout :: statusBadge(${proposal.status})}"></span>
+          </div>
+          <div class="flex flex-wrap gap-2">
+            <form th:if="${proposal.status.name() == 'PROPOSED'}" method="post" th:action="@{/runs/{runId}/changes/{id}/reject(runId=${run.id},id=${proposal.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-secondary btn-sm" type="submit">Reject</button></form>
+            <form th:if="${proposal.status.name() == 'PROPOSED'}" method="post" th:action="@{/runs/{runId}/changes/{id}/approve(runId=${run.id},id=${proposal.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-primary btn-sm" type="submit"><i data-lucide="Check"></i> Approve</button></form>
+            <form th:if="${proposal.status.name() == 'APPROVED'}" method="post" th:action="@{/runs/{runId}/changes/{id}/apply(runId=${run.id},id=${proposal.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-primary btn-sm" type="submit">Apply change</button></form>
+          </div>
         </div>
-        <span class="badge" th:text="${run.status}">STATUS</span>
-      </div>
+        <pre class="max-h-[32rem] overflow-auto whitespace-pre-wrap break-words border-t border-ink-700/70 bg-ink-950 p-4 font-mono text-xs text-ink-300" th:text="${proposal.unifiedDiff}">diff</pre>
+      </article>
+    </div>
+  </section>
 
-      <div th:if="${operationMessage}" class="mt-6 rounded-xl border border-good-500/30 bg-good-500/10 p-4 text-sm text-good-500" th:text="${operationMessage}">Operation completed.</div>
-      <div th:if="${operationError}" class="mt-6 rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-300" th:text="${operationError}">Operation failed.</div>
-
-      <div class="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <article class="metric"><span class="metric-label">Model</span><span class="mt-2 block break-words font-mono text-sm" th:text="|${run.provider} / ${run.model}|">provider / model</span></article>
-        <article class="metric"><span class="metric-label">Model turns</span><span class="metric-value" th:text="|${run.modelTurnCount} / ${run.maxModelTurns}|">0 / 20</span></article>
-        <article class="metric"><span class="metric-label">Created</span><span class="mt-2 block font-mono text-xs" th:text="${run.createdAt}">time</span></article>
-        <article class="metric"><span class="metric-label">Generation</span><span class="mt-2 block text-sm" th:text="|${run.maxOutputTokens} tokens · reasoning ${run.reasoningEffort ?: 'default'} · verbosity ${run.textVerbosity ?: 'default'}|">settings</span></article>
-      </div>
-
-      <div class="mt-6">
-        <h2 class="font-semibold">Prompt</h2>
-        <pre class="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-ink-700 bg-ink-950 p-4 text-sm text-ink-300" th:text="${run.prompt}">prompt</pre>
-      </div>
-      <div th:if="${run.finalOutput != null}" class="mt-6">
-        <h2 class="font-semibold">Final output</h2>
-        <div class="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-xl border border-good-500/30 bg-good-500/5 p-4 text-sm text-ink-300" data-markdown th:text="${run.finalOutput}">output</div>
-      </div>
-      <div th:if="${run.errorMessage != null}" class="mt-6 rounded-xl border border-red-400/30 bg-red-400/10 p-4 text-sm text-red-300" th:text="${run.errorMessage}">error</div>
-    </section>
-
-    <section class="panel p-6 sm:p-8">
-      <h2 class="text-xl font-semibold">Ordered turns</h2>
-      <p class="mt-2 text-sm text-ink-500">Persisted model responses, tool calls and tool outputs used to resume the run.</p>
-      <div class="mt-6 space-y-3">
-        <article th:each="turn : ${run.turns}" class="rounded-xl border border-ink-700/70 bg-ink-900 p-4">
-          <div class="flex flex-wrap items-center justify-between gap-2">
-            <div class="flex items-center gap-2"><span class="badge" th:text="${turn.kind}">KIND</span><strong th:if="${turn.toolName != null}" th:text="${turn.toolName}">tool</strong></div>
-            <span class="font-mono text-xs text-ink-500" th:text="|#${turn.index} · ${turn.createdAt}|">turn</span>
+  <section class="section">
+    <div class="section-header"><div><h2 class="section-title">Test approvals</h2><p class="section-description">Test commands the agent requested in this run.</p></div></div>
+    <p th:if="${#lists.isEmpty(testRuns)}" class="text-sm text-ink-500">No test requests.</p>
+    <div class="space-y-3" th:unless="${#lists.isEmpty(testRuns)}">
+      <article th:each="testRun : ${testRuns}" class="card overflow-hidden">
+        <div class="flex flex-wrap items-center justify-between gap-3 px-4 py-3">
+          <div class="flex min-w-0 items-center gap-2">
+            <i data-lucide="SquareTerminal"></i>
+            <code class="truncate text-sm" th:text="${testRun.command}">command</code>
+            <span th:replace="~{fragments/layout :: statusBadge(${testRun.status})}"></span>
           </div>
-          <div th:if="${turn.providerResponseId != null || turn.toolCallId != null}" class="mt-3 flex flex-wrap gap-3 font-mono text-xs text-ink-500">
-            <span th:if="${turn.providerResponseId != null}" th:text="|response: ${turn.providerResponseId}|">response</span>
-            <span th:if="${turn.toolCallId != null}" th:text="|call: ${turn.toolCallId}|">call</span>
+          <div class="flex flex-wrap gap-2">
+            <form th:if="${testRun.status.name() == 'PROPOSED'}" method="post" th:action="@{/runs/{runId}/tests/{id}/reject(runId=${run.id},id=${testRun.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-secondary btn-sm" type="submit">Reject</button></form>
+            <form th:if="${testRun.status.name() == 'PROPOSED'}" method="post" th:action="@{/runs/{runId}/tests/{id}/approve(runId=${run.id},id=${testRun.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-primary btn-sm" type="submit"><i data-lucide="Check"></i> Approve</button></form>
+            <form th:if="${testRun.status.name() == 'APPROVED'}" method="post" th:action="@{/runs/{runId}/tests/{id}/execute(runId=${run.id},id=${testRun.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-primary btn-sm" type="submit"><i data-lucide="Play"></i> Run tests</button></form>
           </div>
-          <pre class="mt-3 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-ink-950 p-3 text-xs text-ink-300" th:text="${turn.content}">content</pre>
-        </article>
-      </div>
-    </section>
+        </div>
+        <pre th:if="${testRun.output != null}" class="max-h-96 overflow-auto whitespace-pre-wrap break-words border-t border-ink-700/70 bg-ink-950 p-4 font-mono text-xs text-ink-300" th:text="${testRun.output}">test output</pre>
+      </article>
+    </div>
+  </section>
 
-    <section class="panel p-6 sm:p-8">
-      <h2 class="text-xl font-semibold">Change approvals</h2>
-      <p th:if="${#lists.isEmpty(changeProposals)}" class="mt-4 text-sm text-ink-500">This run has no change proposals.</p>
-      <div class="mt-6 space-y-4" th:unless="${#lists.isEmpty(changeProposals)}">
-        <article th:each="proposal : ${changeProposals}" class="rounded-xl border border-ink-700/70 p-4">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div><strong th:text="|${proposal.changeType.name() == 'CREATE' ? 'New file: ' : ''}${proposal.filePath}|">file</strong><span class="ml-3 badge" th:text="${proposal.status}">status</span></div>
-            <div class="flex flex-wrap gap-2">
-              <form th:if="${proposal.status.name() == 'PROPOSED'}" method="post" th:action="@{/runs/{runId}/changes/{id}/approve(runId=${run.id},id=${proposal.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-primary" type="submit">Approve</button></form>
-              <form th:if="${proposal.status.name() == 'PROPOSED'}" method="post" th:action="@{/runs/{runId}/changes/{id}/reject(runId=${run.id},id=${proposal.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-secondary" type="submit">Reject</button></form>
-              <form th:if="${proposal.status.name() == 'APPROVED'}" method="post" th:action="@{/runs/{runId}/changes/{id}/apply(runId=${run.id},id=${proposal.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-primary" type="submit">Apply approved change</button></form>
-            </div>
+  <section class="section">
+    <div class="section-header"><div><h2 class="section-title">Turns</h2><p class="section-description">Persisted model responses, tool calls and tool results used to resume the run.</p></div></div>
+    <div class="list">
+      <details th:each="turn : ${run.turns}" class="group">
+        <summary class="flex cursor-pointer list-none flex-wrap items-center gap-3 px-4 py-3 transition hover:bg-ink-800/40">
+          <span class="w-8 shrink-0 font-mono text-xs text-ink-500" th:text="|#${turn.index}|">#1</span>
+          <span class="badge badge-neutral" th:text="${#strings.capitalize(#strings.toLowerCase(#strings.replace(turn.kind.name(), '_', ' ')))}">Kind</span>
+          <strong th:if="${turn.toolName != null}" class="font-mono text-xs text-ink-300" th:text="${turn.toolName}">tool</strong>
+          <span class="ml-auto text-xs text-ink-500"><time data-local th:attr="datetime=${turn.createdAt}" th:text="${turn.createdAt}">time</time></span>
+        </summary>
+        <div class="border-t border-ink-700/60 bg-ink-950/40 px-4 py-3">
+          <div th:if="${turn.providerResponseId != null || turn.toolCallId != null}" class="mb-2 flex flex-wrap gap-3 font-mono text-[11px] text-ink-500">
+            <span th:if="${turn.providerResponseId != null}" th:text="|response ${turn.providerResponseId}|">response</span>
+            <span th:if="${turn.toolCallId != null}" th:text="|call ${turn.toolCallId}|">call</span>
           </div>
-          <pre class="mt-4 max-h-[32rem] overflow-auto whitespace-pre-wrap break-words rounded-lg bg-ink-950 p-3 text-xs text-ink-300" th:text="${proposal.unifiedDiff}">diff</pre>
-        </article>
-      </div>
-    </section>
-
-    <section class="panel p-6 sm:p-8">
-      <h2 class="text-xl font-semibold">Test approvals</h2>
-      <p th:if="${#lists.isEmpty(testRuns)}" class="mt-4 text-sm text-ink-500">This run has no test requests.</p>
-      <div class="mt-6 space-y-4" th:unless="${#lists.isEmpty(testRuns)}">
-        <article th:each="testRun : ${testRuns}" class="rounded-xl border border-ink-700/70 p-4">
-          <div class="flex flex-wrap items-center justify-between gap-3">
-            <div><code th:text="${testRun.command}">command</code><span class="ml-3 badge" th:text="${testRun.status}">status</span></div>
-            <div class="flex flex-wrap gap-2">
-              <form th:if="${testRun.status.name() == 'PROPOSED'}" method="post" th:action="@{/runs/{runId}/tests/{id}/approve(runId=${run.id},id=${testRun.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-primary" type="submit">Approve</button></form>
-              <form th:if="${testRun.status.name() == 'PROPOSED'}" method="post" th:action="@{/runs/{runId}/tests/{id}/reject(runId=${run.id},id=${testRun.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-secondary" type="submit">Reject</button></form>
-              <form th:if="${testRun.status.name() == 'APPROVED'}" method="post" th:action="@{/runs/{runId}/tests/{id}/execute(runId=${run.id},id=${testRun.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-primary" type="submit">Execute approved tests</button></form>
-            </div>
-          </div>
-          <pre th:if="${testRun.output != null}" class="mt-4 max-h-96 overflow-auto whitespace-pre-wrap break-words rounded-lg bg-ink-950 p-3 text-xs text-ink-300" th:text="${testRun.output}">test output</pre>
-        </article>
-      </div>
-    </section>
-  </main>
+          <pre class="max-h-96 overflow-auto whitespace-pre-wrap break-words text-xs text-ink-300" th:text="${turn.content}">content</pre>
+        </div>
+      </details>
+    </div>
+  </section>
+</main>
 </body>
 </html>

@@ -36,7 +36,9 @@
 - LiteLLM Responses API.
 - Ollama OpenAI-compatible Chat Completions API.
 - Generic OpenAI-compatible Chat Completions endpoint.
-- Independent base URL, model, output budget and optional key per provider.
+- Several administrator-defined providers per kind, each with its own base URL, model and output budget.
+- Per-user API keys per provider, with an optional shared key.
+- Optional personal providers, enabled by an administrator and private to their owner.
 - Optional reasoning effort and text verbosity controls.
 - Per-run model setting snapshots and per-task overrides.
 - Full persisted conversation reconstruction for stateless Chat Completions servers.
@@ -48,7 +50,7 @@
 - Local Monaco language workers and native responsive side-by-side/inline Git and proposal diffs.
 - Persistent browser drafts, cursor/view state, optimistic SHA saves and conflict-safe reload behavior.
 - Files/Changes navigator with Git decorations and staged, unstaged, untracked and conflict groups, with stage/unstage and revert per file, section or all.
-- Workflow panel above the chat (stage rail, attempts, cancel / open-merge-request placeholder) that stays on *Done* until the next workflow; chat shows live tool calls, agent messages and artifacts with timestamps.
+- Workflow panel above the chat (Petri net with per-goal verification, attempts, cancel / open-merge-request placeholder) that stays on *Done* until the next workflow; chat shows live tool calls, agent messages and artifacts with timestamps.
 - Embedded durable streaming chat, persistent project model selection and inline/pinned approvals.
 - Git bar with branch before worktree selection and non-reloading Git status/actions.
 

@@ -11,6 +11,7 @@ public record AgentRunView(
     UUID id,
     UUID worktreeId,
     ModelProvider provider,
+    UUID providerInstanceId,
     String model,
     String prompt,
     AgentRunStatus status,

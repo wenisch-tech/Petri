@@ -21,6 +21,7 @@ class OrchestrationProfile {
   @Enumerated(EnumType.STRING) @Column(nullable = false, length = 32) private AgentWorkflowRole role;
   @Enumerated(EnumType.STRING) @Column(name = "model_provider", nullable = false, length = 32)
   private ModelProvider provider;
+  @Column(name = "provider_instance_id") private UUID providerInstanceId;
   @Column(name = "model_name", nullable = false, length = 200) private String model;
   @Column(name = "max_model_turns", nullable = false) private int maxModelTurns;
   @Column(name = "max_output_tokens", nullable = false) private int maxOutputTokens;
@@ -34,21 +35,24 @@ class OrchestrationProfile {
 
   protected OrchestrationProfile() {}
   OrchestrationProfile(UUID id, UUID projectId, UUID userId, AgentWorkflowRole role,
-      ModelProvider provider, String model, int turns, int outputTokens, int contextTokens,
-      ReasoningEffort reasoning, TextVerbosity verbosity, int attempts, String addendum, Instant now) {
+      ModelProvider provider, UUID providerInstanceId, String model, int turns, int outputTokens,
+      int contextTokens, ReasoningEffort reasoning, TextVerbosity verbosity, int attempts,
+      String addendum, Instant now) {
     this.id = id; this.projectId = projectId; this.userId = userId; this.role = role;
-    replace(provider, model, turns, outputTokens, contextTokens, reasoning, verbosity, attempts, addendum, now);
+    replace(provider, providerInstanceId, model, turns, outputTokens, contextTokens, reasoning, verbosity, attempts, addendum, now);
     this.createdAt = now;
   }
-  void replace(ModelProvider provider, String model, int turns, int outputTokens, int contextTokens,
-      ReasoningEffort reasoning, TextVerbosity verbosity, int attempts, String addendum, Instant now) {
-    this.provider = provider; this.model = model; this.maxModelTurns = turns;
+  void replace(ModelProvider provider, UUID providerInstanceId, String model, int turns,
+      int outputTokens, int contextTokens, ReasoningEffort reasoning, TextVerbosity verbosity,
+      int attempts, String addendum, Instant now) {
+    this.provider = provider; this.providerInstanceId = providerInstanceId; this.model = model; this.maxModelTurns = turns;
     this.maxOutputTokens = outputTokens; this.contextWindowTokens = contextTokens;
     this.reasoningEffort = reasoning; this.textVerbosity = verbosity; this.maxAttempts = attempts;
     this.promptAddendum = addendum; this.updatedAt = now;
   }
   UUID id() { return id; } UUID projectId() { return projectId; } UUID userId() { return userId; }
   AgentWorkflowRole role() { return role; } ModelProvider provider() { return provider; }
+  UUID providerInstanceId() { return providerInstanceId; }
   String model() { return model; } int maxModelTurns() { return maxModelTurns; }
   int maxOutputTokens() { return maxOutputTokens; } int contextWindowTokens() { return contextWindowTokens; }
   ReasoningEffort reasoningEffort() { return reasoningEffort; } TextVerbosity textVerbosity() { return textVerbosity; }

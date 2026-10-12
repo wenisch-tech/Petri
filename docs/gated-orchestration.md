@@ -29,10 +29,41 @@ The final gate also writes a Markdown **summary** of what was done (changes, tou
 evidence, caveats). It is stored with the final verdict and shown in the chat when the workflow
 completes.
 
-If the review is `APPROVED` but no executed test passed and the gate does not pass, the workflow does
-not loop back to the implementer. It waits for the user at the final gate, who can approve without
-executed tests (`POST /workflows/{id}/final/approve`) and finish without another run. Any other gate
-failure still triggers rework or `HUMAN_HOLD`.
+If the review is `APPROVED` but no executed test passed, or not every acceptance criterion is verified
+(next section), the workflow does not loop back to the implementer. It waits for the user at the final
+gate, who can approve and finish without another run (`POST /workflows/{id}/final/approve`). Any other
+gate failure still triggers rework or `HUMAN_HOLD`.
+
+### Acceptance criteria and verification
+
+Every acceptance criterion of a plan has a stable id (`AC1`, `AC2`, ...). The planner returns
+`"acceptanceCriteria":[{"id":"AC1","text":"..."}]`; plain strings from older plans are numbered by
+position. When a plan is revised, the planner is shown the previous plan and keeps the id of every
+criterion whose meaning did not change.
+
+The reviewer reports `planCoverage`, one entry per criterion:
+
+```json
+{"criterionId":"AC1","status":"MET|PARTIAL|NOT_MET",
+ "evidence":[{"type":"TEST","ref":"<test run id>"},{"type":"FILE","ref":"<changed file path>"}],
+ "note":"..."}
+```
+
+Petri checks each citation against what really happened instead of trusting the model. The reviewer is
+given the workflow's test run ids and changed files and may cite only those.
+
+| Status | Meaning |
+| --- | --- |
+| `VERIFIED` | Reviewer says `MET` and at least one cited test run passed or cited file was applied and still matches. |
+| `CLAIMED` | Reviewer says `MET` but no citation could be confirmed (none cited, unknown id, file not changed). |
+| `PARTIAL` | Reviewer says the criterion is only partly met. |
+| `NOT_MET` | Reviewer says `NOT_MET`, or every cited test failed or timed out. |
+| `UNVERIFIED` | Not covered yet, or the review is older than the latest plan or implementation changes. |
+
+The status is computed on read from the latest plan, review, task evidence and live test runs, so it
+changes as soon as new evidence exists. When the final gate would pass and the review is approved but a
+criterion is not `VERIFIED`, the workflow waits for the user (naming the open criteria) instead of
+completing on its own.
 
 ### Retry and attempt budgets
 
@@ -53,13 +84,22 @@ path was applied.
 
 ## Workspace presentation
 
-- **Workflow view (top panel):** the stage rail, status, attempt/run counts and the **Cancel task**
-  button. A finished workflow stays pinned in the *Done* state until a newer workflow starts and
-  shows **Open merge request** (placeholder, not implemented yet) instead of Cancel.
+- **Workflow view (top panel):** the workflow as a **Petri net**, its status, attempt/run counts and
+  the **Cancel task** button. A finished workflow stays pinned in the *Done* state until a newer
+  workflow starts and shows **Open merge request** (placeholder, not implemented yet) instead of
+  Cancel. Click the net to open the full view with goals, evidence and the firing history.
 - **Chat:** live actions and the conversation only: tool calls and stage start/finish events with
   timestamps, agent replies labelled by role, and artifacts (plan, task diff, review, summary) at the
   position where they were created. Plan approval, clarification questions and final approval appear
   at the bottom only while they await the user.
+- **Reading the net:** circles are places and rectangles are transitions (gates, agents, or you).
+  The coloured token marks where the workflow is: blue while an agent works, amber when it waits for
+  you, red on a hold, green when done. A transition that has fired is outlined green; dashed arcs are
+  rework and exception paths with a counter of how often they fired (`rework ×2`). Each acceptance
+  criterion gets its own row: an open place, a verify transition driven by the review, and a verified
+  place that the final gate consumes. A solid dot means open, a ring means claimed but unconfirmed,
+  half-filled means partial, a cross means not met, and a filled green token means verified. The final
+  gate can only complete on its own when every verified place is marked.
 - **Guide active task:** a composer checkbox, enabled by default while a workflow is active. Checked,
   the message is sent as guidance to the running task; unchecked, it is queued as a new task.
 

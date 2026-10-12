@@ -10,6 +10,10 @@ set -eu
 # git is required: Petri drives it as a subprocess.
 apk add --no-cache git bash curl ca-certificates
 
+# Security floors for libraries that ship in the JDK base image. `--upgrade` raises them to at
+# least these versions (and to anything newer the repository offers) in this layer.
+apk add --no-cache --upgrade 'libpng>=1.6.59-r0' 'zlib>=1.3.2-r1'
+
 PETRI_UID="${PETRI_UID:-65532}"
 addgroup -g "$PETRI_UID" -S petri
 adduser -u "$PETRI_UID" -S -G petri -h /home/petri -s /bin/bash petri

@@ -12,4 +12,9 @@ public class GlobalNavigationAdvice {
     return authentication != null && authentication.getAuthorities().stream()
         .anyMatch(authority -> "ROLE_INSTANCE_ADMIN".equals(authority.getAuthority()));
   }
+
+  @ModelAttribute("currentUserEmail")
+  public String currentUserEmail(Authentication authentication) {
+    return authentication == null ? null : authentication.getName();
+  }
 }

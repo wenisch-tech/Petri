@@ -177,7 +177,8 @@ class ProjectMirrorServiceTest {
         ADMIN_EMAIL);
     entityManager.flush();
     String encryptedModelKey = jdbc.queryForObject(
-        "select api_key_ciphertext from model_provider_credential where provider = 'OPENAI'",
+        "select shared_api_key_ciphertext from model_provider_instance "
+            + "where provider = 'OPENAI' and owner_id is null",
         String.class);
     assertThat(encryptedModelKey)
         .startsWith("v1:")

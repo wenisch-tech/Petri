@@ -59,11 +59,12 @@ public class OrchestrationProfileService {
     if (commands == null || commands.isEmpty()) throw new IllegalArgumentException("At least one role profile is required");
     Instant now = Instant.now();
     for (SaveOrchestrationRoleProfile command : commands) {
-      if (command == null || command.role() == null || command.provider() == null) {
+      if (command == null || command.role() == null
+          || (command.provider() == null && command.providerInstanceId() == null)) {
         throw new IllegalArgumentException("Role and provider are required");
       }
-      ModelCredentialStatus credential = credentials.status(command.provider());
-      if (!credential.configured()) throw new IllegalStateException(command.provider() + " credentials are not configured");
+      ModelCredentialStatus credential = credentials.resolve(
+          userId, command.provider(), command.providerInstanceId());
       String model = required(command.model(), "Model", 200);
       int turns = bounded(command.maxModelTurns(), DEFAULT_TURNS, 1, 100, "Maximum model turns");
       int output = bounded(command.maxOutputTokens(), credential.maxOutputTokens(), 16, 1_000_000, "Maximum output tokens");
@@ -73,9 +74,10 @@ public class OrchestrationProfileService {
       String addendum = optional(command.promptAddendum(), 20_000);
       OrchestrationProfile value = profiles.findByProjectIdAndUserIdAndRole(projectId, userId, command.role())
           .orElseGet(() -> new OrchestrationProfile(UUID.randomUUID(), projectId, userId, command.role(),
-              command.provider(), model, turns, output, context, command.reasoningEffort(),
-              command.textVerbosity(), attempts, addendum, now));
-      value.replace(command.provider(), model, turns, output, context, command.reasoningEffort(),
+              credential.provider(), credential.id(), model, turns, output, context,
+              command.reasoningEffort(), command.textVerbosity(), attempts, addendum, now));
+      value.replace(credential.provider(), credential.id(), model, turns, output, context,
+          command.reasoningEffort(),
           command.textVerbosity(), attempts, addendum, now);
       profiles.save(value);
     }
@@ -97,16 +99,18 @@ public class OrchestrationProfileService {
     }
     for (OrchestrationRoleProfileView base : get(projectId, userId)) {
       SaveOrchestrationRoleProfile override = supplied.get(base.role());
-      OrchestrationRoleProfileView value = override == null ? base : resolve(base, override);
+      OrchestrationRoleProfileView value = override == null ? base : resolve(base, override, userId);
       snapshots.save(new AgentWorkflowRoleSnapshot(UUID.randomUUID(), workflowId, value));
     }
   }
 
   private OrchestrationRoleProfileView resolve(
-      OrchestrationRoleProfileView base, SaveOrchestrationRoleProfile command) {
-    ModelProvider provider = command.provider() == null ? base.provider() : command.provider();
-    ModelCredentialStatus credential = credentials.status(provider);
-    if (!credential.configured()) throw new IllegalStateException(provider + " credentials are not configured");
+      OrchestrationRoleProfileView base, SaveOrchestrationRoleProfile command, UUID userId) {
+    boolean overridesProvider = command.provider() != null || command.providerInstanceId() != null;
+    ModelCredentialStatus credential = overridesProvider
+        ? credentials.resolve(userId, command.provider(), command.providerInstanceId())
+        : credentials.resolve(userId, base.provider(), base.providerInstanceId());
+    ModelProvider provider = credential.provider();
     String model = command.model() == null ? base.model() : required(command.model(), "Model", 200);
     int turns = bounded(command.maxModelTurns(), base.maxModelTurns(), 1, 100, "Maximum model turns");
     int output = bounded(command.maxOutputTokens(), base.maxOutputTokens(), 16, 1_000_000, "Maximum output tokens");
@@ -114,7 +118,8 @@ public class OrchestrationProfileService {
         10_000_000, "Context window");
     validateContextWindow(context, output);
     int attempts = bounded(command.maxAttempts(), base.maxAttempts(), 1, 10, "Maximum attempts");
-    return new OrchestrationRoleProfileView(base.role(), provider, model, turns, output, context,
+    return new OrchestrationRoleProfileView(base.role(), provider, credential.id(), model, turns,
+        output, context,
         command.reasoningEffort() == null ? base.reasoningEffort() : command.reasoningEffort(),
         command.textVerbosity() == null ? base.textVerbosity() : command.textVerbosity(), attempts,
         command.promptAddendum() == null ? base.promptAddendum() : optional(command.promptAddendum(), 20_000),
@@ -123,24 +128,25 @@ public class OrchestrationProfileService {
 
   private OrchestrationRoleProfileView fallback(UUID projectId, UUID userId, AgentWorkflowRole role) {
     WorkspaceModelPreferenceView preference = preferences.get(projectId, userId);
-    ModelProvider provider = preference != null && credentials.status(preference.provider()).configured()
-        ? preference.provider() : defaultProvider();
-    ModelCredentialStatus credential = credentials.status(provider);
-    String model = preference != null && preference.provider() == provider ? preference.model() : credential.model();
-    return new OrchestrationRoleProfileView(role, provider, model, DEFAULT_TURNS,
-        credential.maxOutputTokens(), credential.contextWindowTokens(), credential.reasoningEffort(),
-        credential.textVerbosity(), DEFAULT_ATTEMPTS, null, false);
-  }
-
-  private ModelProvider defaultProvider() {
-    if (credentials.status(ModelProvider.OLLAMA).configured()) return ModelProvider.OLLAMA;
-    for (ModelProvider value : ModelProvider.values()) if (credentials.status(value).configured()) return value;
-    throw new IllegalStateException("No model provider is configured");
+    List<ModelCredentialStatus> usable = credentials.usable(userId);
+    if (usable.isEmpty()) throw new IllegalStateException("No model provider is configured");
+    ModelCredentialStatus preferred = preference == null ? null : usable.stream()
+        .filter(value -> preference.providerInstanceId() != null
+            ? value.id().equals(preference.providerInstanceId())
+            : value.provider() == preference.provider())
+        .findFirst().orElse(null);
+    ModelCredentialStatus chosen = preferred != null ? preferred : usable.stream()
+        .filter(value -> value.provider() == ModelProvider.OLLAMA).findFirst()
+        .orElse(usable.getFirst());
+    String model = preferred != null ? preference.model() : chosen.model();
+    return new OrchestrationRoleProfileView(role, chosen.provider(), chosen.id(), model,
+        DEFAULT_TURNS, chosen.maxOutputTokens(), chosen.contextWindowTokens(),
+        chosen.reasoningEffort(), chosen.textVerbosity(), DEFAULT_ATTEMPTS, null, false);
   }
 
   private static OrchestrationRoleProfileView view(OrchestrationProfile value, boolean persisted) {
-    return new OrchestrationRoleProfileView(value.role(), value.provider(), value.model(),
-        value.maxModelTurns(), value.maxOutputTokens(), value.contextWindowTokens(),
+    return new OrchestrationRoleProfileView(value.role(), value.provider(),
+        value.providerInstanceId(), value.model(), value.maxModelTurns(), value.maxOutputTokens(), value.contextWindowTokens(),
         value.reasoningEffort(), value.textVerbosity(), value.maxAttempts(), value.promptAddendum(), persisted);
   }
   private void requireProject(UUID id) { if (!projects.existsById(id)) throw new IllegalArgumentException("Unknown project"); }

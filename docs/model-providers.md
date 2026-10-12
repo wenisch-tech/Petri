@@ -1,8 +1,31 @@
 # Model providers
 
-Petri has a provider-neutral model-client registry. Each provider configuration stores its own endpoint and defaults.
+Petri has a provider-neutral model-client registry. A **provider** is a configured endpoint with its own
+base URL, model and defaults. Its **kind** (below) decides which API Petri speaks.
 
-| Provider | Default base URL | Request API | Key policy |
+## Who configures what
+
+- **Administrators** add providers at `/model-settings` (Administration → Model providers). Several
+  providers of the same kind are allowed, for example two LiteLLM gateways with different models.
+  A provider may carry an optional **shared key**; without one, every user brings their own.
+- **Users** add their own API key per provider at `/model-providers` (avatar menu → Model providers).
+  A user's key is used for that user's runs and takes precedence over the shared key. Keys are
+  encrypted at rest and never displayed again.
+- **Personal providers** are off by default. An administrator can enable
+  *Let users add their own model providers*; users can then add endpoints that only they can see and
+  use. A personal provider can make the Petri server call any HTTP(S) address it can reach, so enable
+  this only when every user is trusted. Turning the setting off hides personal providers and makes
+  runs that use them fail; the providers and keys are kept.
+
+A provider appears in the workspace model picker only when the user can call it right now: it is
+enabled, and a key is available (their own or the shared one) when the kind requires one.
+
+Runs record the provider they were started with. Workflow role profiles and the per-project model
+choice record it too, and fall back to a usable provider when the saved one is no longer available.
+
+## Provider kinds
+
+| Kind | Default base URL | Request API | Key policy |
 | --- | --- | --- | --- |
 | `OPENAI` | `https://api.openai.com/v1` | Responses | Required |
 | `LITELLM` | `http://localhost:4000/v1` | Responses | Optional |
@@ -16,7 +39,7 @@ Petri appends `/responses` or `/chat/completions` to the configured base URL. In
 Configure:
 
 ```text
-Provider: OLLAMA
+Kind: Ollama
 Base URL: http://localhost:11434/v1
 Model ID: <installed Ollama model>
 API key: empty
@@ -53,7 +76,7 @@ Provider-specific reasoning and verbosity fields are omitted from generic Chat C
 - **Reasoning effort** is optional and model-dependent.
 - **Text verbosity** is optional and mainly relevant to Responses-compatible models.
 
-The chat can override these defaults for one task. The selected provider, model and generation values are stored on the run so later default changes do not alter its model identity or generation limits. Endpoint URLs and secrets remain provider-level configuration and are resolved when a request executes; changing them therefore affects resumed runs for that provider.
+The chat can override these defaults for one task. The selected provider, model and generation values are stored on the run so later default changes do not alter its model identity or generation limits. Endpoint URLs and secrets remain provider-level configuration and are resolved when a request executes; changing them therefore affects resumed runs for that provider. A run uses the key of the user who started it.
 
 ## Streaming compatibility
 
@@ -64,4 +87,4 @@ request once without streaming. It never retries after text has reached the brow
 
 ## Endpoint security
 
-Base URLs must be HTTP(S) URLs without embedded credentials, query strings or fragments. API keys are sent as bearer tokens only when configured. Use HTTP only for trusted local/container networks; use HTTPS across untrusted networks.
+Base URLs must be HTTP(S) URLs without embedded credentials, query strings or fragments. API keys are sent as bearer tokens only when one is available for the calling user or the provider. Use HTTP only for trusted local/container networks; use HTTPS across untrusted networks.

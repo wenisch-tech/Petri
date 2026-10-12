@@ -1,42 +1,38 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Sign in · Petri</title>
-  <link rel="stylesheet" href="/css/petri.css">
-  <script defer src="/js/petri.js"></script>
-</head>
-<body class="grid place-items-center px-5 py-12">
-  <main class="panel w-full max-w-md p-7 sm:p-9">
-    <div class="mb-8 flex items-center gap-3">
-      <span class="grid size-11 place-items-center rounded-xl bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span>
-      <div>
-        <h1 class="text-xl font-semibold">Sign in to Petri</h1>
-        <p class="text-sm text-ink-500">Managed coding-agent workspace</p>
+<head th:replace="~{fragments/layout :: head('Sign in')}"></head>
+<body class="grid place-items-center px-4 py-12">
+  <main class="w-full max-w-sm">
+    <div class="mb-8 flex flex-col items-center text-center">
+      <img class="app-logo !size-20" src="/img/petri-logo.png" alt="Petri" width="80" height="80">
+      <h1 class="mt-4 text-xl font-semibold tracking-tight">Sign in to Petri</h1>
+      <p class="mt-1 text-sm text-ink-500">Agentic development workspace</p>
+    </div>
+
+    <section class="card card-body sm:p-7">
+      <th:block th:if="${param.error}"><div th:replace="~{fragments/layout :: alert('error', 'Unable to sign in. Check your credentials or identity-provider account.')}"></div></th:block>
+      <th:block th:if="${param.logout}"><div th:replace="~{fragments/layout :: alert('success', 'You have been signed out.')}"></div></th:block>
+      <form method="post" action="/login" class="space-y-4">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        <div>
+          <label class="label" for="username">Email</label>
+          <input id="username" class="field" type="email" name="username" autocomplete="username" required autofocus>
+        </div>
+        <div>
+          <label class="label" for="password">Password</label>
+          <input id="password" class="field" type="password" name="password" autocomplete="current-password" required>
+        </div>
+        <button class="btn-primary w-full" type="submit">Sign in</button>
+      </form>
+      <div th:if="${!#lists.isEmpty(oidcProviders)}" class="mt-6">
+        <div class="mb-4 flex items-center gap-3 text-xs text-ink-500"><span class="h-px flex-1 bg-ink-700"></span>or<span class="h-px flex-1 bg-ink-700"></span></div>
+        <div class="space-y-2">
+          <a th:each="provider : ${oidcProviders}" class="btn-secondary w-full"
+             th:href="@{/oauth2/authorization/{registrationId}(registrationId=${provider.registrationId})}"
+             th:text="|Continue with ${provider.clientName}|">Continue with identity provider</a>
+        </div>
       </div>
-    </div>
-    <p th:if="${param.error}" class="mb-5 rounded-lg border border-red-500/30 bg-red-500/10 p-3 text-sm text-red-300">Unable to sign in. Check your credentials or identity-provider account.</p>
-    <p th:if="${param.logout}" class="mb-5 rounded-lg border border-good-500/30 bg-good-500/10 p-3 text-sm text-good-500">You have been signed out.</p>
-    <form method="post" action="/login" class="space-y-5">
-      <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-      <label class="block">
-        <span class="mb-2 block text-sm font-medium">Email</span>
-        <input class="field" type="email" name="username" autocomplete="username" required autofocus>
-      </label>
-      <label class="block">
-        <span class="mb-2 block text-sm font-medium">Password</span>
-        <input class="field" type="password" name="password" autocomplete="current-password" required>
-      </label>
-      <button class="btn-primary w-full" type="submit"><i data-lucide="KeyRound"></i> Sign in</button>
-    </form>
-    <div th:if="${!#lists.isEmpty(oidcProviders)}" class="mt-7 border-t border-ink-700 pt-6">
-      <p class="mb-3 text-center text-xs font-bold uppercase tracking-[.16em] text-ink-500">or continue with</p>
-      <a th:each="provider : ${oidcProviders}"
-         class="btn-secondary mb-2 w-full"
-         th:href="@{/oauth2/authorization/{registrationId}(registrationId=${provider.registrationId})}"
-         th:text="${provider.clientName}">Identity provider</a>
-    </div>
+    </section>
   </main>
 </body>
 </html>

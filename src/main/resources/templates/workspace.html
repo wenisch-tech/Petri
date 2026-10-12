@@ -6,27 +6,29 @@
   <meta name="_csrf" th:content="${_csrf.token}">
   <meta name="_csrf_header" th:content="${_csrf.headerName}">
   <title th:text="|${project.name} · Workspace · Petri|">Workspace · Petri</title>
-  <link rel="stylesheet" href="/css/petri.css?v=23">
-  <script defer src="/js/petri.js?v=24"></script>
+  <link rel="icon" href="/favicon.ico" sizes="any">
+  <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
+  <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
+  <link rel="stylesheet" href="/css/petri.css?v=26">
+  <script defer src="/js/petri.js?v=27"></script>
 </head>
 <body class="workspace-body">
-  <header class="topbar workspace-topbar">
+  <header class="topbar workspace-topbar relative z-40">
     <div class="flex h-14 items-center justify-between gap-3 px-4">
-      <div class="flex min-w-0 items-center gap-3">
-        <a href="/projects" class="flex items-center gap-2 font-semibold">
-          <span class="grid size-8 place-items-center rounded-lg bg-brand-500/15 text-brand-400"><i data-lucide="Bot"></i></span>
-          <span>Petri</span>
-        </a>
-        <span class="hidden h-5 border-l border-ink-700 sm:block"></span>
-        <span class="truncate text-sm font-medium" th:text="${project.name}">Project</span>
-      </div>
-      <nav class="hidden items-center gap-1 lg:flex">
-        <a class="nav-link bg-ink-800 text-ink-100" href="/projects">Workspace</a>
-        <a class="nav-link" href="/runs">Runs</a><a class="nav-link" href="/git-accounts">Git accounts</a><a th:if="${isInstanceAdmin}" class="nav-link" href="/model-settings">Models</a><a th:if="${isInstanceAdmin}" class="nav-link" href="/audit">Audit</a>
+      <nav class="flex min-w-0 items-center gap-2 text-sm" aria-label="Breadcrumb">
+        <a href="/" class="app-brand mr-1" title="Dashboard"><img class="app-logo" src="/img/petri-logo-64.png" alt="" width="36" height="36"><span class="hidden sm:inline">Petri</span></a>
+        <span class="hidden text-ink-700 sm:inline">/</span>
+        <a href="/projects" class="hidden text-ink-500 transition hover:text-ink-100 sm:inline">Projects</a>
+        <span class="text-ink-700">/</span>
+        <span class="truncate font-medium text-ink-100" th:text="${project.name}">Project</span>
+        <a class="icon-button shrink-0" th:href="@{/projects/{id}/settings(id=${project.id})}" title="Project settings" aria-label="Project settings"><i data-lucide="Settings"></i></a>
       </nav>
-      <div class="flex items-center gap-1">
+      <div class="flex items-center gap-1.5">
+        <a class="btn-ghost hidden !min-h-8 lg:inline-flex" href="/runs">Runs</a>
+        <a th:if="${isInstanceAdmin}" href="/admin" class="app-admin-link" title="Instance administration"><i data-lucide="ShieldCheck"></i><span class="hidden sm:inline">Admin</span></a>
         <button class="icon-button" type="button" data-toggle-chat title="Toggle chat" aria-label="Toggle chat"><i data-lucide="PanelRight"></i></button>
-        <button class="icon-button" type="button" x-data @click="$store.theme.toggle()" title="Toggle theme" aria-label="Toggle theme"><i data-lucide="Sun"></i></button>
+        <button th:replace="~{fragments/layout :: themeToggle}"></button>
+        <div th:replace="~{fragments/layout :: userMenu}"></div>
       </div>
     </div>
   </header>
@@ -178,15 +180,16 @@
         </div>
         <small data-approval-hint>Workflow chats: approving the plan already covers file changes and tests. Package installs and terminal commands always ask unless enabled above.</small>
       </div>
+      <div th:unless="${modelConfigured}" class="workspace-warning mx-3 mb-2">No model is ready for you yet. <a class="underline" href="/model-providers">Add your API key</a><span th:if="${isInstanceAdmin}"> or <a class="underline" href="/model-settings">configure a provider</a></span>.</div>
       <form class="workspace-composer" data-chat-form><textarea class="field" data-chat-input required maxlength="200000" placeholder="Ask Petri to work in this project…" th:disabled="${!modelConfigured}"></textarea><label class="workspace-guide-toggle" data-guide-toggle hidden><input type="checkbox" data-guide-active checked><span>Guide active task</span></label><div><span class="text-xs text-ink-500" data-chat-status>Ready</span><button class="btn-primary !min-h-9 !px-3" type="button" data-chat-send th:disabled="${!modelConfigured}" aria-label="Send message"><i data-lucide="Send"></i><span>Send</span></button></div></form>
       <div class="workspace-chat-tools" aria-label="Chat configuration">
         <label><span>Mode</span><select class="workspace-mode-selector" data-chat-mode aria-label="Agent mode" title="Agent mode">
           <option value="ORCHESTRATED">Workflow</option><option value="DIRECT">Direct</option>
         </select></label>
         <label class="workspace-model-field"><span>Model</span><select class="workspace-model-selector" data-model-selector th:disabled="${!modelConfigured}" aria-label="Workspace model">
-          <option th:each="item : ${configuredModels}" th:value="${item.provider}" th:selected="${item.provider == selectedModelCredential.provider}"
-                  th:attr="data-model=${item.model},data-tokens=${item.maxOutputTokens},data-context=${item.contextWindowTokens},data-reasoning=${item.reasoningEffort},data-verbosity=${item.textVerbosity}"
-                  th:text="|${item.provider.displayName()} · ${item.model}|">Model</option>
+          <option th:each="item : ${configuredModels}" th:value="${item.id}" th:selected="${item.id == selectedModelCredential.id}"
+                  th:attr="data-kind=${item.provider},data-model=${item.model},data-tokens=${item.maxOutputTokens},data-context=${item.contextWindowTokens},data-reasoning=${item.reasoningEffort},data-verbosity=${item.textVerbosity}"
+                  th:text="|${item.displayName} · ${item.model}|">Model</option>
         </select></label>
         <span class="workspace-model-unavailable" data-model-unavailable th:hidden="${!savedModelUnavailable}">Saved model unavailable</span>
         <button class="icon-button" type="button" data-orchestration-settings title="Configure workflow roles" aria-label="Configure workflow roles"><i data-lucide="Workflow"></i></button>
@@ -195,6 +198,15 @@
     </aside>
 
     <dialog class="workspace-dialog" data-workspace-dialog><form method="dialog" data-dialog-form><h2 data-dialog-title>Workspace action</h2><p data-dialog-description></p><label data-dialog-path-label>Path<input class="field" data-dialog-path required></label><label data-dialog-confirmation-label hidden>Type the exact path to confirm<input class="field" data-dialog-confirmation></label><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm" data-dialog-confirm>Continue</button></div></form></dialog>
+    <dialog class="dialog petrinet-dialog" data-petrinet-dialog aria-label="Workflow Petri net">
+      <div class="dialog-panel">
+        <div class="dialog-header">
+          <div><h2>Workflow net</h2><p data-petrinet-subtitle></p></div>
+          <form method="dialog"><button class="icon-button" aria-label="Close"><i data-lucide="X"></i></button></form>
+        </div>
+        <div class="dialog-body" data-petrinet-body></div>
+      </div>
+    </dialog>
     <dialog class="workspace-dialog" data-git-branch-dialog><form method="dialog"><h2>New branch</h2><p>Create a local branch and its dedicated worktree.</p><label>Branch name<input class="field" data-git-branch-name required autocomplete="off" placeholder="feature/my-change"></label><label>Start from<select class="field" data-git-branch-start><option th:each="branch : ${branches}" th:value="${branch.kind.name() == 'REMOTE' ? 'origin/' + branch.name : branch.name}" th:text="${branch.kind.name() == 'REMOTE' ? 'origin/' + branch.name : branch.name}">main</option></select></label><div class="workspace-dialog-error" data-git-dialog-error></div><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm">Create branch</button></div></form></dialog>
     <dialog class="workspace-dialog" data-git-commit-dialog><form method="dialog"><h2>Commit changes</h2><p>Commit staged changes, or stage every visible worktree change first.</p><label>Commit message<textarea class="field" data-git-commit-message required maxlength="10000" rows="4"></textarea></label><label class="workspace-check"><input type="checkbox" data-git-stage-all> Stage all changes before committing</label><div class="workspace-dialog-error" data-git-dialog-error></div><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm">Commit</button></div></form></dialog>
     <dialog class="workspace-dialog" data-git-rebase-dialog><form method="dialog"><h2>Rebase branch</h2><p>The worktree must be clean. Conflicts remain in the editor for manual resolution.</p><label>Rebase onto<select class="field" data-git-rebase-target><option value="">Configured upstream</option><option th:each="branch : ${branches}" th:value="${branch.kind.name() == 'REMOTE' ? 'origin/' + branch.name : branch.name}" th:text="${branch.kind.name() == 'REMOTE' ? 'origin/' + branch.name : branch.name}">origin/main</option></select></label><div class="workspace-dialog-error" data-git-dialog-error></div><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm">Start rebase</button></div></form></dialog>

@@ -6,3 +6,8 @@ data/
 .vscode/
 *.iml
 *.log
+.agents/
+.mvn/
+mvnw
+mvnw.cmd
+skills-lock.json

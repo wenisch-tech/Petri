@@ -1,4 +1,5 @@
 import { renderIcon } from './icons';
+import { renderNet, goalStatusLabels, stageLabel } from './petrinet';
 import { applyMarkdown, scheduleMarkdown } from './markdown';
 
 const DB = 'petri-workspace', STORE = 'worktree-state';
@@ -572,6 +573,7 @@ async function ensureMonaco(state) {
 }
 
 function layoutEditor(state) {
+  if (!state.host) return;
   const dimension = { width: state.host.clientWidth, height: state.host.clientHeight };
   if (dimension.width < 1 || dimension.height < 1) return;
   state.editor?.layout(dimension);
@@ -1021,7 +1023,7 @@ function initializeChat(state) {
         await snapshot(state);
       } else {
         const option = model?.selectedOptions[0];
-        const body = { prompt, provider: model?.value || null, model: option?.dataset.model,
+        const body = { prompt, providerInstanceId: model?.value || null, provider: option?.dataset.kind || null, model: option?.dataset.model,
           maxModelTurns: 20, maxOutputTokens: option?.dataset.tokens ? Number(option.dataset.tokens) : null,
           contextWindowTokens: option?.dataset.context ? Number(option.dataset.context) : null,
           reasoningEffort: option?.dataset.reasoning || null, textVerbosity: option?.dataset.verbosity || null };
@@ -1065,7 +1067,7 @@ function initializeChat(state) {
   model?.addEventListener('change', async () => {
     const option = model.selectedOptions[0];
     try {
-      await request(`/workspace/api/projects/${state.projectId}/model-preference`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ provider: model.value, model: option.dataset.model }) });
+      await request(`/workspace/api/projects/${state.projectId}/model-preference`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ providerInstanceId: model.value, provider: option.dataset.kind, model: option.dataset.model }) });
       chat.querySelector('[data-chat-status]').textContent = 'Model saved for this project';
     } catch (error) { chat.querySelector('[data-chat-status]').textContent = error.message; }
   });
@@ -1277,8 +1279,22 @@ function finalApprovalPanel(state, workflow) {
   const panel = el('section', 'workspace-workflow-panel');
   panel.append(el('h3', '', 'Final approval'));
   if (workflow.holdReason) panel.append(el('p', '', workflow.holdReason));
-  panel.append(el('p', '', 'The review passed but no test was executed. You can finish the workflow without another run.'));
-  const approve = el('button', 'btn-primary !min-h-8 !px-3 text-xs', 'Approve without executed tests'); approve.type = 'button';
+  const goals = workflow.goals || [];
+  const open = goals.filter(goal => goal.status !== 'VERIFIED');
+  const noPassedTest = !(workflow.tests || []).some(test => test.status === 'PASSED');
+  if (open.length) {
+    panel.append(el('p', '', `${open.length} of ${goals.length} acceptance criteria are not backed by evidence Petri could confirm:`));
+    const list = el('ul', 'workspace-goal-list');
+    for (const goal of open) {
+      const item = el('li');
+      item.append(el('code', '', goal.id), document.createTextNode(` ${goal.text}`), goalBadge(goal));
+      list.append(item);
+    }
+    panel.append(list);
+  }
+  if (noPassedTest) panel.append(el('p', '', 'No executed test passed.'));
+  panel.append(el('p', '', 'You can finish the workflow as it is, or send it back with guidance.'));
+  const approve = el('button', 'btn-primary !min-h-8 !px-3 text-xs', 'Approve and finish'); approve.type = 'button';
   approve.addEventListener('click', () => workflowAction(state, approve, workflow.id, 'final/approve'));
   panel.append(el('div', 'workspace-workflow-actions'));
   panel.lastChild.append(approve);
@@ -1289,6 +1305,94 @@ function pendingPlanArtifact(workflow) {
   if (workflow.currentStage !== 'WAITING_FOR_PLAN_APPROVAL') return null;
   return (workflow.artifacts || []).find(value =>
     value.kind === 'PLAN' && value.revision === workflow.currentPlanRevision) || null;
+}
+
+function openPetriDialog(state, workflow) {
+  const dialog = state.root.querySelector('[data-petrinet-dialog]');
+  if (!dialog) return;
+  dialog.dataset.workflowId = workflow.id;
+  fillPetriDialog(state, dialog, workflow);
+  if (!dialog.open) dialog.showModal();
+}
+
+/** Keeps an open net dialog live: every snapshot re-renders it from the same workflow. */
+function refreshPetriDialog(state, workflow) {
+  const dialog = state.root.querySelector('[data-petrinet-dialog]');
+  if (dialog?.open && dialog.dataset.workflowId === workflow.id) fillPetriDialog(state, dialog, workflow);
+}
+
+function fillPetriDialog(state, dialog, workflow) {
+  const body = dialog.querySelector('[data-petrinet-body]');
+  const scroll = body.scrollTop;
+  dialog.querySelector('[data-petrinet-subtitle]').textContent =
+    `${stageLabel(workflow.currentStage)} · ${workflow.status.replaceAll('_', ' ').toLowerCase()}`;
+  const net = el('div', 'overflow-x-auto');
+  const holder = el('div', 'petrinet-canvas');
+  holder.append(renderNet(workflow, { compact: false, previousStage: state.petriPrevious ?? null }));
+  net.append(holder);
+
+  const legend = el('div', 'petrinet-legend');
+  for (const [cls, text] of [['', 'place'], ['is-square', 'transition (gate, agent or you)'],
+    ['', 'token: where the workflow is'], ['', 'dashed arc: rework or exception']]) {
+    const item = el('span');
+    item.append(el('i', cls), document.createTextNode(text));
+    legend.append(item);
+  }
+  const parts = [net, legend];
+
+  const goals = workflow.goals || [];
+  if (goals.length) {
+    const verified = goals.filter(goal => goal.status === 'VERIFIED').length;
+    parts.push(el('h3', 'section-title mt-5', `Acceptance criteria · ${verified}/${goals.length} verified`));
+    parts.push(el('p', 'section-description', 'A criterion counts as verified only when a cited test passed or a cited file was really changed. The workflow cannot finish on its own until all are verified.'));
+    const shell = el('div', 'table-shell mt-3');
+    const table = el('table', 'data-table');
+    const head = el('thead'); const headRow = el('tr');
+    for (const name of ['Goal', 'Status', 'Evidence']) headRow.append(el('th', '', name));
+    head.append(headRow); table.append(head);
+    const rows = el('tbody');
+    for (const goal of goals) {
+      const row = el('tr');
+      const text = el('td'); text.append(el('code', '', goal.id), document.createTextNode(` ${goal.text}`));
+      if (goal.note) text.append(el('small', 'workspace-goal-reason', goal.note));
+      const status = el('td'); status.append(goalBadge(goal));
+      for (const reason of goal.reasons || []) status.append(el('small', 'workspace-goal-reason', reason));
+      const evidence = el('td');
+      if (!(goal.evidence || []).length) evidence.append(el('span', 'text-ink-500', '—'));
+      for (const cited of goal.evidence || []) {
+        const line = el('div', 'flex items-center gap-2');
+        line.append(el('span', 'badge badge-neutral', cited.type === 'TEST' ? 'Test' : 'File'),
+          el('span', 'min-w-0 truncate', cited.label || cited.ref), el('small', 'text-ink-500', cited.state.toLowerCase()));
+        const proposal = cited.type === 'FILE'
+          ? (workflow.proposals || []).filter(value => value.filePath === cited.ref && value.status === 'APPLIED').at(-1) : null;
+        if (proposal) {
+          const view = el('button', 'btn-ghost !min-h-7 !px-2 text-xs', 'Diff'); view.type = 'button';
+          view.addEventListener('click', () => { dialog.close(); openDiff(state, cited.ref, proposal.id); });
+          line.append(view);
+        }
+        evidence.append(line);
+      }
+      row.append(text, status, evidence); rows.append(row);
+    }
+    table.append(rows); shell.append(table); parts.push(shell);
+  }
+
+  const history = [...(workflow.transitions || [])].filter(value => value.fromStage !== value.toStage).reverse();
+  if (history.length) {
+    parts.push(el('h3', 'section-title mt-5', 'Firing history'));
+    const list = el('ol', 'petrinet-history');
+    for (const value of history) {
+      const item = el('li');
+      const time = el('time', '', new Date(value.createdAt).toLocaleString());
+      item.append(time, el('span', '', `${stageLabel(value.fromStage)} → ${stageLabel(value.toStage)}`),
+        el('span', 'badge badge-neutral', String(value.outcome).replaceAll('_', ' ').toLowerCase()));
+      if (value.reason) item.append(el('small', 'text-ink-500', value.reason));
+      list.append(item);
+    }
+    parts.push(list);
+  }
+  body.replaceChildren(...parts);
+  body.scrollTop = scroll;
 }
 
 function workflowPin(state, workflow, timeline) {
@@ -1322,7 +1426,17 @@ function workflowPin(state, workflow, timeline) {
     side.append(cancel);
   }
   heading.append(title, side);
-  pin.append(heading, workflowStageRail(workflow));
+  const net = el('div', 'workspace-net');
+  net.title = 'Open the workflow Petri net';
+  net.tabIndex = 0;
+  net.setAttribute('role', 'button');
+  net.append(renderNet(workflow, { compact: true, previousStage: state.petriPrevious ?? null }));
+  const openNet = event => { event.stopPropagation(); openPetriDialog(state, workflow); };
+  net.addEventListener('click', openNet);
+  net.addEventListener('keydown', event => {
+    if (event.key === 'Enter' || event.key === ' ') { event.preventDefault(); openNet(event); }
+  });
+  pin.append(heading, net);
   pin.addEventListener('click', () => {
     const card = timeline.querySelector(`[data-workflow-card="${workflow.id}"]`);
     card?.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -1335,7 +1449,14 @@ function renderActiveWorkflowPanel(state, workflow, timeline) {
   const panel = document.querySelector('[data-active-workflow-panel]');
   if (!panel) return;
   panel.replaceChildren();
-  if (workflow) { panel.append(workflowPin(state, workflow, timeline)); return; }
+  if (workflow) {
+    // The net animates the token's arrival when the stage moved since the previous snapshot.
+    state.petriPrevious = state.petriNet && state.petriNet.id === workflow.id ? state.petriNet.stage : null;
+    panel.append(workflowPin(state, workflow, timeline));
+    state.petriNet = { id: workflow.id, stage: workflow.currentStage };
+    refreshPetriDialog(state, workflow);
+    return;
+  }
   const empty = el('div', 'workspace-workflow-top-empty');
   const copy = el('span');
   copy.append(el('small', '', 'Workflow'), el('strong', '', 'No active workflow'));
@@ -1383,7 +1504,7 @@ function workflowFeed(workflow) {
     events.push({ kind: 'node', time: artifact.createdAt, order: 0.5, build: state => {
       if (artifact.kind === 'PLAN') return planPanel(state, workflow, artifact, null, false);
       if (artifact.kind === 'FINAL_VERDICT') return summaryPanel(artifact);
-      return artifact.kind === 'TASK_DIFF' ? diffArtifactPanel(artifact) : reviewPanel(artifact);
+      return artifact.kind === 'TASK_DIFF' ? diffArtifactPanel(artifact) : reviewPanel(artifact, workflow);
     } });
   }
   for (const proposal of workflow.proposals || []) events.push({ kind: 'node', time: proposal.createdAt, order: 0.5, build: state => workflowProposal(state, proposal) });
@@ -1467,21 +1588,6 @@ function workflowLabel(stage) {
     || stage.replaceAll('_', ' ').toLowerCase().replace(/^./, value => value.toUpperCase());
 }
 
-function workflowStageRail(workflow) {
-  const rail = el('div', 'workspace-stage-rail');
-  const current = workflowStages.findIndex(value => value[0] === workflow.currentStage);
-  const completed = workflow.status === 'COMPLETED';
-  workflowStages.forEach(([stage, label], index) => {
-    const item = el('span', 'workspace-stage');
-    item.classList.toggle('is-current', stage === workflow.currentStage);
-    item.classList.toggle('is-complete', completed || (current >= 0 && index < current));
-    item.title = label;
-    item.append(el('i'), el('small', '', label));
-    rail.append(item);
-  });
-  return rail;
-}
-
 function latestArtifact(artifacts, kind) {
   return artifacts.filter(value => value.kind === kind).sort((a, b) => b.revision - a.revision)[0] || null;
 }
@@ -1531,7 +1637,7 @@ function planPanel(state, workflow, artifact, verdictArtifact, interactive = fal
   panel.append(el('h3', '', plan.title || `Plan revision ${artifact.revision}`));
   if (plan.objective) panel.append(el('p', '', plan.objective));
   appendArtifactList(panel, 'Steps', plan.steps);
-  appendArtifactList(panel, 'Acceptance criteria', plan.acceptanceCriteria);
+  appendGoalList(panel, workflow, plan.acceptanceCriteria);
   appendArtifactList(panel, 'Risks', plan.risks);
   if (interactive) {
     if (verdict && verdict.decision === 'PASS_WITH_WARNINGS') {
@@ -1558,6 +1664,31 @@ function planPanel(state, workflow, artifact, verdictArtifact, interactive = fal
   return panel;
 }
 
+function goalBadge(goal) {
+  const tone = { VERIFIED: '', CLAIMED: ' badge-warn', PARTIAL: ' badge-warn', NOT_MET: ' badge-danger', UNVERIFIED: ' badge-neutral' }[goal.status] ?? ' badge-neutral';
+  const badge = el('span', `badge workspace-goal-badge${tone}`, goalStatusLabels[goal.status] || goal.status);
+  if ((goal.reasons || []).length) badge.title = goal.reasons.join('\n');
+  return badge;
+}
+
+function appendGoalList(parent, workflow, criteria) {
+  if (!Array.isArray(criteria) || !criteria.length) return;
+  const known = new Map((workflow.goals || []).map(goal => [goal.id, goal]));
+  parent.append(el('h4', '', 'Acceptance criteria'));
+  const list = el('ul', 'workspace-goal-list');
+  criteria.forEach((value, index) => {
+    const object = value && typeof value === 'object';
+    const id = object && value.id ? value.id : `AC${index + 1}`;
+    const text = typeof value === 'string' ? value : (object && value.text) || JSON.stringify(value);
+    const item = el('li');
+    item.append(el('code', '', id), document.createTextNode(` ${text}`));
+    const goal = known.get(id);
+    if (goal && goal.status !== 'UNVERIFIED') item.append(goalBadge(goal));
+    list.append(item);
+  });
+  parent.append(list);
+}
+
 function appendArtifactList(parent, title, values) {
   if (!Array.isArray(values) || !values.length) return;
   parent.append(el('h4', '', title));
@@ -1572,10 +1703,21 @@ function diffArtifactPanel(artifact) {
   return details;
 }
 
-function reviewPanel(artifact) {
+function reviewPanel(artifact, workflow) {
   const review = artifactJson(artifact);
   const panel = el('section', 'workspace-workflow-panel workspace-review-result');
   panel.append(el('h3', '', `Review · ${review.decision || 'pending'}`), el('p', '', review.summary || ''));
+  if ((workflow?.goals || []).length) {
+    panel.append(el('h4', '', 'Acceptance criteria'));
+    const list = el('ul', 'workspace-goal-list');
+    for (const goal of workflow.goals) {
+      const item = el('li');
+      item.append(el('code', '', goal.id), document.createTextNode(` ${goal.text}`), goalBadge(goal));
+      for (const reason of goal.reasons || []) item.append(el('small', 'workspace-goal-reason', reason));
+      list.append(item);
+    }
+    panel.append(list);
+  }
   for (const finding of review.findings || []) {
     const item = el('div', 'workspace-finding');
     item.append(el('strong', '', `${finding.severity || 'Finding'}${finding.path ? ` · ${finding.path}${finding.line ? `:${finding.line}` : ''}` : ''}`), el('p', '', finding.issue || finding.requiredChange || ''));
@@ -1712,7 +1854,11 @@ function roleProfileRow(state, profile) {
   const row = el('section', 'workspace-role-profile'); row.dataset.role = profile.role;
   row.append(el('h3', '', profile.role.charAt(0) + profile.role.slice(1).toLowerCase()));
   const grid = el('div', 'workspace-role-grid');
-  const provider = labeledSelect('Provider', 'provider', [...state.chat.querySelector('[data-model-selector]').options].map(option => [option.value, option.textContent.split(' · ')[0]]), profile.provider);
+  const providerOptions = [...state.chat.querySelector('[data-model-selector]').options];
+  // Rows saved before provider instances only know the kind; map those to the first matching instance.
+  const selectedProvider = profile.providerInstanceId
+    || providerOptions.find(option => option.dataset.kind === profile.provider)?.value || '';
+  const provider = labeledSelect('Provider', 'provider', providerOptions.map(option => [option.value, option.textContent]), selectedProvider);
   const model = labeledInput('Model', 'model', profile.model, 'text');
   const attempts = labeledInput('Attempts', 'maxAttempts', profile.maxAttempts, 'number', 1, 10);
   const turns = labeledInput('Turn budget', 'maxModelTurns', profile.maxModelTurns, 'number', 1, 100);
@@ -1760,7 +1906,7 @@ function wireOrchestrationDialog(state) {
     const values = [...dialog.querySelectorAll('[data-role]')].map(row => {
       const get = field => row.querySelector(`[data-field="${field}"]`).value;
       const number = field => Number(get(field));
-      return { role: row.dataset.role, provider: get('provider'), model: get('model'),
+      return { role: row.dataset.role, providerInstanceId: get('provider'), model: get('model'),
         maxAttempts: number('maxAttempts'), maxModelTurns: number('maxModelTurns'),
         maxOutputTokens: number('maxOutputTokens'), contextWindowTokens: number('contextWindowTokens'),
         reasoningEffort: get('reasoningEffort') || null, textVerbosity: get('textVerbosity') || null,

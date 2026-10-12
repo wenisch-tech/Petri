@@ -30,13 +30,15 @@ public class WorkspaceModelPreferenceService {
   @Transactional(readOnly = true)
   public WorkspaceModelPreferenceView get(UUID projectId, UUID userId) {
     return preferences.findByProjectIdAndUserId(projectId, userId)
-        .map(value -> new WorkspaceModelPreferenceView(value.provider(), value.model(), true))
+        .map(value -> new WorkspaceModelPreferenceView(
+            value.provider(), value.providerInstanceId(), value.model(), true))
         .orElse(null);
   }
 
   @Transactional
   public WorkspaceModelPreferenceView save(
-      UUID projectId, UUID userId, String actorEmail, ModelProvider provider, String model) {
+      UUID projectId, UUID userId, String actorEmail, ModelProvider provider,
+      UUID providerInstanceId, String model) {
     if (!projects.existsById(projectId)) throw new IllegalArgumentException("Unknown project");
     if (!users.existsById(userId)) throw new IllegalArgumentException("Unknown user");
     if (provider == null) throw new IllegalArgumentException("Model provider is required");
@@ -46,11 +48,11 @@ public class WorkspaceModelPreferenceService {
     Instant now = Instant.now();
     WorkspaceModelPreference preference = preferences.findByProjectIdAndUserId(projectId, userId)
         .orElseGet(() -> new WorkspaceModelPreference(
-            UUID.randomUUID(), projectId, userId, provider, model.strip(), now));
-    preference.replace(provider, model.strip(), now);
+            UUID.randomUUID(), projectId, userId, provider, providerInstanceId, model.strip(), now));
+    preference.replace(provider, providerInstanceId, model.strip(), now);
     preferences.save(preference);
     audit.record(actorEmail, "WORKSPACE_MODEL_PREFERENCE_SAVED", "AGENT_PROJECT", projectId,
         "Selected " + provider + " model " + model.strip());
-    return new WorkspaceModelPreferenceView(provider, model.strip(), true);
+    return new WorkspaceModelPreferenceView(provider, providerInstanceId, model.strip(), true);
   }
 }

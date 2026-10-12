@@ -56,6 +56,10 @@ curl -X POST \
 
 Optional run fields are `model`, `maxOutputTokens`, `reasoningEffort` and `textVerbosity`.
 
+`provider` selects the oldest administrator-defined provider of that kind. To target a specific
+provider when several of the same kind exist, send its id as `providerInstanceId`; it takes precedence
+over `provider`. The API key owner's own key is used when they stored one for that provider.
+
 | Method and path | Purpose |
 | --- | --- |
 | `POST .../runs` | Create a pending run. |

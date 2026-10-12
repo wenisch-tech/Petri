@@ -21,7 +21,8 @@ public class GenericOpenAiChatCompletionsClient implements ModelClient {
 
   @Override
   public ModelResponse respond(ModelRequest request) {
-    return codec.decode(transport.post(provider(), "/chat/completions", codec.encode(request)));
+    return codec.decode(transport.post(
+        provider(), request.credential(), "/chat/completions", codec.encode(request)));
   }
 
   @Override

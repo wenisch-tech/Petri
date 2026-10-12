@@ -48,6 +48,10 @@ class AgentRun {
   @Column(nullable = false, length = 32)
   private ModelProvider provider;
 
+  /** Null on rows from before provider instances; those resolve to the global instance of the kind. */
+  @Column(name = "provider_instance_id")
+  private UUID providerInstanceId;
+
   @Column(name = "model_name", nullable = false, length = 200)
   private String model;
 
@@ -303,6 +307,11 @@ class AgentRun {
   Integer chatMessageIndex() { return chatMessageIndex; }
   UUID worktreeId() { return worktreeId; }
   ModelProvider provider() { return provider; }
+  UUID providerInstanceId() { return providerInstanceId; }
+
+  void useProviderInstance(UUID instanceId) {
+    this.providerInstanceId = instanceId;
+  }
   String model() { return model; }
   String prompt() { return prompt; }
   AgentRunStatus status() { return status; }
