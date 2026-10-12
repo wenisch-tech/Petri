@@ -24,7 +24,7 @@
         <npm.version>10.9.4</npm.version>
         <!-- Security overrides of versions managed by the Spring Boot BOM. Drop each one once the
              Boot release in use ships a version at least this recent. -->
-        <tomcat.version>11.0.25</tomcat.version>
+        <tomcat.version>11.0.27</tomcat.version>
         <jackson-bom.version>3.1.7</jackson-bom.version>
     </properties>
 
