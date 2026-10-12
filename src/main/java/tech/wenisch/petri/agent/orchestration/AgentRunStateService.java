@@ -183,7 +183,8 @@ class AgentRunStateService {
       throw new IllegalArgumentException("Tool arguments are not valid JSON", exception);
     }
     ToolExecutionResult result = tools.execute(
-        call.name(), new ToolExecutionContext(run.worktreeId(), run.id(), run.workflowRole()), arguments);
+        call.name(), new ToolExecutionContext(run.worktreeId(), run.id(), run.workflowRole(),
+            run.automationRunId()), arguments);
     String output;
     try {
       output = objectMapper.writeValueAsString(result.output());
@@ -337,7 +338,8 @@ class AgentRunStateService {
         run.maxModelTurns(), run.maxOutputTokens(), run.reasoningEffort(), run.textVerbosity(),
         run.modelTurnCount(), latestResponseId,
         List.copyOf(pending), List.copyOf(outputs), conversationForChat(run, history),
-        run.workflowId(), run.workflowRole(), run.workflowPhase(), run.instructionsSnapshot());
+        run.workflowId(), run.workflowRole(), run.workflowPhase(), run.instructionsSnapshot(),
+        run.automationRunId());
   }
 
   private List<ModelConversationMessage> conversationForChat(AgentRun run, List<AgentTurn> current) {

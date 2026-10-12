@@ -41,6 +41,10 @@ class AgentRun {
   @Column(name = "instructions_snapshot", columnDefinition = "TEXT")
   private String instructionsSnapshot;
 
+  /** Set for unattended automation runs; they get a restricted, read-only tool set. */
+  @Column(name = "automation_run_id")
+  private UUID automationRunId;
+
   @Column(name = "worktree_id", nullable = false)
   private UUID worktreeId;
 
@@ -312,6 +316,13 @@ class AgentRun {
   void useProviderInstance(UUID instanceId) {
     this.providerInstanceId = instanceId;
   }
+
+  void useAutomation(UUID automationRunId, String instructions) {
+    this.automationRunId = automationRunId;
+    this.instructionsSnapshot = instructions;
+  }
+
+  UUID automationRunId() { return automationRunId; }
   String model() { return model; }
   String prompt() { return prompt; }
   AgentRunStatus status() { return status; }

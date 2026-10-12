@@ -38,7 +38,13 @@ public class AgentToolRegistry {
       String toolName, ToolExecutionContext context, Map<String, Object> input) {
     AgentTool tool = tools.get(toolName);
     if (tool == null) throw new IllegalArgumentException("Unknown agent tool: " + toolName);
-    if (!AgentWorkflowToolPolicy.allowed(context.workflowRole()).contains(toolName)) {
+    if (context.automationRunId() != null) {
+      if (!AutomationToolPolicy.allowed().contains(toolName)) {
+        throw new IllegalArgumentException("Tool is not permitted for automation runs");
+      }
+    } else if (AutomationToolPolicy.isAutomationOnly(toolName)) {
+      throw new IllegalArgumentException("Tool is only available to automation runs");
+    } else if (!AgentWorkflowToolPolicy.allowed(context.workflowRole()).contains(toolName)) {
       throw new IllegalArgumentException("Tool is not permitted for role " + context.workflowRole());
     }
     Map<String, Object> safeInput = input == null ? Map.of() : Map.copyOf(input);

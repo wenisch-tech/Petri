@@ -133,6 +133,41 @@ public class GitAccountConnectionService {
         connection.getAuthMethod(), repositoryId);
   }
 
+  /** Open pull requests of a repository through the connection; used by automations. */
+  @Transactional(noRollbackFor = {GitProviderException.class, IllegalStateException.class})
+  public PullRequestListing openPullRequests(
+      UUID id, String repositoryId, String fullName) {
+    GitAccountConnection connection = connections.findLockedById(id)
+        .orElseThrow(() -> new IllegalArgumentException("Git account connection not found"));
+    refreshIfNeeded(connection);
+    ResolvedConnection resolved = resolve(connection);
+    return new PullRequestListing(connection.getExternalLogin(),
+        resolved.adapter().openPullRequests(resolved.instance(), resolved.token(),
+            connection.getAuthMethod(), repositoryId, fullName));
+  }
+
+  @Transactional(noRollbackFor = {GitProviderException.class, IllegalStateException.class})
+  public String postPullRequestComment(
+      UUID id, String repositoryId, String fullName, long number, String webUrl, String markdown) {
+    GitAccountConnection connection = connections.findLockedById(id)
+        .orElseThrow(() -> new IllegalArgumentException("Git account connection not found"));
+    refreshIfNeeded(connection);
+    ResolvedConnection resolved = resolve(connection);
+    return resolved.adapter().postPullRequestComment(resolved.instance(), resolved.token(),
+        connection.getAuthMethod(), repositoryId, fullName, number, webUrl, markdown);
+  }
+
+  @Transactional(noRollbackFor = {GitProviderException.class, IllegalStateException.class})
+  public void reactToPullRequest(
+      UUID id, String repositoryId, String fullName, long number, String reaction) {
+    GitAccountConnection connection = connections.findLockedById(id)
+        .orElseThrow(() -> new IllegalArgumentException("Git account connection not found"));
+    refreshIfNeeded(connection);
+    ResolvedConnection resolved = resolve(connection);
+    resolved.adapter().reactToPullRequest(resolved.instance(), resolved.token(),
+        connection.getAuthMethod(), repositoryId, fullName, number, reaction);
+  }
+
   @Transactional(readOnly = true)
   public GitAccountConnection requireOwned(UUID id, String actorEmail) {
     return owned(id, actorEmail);

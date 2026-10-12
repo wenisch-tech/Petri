@@ -48,6 +48,47 @@ abstract class AbstractHttpGitProviderAdapter implements GitProviderAdapter {
     return send(request.GET().build());
   }
 
+  protected JsonNode postJson(
+      GitProviderInstance instance,
+      String resource,
+      String token,
+      GitConnectionAuthMethod method,
+      Map<String, ?> body) {
+    HttpRequest.Builder request = HttpRequest.newBuilder(safeUri(instance.getApiBaseUrl(), resource))
+        .timeout(REQUEST_TIMEOUT)
+        .header("Accept", "application/json")
+        .header("Content-Type", "application/json")
+        .header("User-Agent", "Petri/0.1");
+    authorize(request, token, method);
+    String payload = json.writeValueAsString(body);
+    return send(request.POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8)).build());
+  }
+
+  /** {@code owner/name} (or nested groups) as it may appear inside an API path. */
+  protected static String repositoryPath(String fullName) {
+    if (fullName == null || !fullName.matches("[A-Za-z0-9._-]+(/[A-Za-z0-9._-]+)+")
+        || fullName.contains("..")) {
+      throw new IllegalArgumentException("Invalid repository name");
+    }
+    return fullName;
+  }
+
+  protected static java.time.Instant instant(String value) {
+    if (value == null || value.isBlank()) return null;
+    try {
+      return java.time.OffsetDateTime.parse(value).toInstant();
+    } catch (java.time.format.DateTimeParseException exception) {
+      return null;
+    }
+  }
+
+  protected static boolean looksLikeDraft(String title) {
+    if (title == null) return false;
+    String value = title.strip().toLowerCase(java.util.Locale.ROOT);
+    return value.startsWith("wip:") || value.startsWith("[wip]") || value.startsWith("draft:")
+        || value.startsWith("[draft]");
+  }
+
   protected JsonNode postForm(URI endpoint, Map<String, String> values) {
     validateEndpoint(endpoint);
     StringBuilder body = new StringBuilder();

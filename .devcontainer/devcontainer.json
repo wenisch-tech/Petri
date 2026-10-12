@@ -9,7 +9,27 @@
     "PETRI_TESTS_EXECUTOR": "local",
     "PETRI_TERMINAL_CONFINE_COMMAND": "/usr/local/bin/petri-confine",
     "PETRI_TOOLCHAIN_ROOT": "/workspaces/Petri/data/toolchain",
-    "MAVEN_ARGS": "-Dskip.installnodenpm -Dskip.npm"
+    "MAVEN_ARGS": "-Dskip.installnodenpm -Dskip.npm",
+
+    "PETRI_AUTOMATION_INITIAL_DELAY_MS": "5000",
+    "PETRI_AUTOMATION_POLL_INTERVAL_MS": "30000",
+
+    "IGNORE_TLS": "${localEnv:IGNORE_TLS:false}",
+    "HTTP_PROXY": "${localEnv:HTTP_PROXY:}",
+    "HTTPS_PROXY": "${localEnv:HTTPS_PROXY:}",
+    "NO_PROXY": "${localEnv:NO_PROXY:}",
+
+    "OIDC_ENABLED": "${localEnv:OIDC_ENABLED:false}",
+    "OIDC_INSECURE_SKIP_TLS_VERIFY": "${localEnv:OIDC_INSECURE_SKIP_TLS_VERIFY:false}",
+    "OIDC_CREATEUSERS": "${localEnv:OIDC_CREATEUSERS:true}",
+    "OIDC_PROVIDERS_0_NAME": "${localEnv:OIDC_PROVIDERS_0_NAME:}",
+    "OIDC_PROVIDERS_0_CLIENT_ID": "${localEnv:OIDC_PROVIDERS_0_CLIENT_ID:}",
+    "OIDC_PROVIDERS_0_CLIENT_SECRET": "${localEnv:OIDC_PROVIDERS_0_CLIENT_SECRET:}",
+    "OIDC_PROVIDERS_0_ISSUER_URI": "${localEnv:OIDC_PROVIDERS_0_ISSUER_URI:}",
+    "OIDC_PROVIDERS_1_NAME": "${localEnv:OIDC_PROVIDERS_1_NAME:}",
+    "OIDC_PROVIDERS_1_CLIENT_ID": "${localEnv:OIDC_PROVIDERS_1_CLIENT_ID:}",
+    "OIDC_PROVIDERS_1_CLIENT_SECRET": "${localEnv:OIDC_PROVIDERS_1_CLIENT_SECRET:}",
+    "OIDC_PROVIDERS_1_ISSUER_URI": "${localEnv:OIDC_PROVIDERS_1_ISSUER_URI:}"
   },
   "forwardPorts": [8080],
   "portsAttributes": {

@@ -138,6 +138,148 @@ class GitProviderAdapterTest {
         .hasMessageNotContaining("provider details");
   }
 
+  @Test
+  void githubListsOpenPullRequestsAndPostsAComment() {
+    AtomicReference<HttpRequest> request = new AtomicReference<>();
+    HttpClient client = client(request, value -> value.method().equals("POST")
+        ? new ResponseSpec(201, "{\"html_url\":\"https://example.test/acme/petri/pull/7#c1\"}")
+        : ok("""
+            [{"number":7,"title":"Add feature","body":"Does a thing","draft":false,
+              "html_url":"https://example.test/acme/petri/pull/7","updated_at":"2026-05-01T10:00:00Z",
+              "user":{"login":"alice"},
+              "head":{"sha":"abc123","ref":"feature","repo":{"full_name":"fork/petri"}},
+              "base":{"ref":"main","repo":{"full_name":"acme/petri"}}},
+             {"number":8,"title":"WIP: later","draft":true,
+              "head":{"sha":"def456","ref":"wip","repo":{"full_name":"acme/petri"}},
+              "base":{"ref":"main","repo":{"full_name":"acme/petri"}}}]
+            """));
+    GithubProviderAdapter adapter = new GithubProviderAdapter(json, client);
+    GitProviderInstance instance = instance(GitProviderType.GITHUB);
+
+    var pulls = adapter.openPullRequests(
+        instance, "tok", GitConnectionAuthMethod.PAT, "42", "acme/petri");
+
+    assertThat(request.get().uri().getPath()).isEqualTo("/api/repos/acme/petri/pulls");
+    assertThat(pulls).hasSize(2);
+    assertThat(pulls.get(0)).satisfies(pull -> {
+      assertThat(pull.number()).isEqualTo(7);
+      assertThat(pull.headSha()).isEqualTo("abc123");
+      assertThat(pull.baseRef()).isEqualTo("main");
+      assertThat(pull.authorLogin()).isEqualTo("alice");
+      assertThat(pull.fromFork()).isTrue();
+      assertThat(pull.draft()).isFalse();
+      assertThat(pull.headFetchRef()).isEqualTo("refs/pull/7/head");
+      assertThat(pull.updatedAt()).isEqualTo(Instant.parse("2026-05-01T10:00:00Z"));
+    });
+    assertThat(pulls.get(1).draft()).isTrue();
+
+    String url = adapter.postPullRequestComment(instance, "tok", GitConnectionAuthMethod.PAT,
+        "42", "acme/petri", 7, "https://example.test/acme/petri/pull/7", "Looks fine");
+    assertThat(url).endsWith("#c1");
+    assertThat(request.get().method()).isEqualTo("POST");
+    assertThat(request.get().uri().getPath()).isEqualTo("/api/repos/acme/petri/issues/7/comments");
+    assertThatThrownBy(() -> adapter.openPullRequests(
+        instance, "tok", GitConnectionAuthMethod.PAT, "42", "../../etc"))
+        .isInstanceOf(IllegalArgumentException.class);
+  }
+
+  @Test
+  void gitlabMergeRequestsUseTheMergeRequestHeadRefAndNotes() {
+    AtomicReference<HttpRequest> request = new AtomicReference<>();
+    HttpClient client = client(request, value -> value.method().equals("POST")
+        ? new ResponseSpec(201, "{\"id\":99}")
+        : ok("""
+            [{"iid":3,"title":"Fix bug","description":"Fixes it","sha":"fff000",
+              "source_branch":"fix","target_branch":"develop","draft":false,
+              "web_url":"https://gitlab.test/team/service/-/merge_requests/3",
+              "updated_at":"2026-05-01T10:00:00.000Z","author":{"username":"bob"},
+              "source_project_id":91,"target_project_id":91}]
+            """));
+    GitlabProviderAdapter adapter = new GitlabProviderAdapter(json, client);
+    GitProviderInstance instance = instance(GitProviderType.GITLAB);
+
+    var pulls = adapter.openPullRequests(
+        instance, "tok", GitConnectionAuthMethod.PAT, "91", "team/service");
+
+    assertThat(request.get().uri().getPath()).isEqualTo("/api/projects/91/merge_requests");
+    assertThat(pulls).singleElement().satisfies(pull -> {
+      assertThat(pull.number()).isEqualTo(3);
+      assertThat(pull.headFetchRef()).isEqualTo("refs/merge-requests/3/head");
+      assertThat(pull.fromFork()).isFalse();
+      assertThat(pull.authorLogin()).isEqualTo("bob");
+    });
+    String url = adapter.postPullRequestComment(instance, "tok", GitConnectionAuthMethod.PAT,
+        "91", "team/service", 3, pulls.get(0).webUrl(), "ok");
+    assertThat(url).endsWith("/merge_requests/3#note_99");
+    assertThat(request.get().uri().getPath()).isEqualTo("/api/projects/91/merge_requests/3/notes");
+  }
+
+  @Test
+  void forgejoTreatsWipTitlesAsDraftsAndFailsClosedOnProviderErrors() {
+    AtomicReference<HttpRequest> request = new AtomicReference<>();
+    HttpClient client = client(request, value -> value.uri().getPath().endsWith("/pulls")
+        ? ok("""
+            [{"number":2,"title":"[WIP] thing","head":{"sha":"1","ref":"a","repo":{"full_name":"o/r"}},
+              "base":{"ref":"main","repo":{"full_name":"o/r"}}}]
+            """)
+        : new ResponseSpec(403, "forbidden"));
+    ForgejoProviderAdapter adapter = new ForgejoProviderAdapter(json, client);
+    GitProviderInstance instance = instance(GitProviderType.FORGEJO);
+
+    assertThat(adapter.openPullRequests(
+        instance, "tok", GitConnectionAuthMethod.PAT, "5", "o/r")).singleElement()
+        .satisfies(pull -> assertThat(pull.draft()).isTrue());
+    assertThatThrownBy(() -> adapter.postPullRequestComment(instance, "tok",
+        GitConnectionAuthMethod.PAT, "5", "o/r", 2, null, "x"))
+        .isInstanceOf(GitProviderException.class).hasMessageContaining("403");
+  }
+
+  @Test
+  void reactionsUseEachProvidersEndpointAndEmojiName() {
+    AtomicReference<HttpRequest> request = new AtomicReference<>();
+    HttpClient client = client(request, ignored -> new ResponseSpec(201, "{}"));
+
+    new GithubProviderAdapter(json, client).reactToPullRequest(instance(GitProviderType.GITHUB),
+        "tok", GitConnectionAuthMethod.PAT, "42", "acme/petri", 7, "eyes");
+    assertThat(request.get().method()).isEqualTo("POST");
+    assertThat(request.get().uri().getPath()).isEqualTo("/api/repos/acme/petri/issues/7/reactions");
+
+    new ForgejoProviderAdapter(json, client).reactToPullRequest(instance(GitProviderType.FORGEJO),
+        "tok", GitConnectionAuthMethod.PAT, "5", "o/r", 2, "eyes");
+    assertThat(request.get().uri().getPath()).isEqualTo("/api/repos/o/r/issues/2/reactions");
+
+    new GitlabProviderAdapter(json, client).reactToPullRequest(instance(GitProviderType.GITLAB),
+        "tok", GitConnectionAuthMethod.PAT, "91", "team/service", 3, "eyes");
+    assertThat(request.get().uri().getPath())
+        .isEqualTo("/api/projects/91/merge_requests/3/award_emoji");
+  }
+
+  @Test
+  void draftStateIsRecognisedOnAllProviders() {
+    AtomicReference<HttpRequest> request = new AtomicReference<>();
+    HttpClient github = client(request, ignored -> ok("""
+        [{"number":1,"title":"Ready","draft":false,"head":{"sha":"a","ref":"x","repo":{"full_name":"o/r"}},
+          "base":{"ref":"main","repo":{"full_name":"o/r"}}},
+         {"number":2,"title":"Real draft","draft":true,"head":{"sha":"b","ref":"y","repo":{"full_name":"o/r"}},
+          "base":{"ref":"main","repo":{"full_name":"o/r"}}}]
+        """));
+    assertThat(new GithubProviderAdapter(json, github).openPullRequests(
+        instance(GitProviderType.GITHUB), "t", GitConnectionAuthMethod.PAT, "1", "o/r"))
+        .extracting(PullRequestRef::draft).containsExactly(false, true);
+
+    HttpClient gitlab = client(request, ignored -> ok("""
+        [{"iid":1,"title":"a","sha":"a","source_branch":"x","target_branch":"main","draft":true},
+         {"iid":2,"title":"b","sha":"b","source_branch":"y","target_branch":"main",
+          "detailed_merge_status":"draft_status"},
+         {"iid":3,"title":"Draft: c","sha":"c","source_branch":"z","target_branch":"main"},
+         {"iid":4,"title":"ready","sha":"d","source_branch":"w","target_branch":"main",
+          "draft":false,"detailed_merge_status":"mergeable"}]
+        """));
+    assertThat(new GitlabProviderAdapter(json, gitlab).openPullRequests(
+        instance(GitProviderType.GITLAB), "t", GitConnectionAuthMethod.PAT, "9", "t/s"))
+        .extracting(PullRequestRef::draft).containsExactly(true, true, true, false);
+  }
+
   private static GitProviderInstance instance(GitProviderType type) {
     return new GitProviderInstance(UUID.randomUUID(), type, type.name(),
         "https://git.example.test", "https://git.example.test/api",

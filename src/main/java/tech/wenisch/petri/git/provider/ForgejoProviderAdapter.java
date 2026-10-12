@@ -54,6 +54,54 @@ final class ForgejoProviderAdapter extends AbstractHttpGitProviderAdapter {
   }
 
   @Override
+  public List<PullRequestRef> openPullRequests(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName) {
+    JsonNode nodes = get(instance,
+        "/repos/" + repositoryPath(fullName) + "/pulls?state=open&sort=recentupdate&limit=50",
+        token, method);
+    List<PullRequestRef> result = new ArrayList<>();
+    for (JsonNode node : nodes) {
+      JsonNode head = node.path("head");
+      String sha = text(head, "sha");
+      String headRef = text(head, "ref");
+      String baseRef = text(node.path("base"), "ref");
+      if (sha == null || headRef == null || baseRef == null) continue;
+      String headRepository = text(head.path("repo"), "full_name");
+      String baseRepository = text(node.path("base").path("repo"), "full_name");
+      String title = text(node, "title");
+      long number = node.path("number").asLong();
+      result.add(new PullRequestRef(
+          number, title, text(node, "body"), text(node.path("user"), "login"), sha, headRef, baseRef,
+          "refs/pull/" + number + "/head",
+          node.path("draft").asBoolean(false) || looksLikeDraft(title),
+          headRepository == null || !headRepository.equalsIgnoreCase(baseRepository),
+          text(node, "html_url"), instant(text(node, "updated_at"))));
+    }
+    return result;
+  }
+
+  @Override
+  public String postPullRequestComment(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, long number, String webUrl, String markdown) {
+    JsonNode created = postJson(instance,
+        "/repos/" + repositoryPath(fullName) + "/issues/" + number + "/comments",
+        token, method, Map.of("body", markdown));
+    String url = text(created, "html_url");
+    return url != null ? url : webUrl;
+  }
+
+  @Override
+  public void reactToPullRequest(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, long number, String reaction) {
+    // Pull requests are issues for the reactions API; repeating a reaction is a no-op.
+    postJson(instance, "/repos/" + repositoryPath(fullName) + "/issues/" + number + "/reactions",
+        token, method, Map.of("content", reaction));
+  }
+
+  @Override
   public ProviderToken exchangeCode(
       GitProviderInstance instance, String clientSecret, String code,
       String redirectUri, String codeVerifier) {

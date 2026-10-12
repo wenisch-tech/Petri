@@ -20,6 +20,13 @@
 - Live provider repository catalogs, bulk import and recoverable mirror jobs.
 - Provider-scoped model credentials and endpoint settings.
 
+## Automations
+
+- Per-project, fixed automations started by a pull request poll or a cron schedule.
+- Code review: a read-only agent run with the bundled `code-review` skill posts a structured review
+  comment on new pull requests of GitHub, GitLab and Forgejo projects, automatically or as an
+  approval-gated draft.
+
 ## Repository isolation
 
 - Controlled bare repository per project with separate local and cached `origin/*` refs.

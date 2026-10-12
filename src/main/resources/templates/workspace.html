@@ -21,6 +21,7 @@
         <a href="/projects" class="hidden text-ink-500 transition hover:text-ink-100 sm:inline">Projects</a>
         <span class="text-ink-700">/</span>
         <span class="truncate font-medium text-ink-100" th:text="${project.name}">Project</span>
+        <a class="icon-button shrink-0" th:href="@{/projects/{id}/automations(id=${project.id})}" title="Automations" aria-label="Automations"><i data-lucide="Bot"></i></a>
         <a class="icon-button shrink-0" th:href="@{/projects/{id}/settings(id=${project.id})}" title="Project settings" aria-label="Project settings"><i data-lucide="Settings"></i></a>
       </nav>
       <div class="flex items-center gap-1.5">

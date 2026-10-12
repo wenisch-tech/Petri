@@ -49,6 +49,7 @@
           <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
           <button class="btn-ghost" type="submit"><i data-lucide="RefreshCw"></i> Retry</button>
         </form>
+        <a class="icon-button" th:href="@{/projects/{id}/automations(id=${project.id})}" title="Automations" aria-label="Automations"><i data-lucide="Bot"></i></a>
         <a class="icon-button" th:href="@{/projects/{id}/settings(id=${project.id})}" title="Project settings" aria-label="Project settings"><i data-lucide="Settings"></i></a>
         <a class="btn-secondary btn-sm" th:href="@{/workspace/projects/{id}(id=${project.id})}">Open</a>
       </div>

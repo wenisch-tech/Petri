@@ -92,6 +92,10 @@ env:
   # HTTPS_PROXY: "http://proxy.internal:3128"
   # NO_PROXY: "localhost,.cluster.local"
   # PETRI_COMMAND_ENV_PIP_INDEX_URL: "https://mirror.internal/simple"
+  # Automations (pull request code review): polling and limits, see docs/automations.md.
+  # PETRI_AUTOMATION_ENABLED: "true"
+  # PETRI_AUTOMATION_POLL_INTERVAL_MS: "120000"
+  # PETRI_AUTOMATION_MAX_CONCURRENT: "2"
   # Skip TLS certificate/hostname verification for all outbound HTTPS (self-hosted, private CA).
   IGNORE_TLS: "false"
   # OIDC, one or more providers (repeat with _1_, _2_, ...); put client secrets under `secrets`:

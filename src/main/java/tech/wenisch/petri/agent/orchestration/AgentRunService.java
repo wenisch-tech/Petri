@@ -120,6 +120,25 @@ public class AgentRunService {
     return view(run, turns.findByRunIdOrderByIndexAsc(run.id()));
   }
 
+  /**
+   * Creates a run that belongs to an unattended automation: it keeps its own instructions and is
+   * limited to the automation tool set. The run is not started here.
+   */
+  @Transactional
+  public AgentRunView createAutomationRun(
+      UUID worktreeId,
+      CreateAgentRunCommand command,
+      UUID actorId,
+      String auditActor,
+      UUID automationRunId,
+      String instructions) {
+    AgentRunView created = create(worktreeId, command, actorId, auditActor);
+    AgentRun run = runs.findById(created.id())
+        .orElseThrow(() -> new IllegalStateException("Created agent run disappeared"));
+    run.useAutomation(automationRunId, instructions);
+    return created;
+  }
+
   @Transactional
   public AgentRunView enqueue(
       UUID chatId, CreateAgentRunCommand command, UUID actorId, String auditActor) {

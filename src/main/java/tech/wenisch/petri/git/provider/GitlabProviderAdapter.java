@@ -52,6 +52,56 @@ final class GitlabProviderAdapter extends AbstractHttpGitProviderAdapter {
   }
 
   @Override
+  public List<PullRequestRef> openPullRequests(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName) {
+    if (!repositoryId.matches("[0-9]+")) throw new IllegalArgumentException("Invalid repository id");
+    JsonNode nodes = get(instance,
+        "/projects/" + repositoryId + "/merge_requests?state=opened&order_by=updated_at&sort=desc&per_page=50",
+        token, method);
+    List<PullRequestRef> result = new ArrayList<>();
+    for (JsonNode node : nodes) {
+      String sha = text(node, "sha");
+      String headRef = text(node, "source_branch");
+      String baseRef = text(node, "target_branch");
+      if (sha == null || headRef == null || baseRef == null) continue;
+      long number = node.path("iid").asLong();
+      boolean draft = node.path("draft").asBoolean(false)
+          || node.path("work_in_progress").asBoolean(false)
+          || "draft_status".equals(text(node, "detailed_merge_status"))
+          || looksLikeDraft(text(node, "title"));
+      result.add(new PullRequestRef(
+          number, text(node, "title"), text(node, "description"),
+          text(node.path("author"), "username"), sha, headRef, baseRef,
+          "refs/merge-requests/" + number + "/head", draft,
+          node.path("source_project_id").asLong() != node.path("target_project_id").asLong(),
+          text(node, "web_url"), instant(text(node, "updated_at"))));
+    }
+    return result;
+  }
+
+  @Override
+  public String postPullRequestComment(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, long number, String webUrl, String markdown) {
+    if (!repositoryId.matches("[0-9]+")) throw new IllegalArgumentException("Invalid repository id");
+    JsonNode created = postJson(instance,
+        "/projects/" + repositoryId + "/merge_requests/" + number + "/notes",
+        token, method, Map.of("body", markdown));
+    String id = text(created, "id");
+    return webUrl != null && id != null ? webUrl + "#note_" + id : webUrl;
+  }
+
+  @Override
+  public void reactToPullRequest(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, long number, String reaction) {
+    if (!repositoryId.matches("[0-9]+")) throw new IllegalArgumentException("Invalid repository id");
+    postJson(instance, "/projects/" + repositoryId + "/merge_requests/" + number + "/award_emoji",
+        token, method, Map.of("name", reaction));
+  }
+
+  @Override
   public ProviderToken exchangeCode(
       GitProviderInstance instance, String clientSecret, String code,
       String redirectUri, String codeVerifier) {

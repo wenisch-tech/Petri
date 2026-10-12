@@ -78,6 +78,23 @@ VS Code or any Dev Containers client; `postCreateCommand` builds the application
 `MAVEN_ARGS` skips the frontend plugin's glibc Node download; run `npm ci && npm run build` once
 inside the container (done by `postCreateCommand`) before Maven builds.
 
+The dev container is set up to try the newer features without extra configuration:
+
+- **Automations** poll every 30 seconds (`PETRI_AUTOMATION_POLL_INTERVAL_MS`) after a 5 second
+  initial delay, so a pull request is picked up quickly. To test the code review, connect a GitHub,
+  GitLab or Forgejo account at `/git-accounts` (the token needs permission to comment on pull
+  requests), import a repository, configure a model provider at `/model-settings`, then enable
+  *Code review* at `/projects/{id}/automations`. Open a pull request, or **Review open pull
+  requests now** for existing ones. Skills are read from `./skills`.
+- **Proxy and TLS** settings are taken from the host environment when the container is created:
+  `HTTP_PROXY`, `HTTPS_PROXY`, `NO_PROXY`, `IGNORE_TLS`. Proxy variables are forwarded to terminal
+  commands, tests and package installs; add more under *Environment variables* of a sandbox
+  profile at `/sandbox-profiles`.
+- **OIDC** can be tried by exporting `OIDC_ENABLED=true` and `OIDC_PROVIDERS_0_*` /
+  `OIDC_PROVIDERS_1_*` on the host before opening the container; `OIDC_INSECURE_SKIP_TLS_VERIFY` and
+  `OIDC_CREATEUSERS` are passed through as well. Register `http://localhost:8080/login/oauth2/code/<registration-id>`
+  as the redirect URI. Rebuild the container after changing host variables.
+
 ## Running the image with an arbitrary UID
 
 The image runs as UID 65532 by default and also works with any non-root UID (group 0, `g=u`

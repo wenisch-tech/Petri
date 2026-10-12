@@ -30,7 +30,8 @@ record AgentExecutionState(
     UUID workflowId,
     AgentWorkflowRole workflowRole,
     AgentWorkflowStage workflowPhase,
-    String instructionsSnapshot) {
+    String instructionsSnapshot,
+    UUID automationRunId) {
 
   boolean terminal() {
     return switch (status) {

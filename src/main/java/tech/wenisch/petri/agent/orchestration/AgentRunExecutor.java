@@ -14,6 +14,7 @@ import tech.wenisch.petri.agent.model.ModelResponse;
 import tech.wenisch.petri.agent.model.ModelStreamListener;
 import tech.wenisch.petri.agent.tool.AgentToolRegistry;
 import tech.wenisch.petri.agent.tool.AgentWorkflowToolPolicy;
+import tech.wenisch.petri.agent.tool.AutomationToolPolicy;
 
 @Service
 public class AgentRunExecutor {
@@ -225,14 +226,19 @@ public class AgentRunExecutor {
 
   private ModelRequest request(AgentExecutionState state) {
     AgentWorkflowRole role = state.workflowRole();
-    String instructions = role == null
-        ? INSTRUCTIONS + EnvironmentGuidance.current() : state.instructionsSnapshot();
+    boolean automation = state.automationRunId() != null;
+    String instructions = automation && state.instructionsSnapshot() != null
+        ? state.instructionsSnapshot()
+        : role == null
+            ? INSTRUCTIONS + EnvironmentGuidance.current() : state.instructionsSnapshot();
     if (instructions == null || instructions.isBlank()) {
       instructions = role == null
           ? INSTRUCTIONS + EnvironmentGuidance.current() : WorkflowPrompts.instructions(role, null);
     }
-    var definitions = role == null
-        ? tools.definitions() : tools.definitions(AgentWorkflowToolPolicy.allowed(role));
+    var definitions = automation
+        ? tools.definitions(AutomationToolPolicy.allowed())
+        : role == null
+            ? tools.definitions() : tools.definitions(AgentWorkflowToolPolicy.allowed(role));
     if (state.initialModelRequest()) {
       return new ModelRequest(
           state.model(), instructions, state.prompt(), null, null, definitions,

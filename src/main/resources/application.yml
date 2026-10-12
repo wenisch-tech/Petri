@@ -38,6 +38,12 @@ oidc:
 petri:
   imports:
     max-parallel: ${PETRI_IMPORT_MAX_PARALLEL:4}
+  automation:
+    enabled: ${PETRI_AUTOMATION_ENABLED:true}
+    poll-interval-ms: ${PETRI_AUTOMATION_POLL_INTERVAL_MS:120000}
+    max-per-poll: ${PETRI_AUTOMATION_MAX_PER_POLL:5}
+    max-concurrent: ${PETRI_AUTOMATION_MAX_CONCURRENT:2}
+    max-diff-bytes: ${PETRI_AUTOMATION_MAX_DIFF_BYTES:120000}
   tests:
     podman-executable: ${PETRI_PODMAN_EXECUTABLE:podman}
     # podman (default, isolated) or local (run tests in Petri's own Alpine container)

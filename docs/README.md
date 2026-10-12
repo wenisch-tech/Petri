@@ -12,6 +12,7 @@ Petri is a self-hosted agentic coding harness, multi-agent orchestrator and deve
 - [Git provider accounts](git-provider-accounts.md) — personal GitHub, GitLab and Forgejo connections and bulk import.
 - [Rootless Podman test sandboxes](test-sandboxes.md) — isolated test execution and administrator profiles.
 - [Agent workflow](agent-workflow.md) — model loop, tools, approvals, persistence and recovery.
+- [Automations](automations.md) — per-project triggers (pull request, cron) and the automatic code review.
 - [Gated multi-agent orchestration](gated-orchestration.md) — planner questions, plan gates, role profiles, review and recovery.
 - [HTTP API](http-api.md) — API-key authentication, worktrees, runs, events and tools.
 - [Security model](security.md) — trust boundaries and production deployment guidance.
@@ -25,6 +26,7 @@ Petri is a self-hosted agentic coding harness, multi-agent orchestrator and deve
 | `/projects` | Register repositories and open project settings. |
 | `/git-accounts` | Connect personal Git provider accounts. |
 | `/git-provider-instances` | Configure personal self-hosted GitHub, GitLab or Forgejo endpoints; admins maintain global instances. |
+| `/projects/{projectId}/automations` | Enable and review automations such as the pull request code review. |
 | `/sandbox-profiles` | Administer rootless Podman test profiles. |
 | `/model-settings` | Configure model providers and local endpoints. |
 | `/runs` | Inspect persisted runs and approvals. |

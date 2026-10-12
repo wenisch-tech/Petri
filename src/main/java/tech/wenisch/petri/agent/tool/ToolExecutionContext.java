@@ -5,13 +5,21 @@ import java.util.UUID;
 public record ToolExecutionContext(
     UUID worktreeId,
     UUID agentRunId,
-    tech.wenisch.petri.agent.orchestration.AgentWorkflowRole workflowRole) {
+    tech.wenisch.petri.agent.orchestration.AgentWorkflowRole workflowRole,
+    UUID automationRunId) {
   public ToolExecutionContext(UUID worktreeId) {
-    this(worktreeId, null, null);
+    this(worktreeId, null, null, null);
   }
 
   public ToolExecutionContext(UUID worktreeId, UUID agentRunId) {
-    this(worktreeId, agentRunId, null);
+    this(worktreeId, agentRunId, null, null);
+  }
+
+  public ToolExecutionContext(
+      UUID worktreeId,
+      UUID agentRunId,
+      tech.wenisch.petri.agent.orchestration.AgentWorkflowRole workflowRole) {
+    this(worktreeId, agentRunId, workflowRole, null);
   }
 
   public ToolExecutionContext {

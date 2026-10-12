@@ -1,0 +1,87 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<th:block th:fragment="automationForm(automation, idPrefix)">
+  <form class="dialog-panel" method="post" th:action="@{/projects/{id}/automations(id=${project.id})}"
+        th:attr="x-data=|{ trigger: '${automation != null ? automation.trigger.name() : 'PULL_REQUEST'}' }|">
+    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+    <input type="hidden" name="automationId" th:if="${automation != null}" th:value="${automation.id}">
+    <div class="dialog-header">
+      <div>
+        <h2 th:text="${automation == null} ? 'Add automation' : |Edit ${automation.kind.title}|">Add automation</h2>
+        <p>Define how it starts and which skill it runs.</p>
+      </div>
+      <button class="icon-button" formmethod="dialog" formnovalidate aria-label="Close"><i data-lucide="X"></i></button>
+    </div>
+    <div class="dialog-body">
+      <div>
+        <label class="label" th:for="|${idPrefix}-trigger|">Starts</label>
+        <select th:id="|${idPrefix}-trigger|" class="field" name="trigger" x-model="trigger">
+          <option th:each="value : ${triggers}" th:value="${value}" th:text="${value.label}"
+                  th:selected="${automation != null and automation.trigger == value}">PULL_REQUEST</option>
+        </select>
+      </div>
+      <div x-show="trigger === 'CRON'" x-cloak>
+        <label class="label" th:for="|${idPrefix}-cron|">Cron schedule</label>
+        <input th:id="|${idPrefix}-cron|" class="field font-mono text-sm" name="cronExpression"
+               th:value="${automation != null ? automation.cronExpression : null}"
+               placeholder="0 9 * * 1-5" autocomplete="off" x-bind:required="trigger === 'CRON'">
+        <p class="hint">Five or six fields, evaluated in UTC. Every open pull request without a review of its latest commit is reviewed.</p>
+      </div>
+      <p x-show="trigger === 'PULL_REQUEST'" class="hint !mt-0">Pull requests are checked about every two minutes. Only pull requests opened or updated after this is enabled are reviewed, and drafts are skipped.</p>
+
+      <div>
+        <label class="label" th:for="|${idPrefix}-kind|">Skill</label>
+        <select th:id="|${idPrefix}-kind|" class="field" name="kind" th:disabled="${automation != null}">
+          <option th:each="value : ${kinds}" th:value="${value}"
+                  th:text="|${value.title} (${value.skill})|"
+                  th:selected="${automation != null and automation.kind == value}">CODE_REVIEW</option>
+        </select>
+        <input type="hidden" name="kind" th:if="${automation != null}" th:value="${automation.kind}">
+        <p class="hint" th:text="${kinds.length == 1 ? kinds[0].description : 'The skill the automation runs.'}">Reviews new pull requests.</p>
+      </div>
+
+      <label class="check">
+        <input type="checkbox" name="completeWithoutApproval" value="true"
+               th:checked="${automation == null or automation.postMode.name() == 'AUTO'}">
+        <span>Complete without approval
+          <span class="hint !mt-0">When unchecked, the result is held until a person approves it; nothing is posted or changed before then.</span></span>
+      </label>
+      <label class="check">
+        <input type="checkbox" name="enabled" value="true" th:checked="${automation == null or automation.enabled}">
+        <span>Enabled</span>
+      </label>
+
+      <details class="card">
+        <summary class="cursor-pointer px-4 py-3 text-sm font-medium text-ink-300">Model <span class="label-optional">(optional)</span></summary>
+        <div class="space-y-4 border-t border-ink-700/70 p-4">
+          <div>
+            <label class="label" th:for="|${idPrefix}-provider|">Model provider</label>
+            <select th:id="|${idPrefix}-provider|" class="field" name="providerInstanceId">
+              <option value="">Default for the project owner</option>
+              <option th:each="provider : ${providers}" th:value="${provider.id}" th:text="${provider.displayName}"
+                      th:selected="${automation != null and provider.id == automation.providerInstanceId}">Provider</option>
+            </select>
+          </div>
+          <div class="form-grid">
+            <div>
+              <label class="label" th:for="|${idPrefix}-model|">Model</label>
+              <input th:id="|${idPrefix}-model|" class="field" name="model" th:value="${automation != null ? automation.model : null}" placeholder="Provider default" autocomplete="off">
+            </div>
+            <div>
+              <label class="label" th:for="|${idPrefix}-turns|">Maximum model turns</label>
+              <input th:id="|${idPrefix}-turns|" class="field" type="number" min="1" max="50" name="maxModelTurns"
+                     th:value="${automation != null ? automation.maxModelTurns : 20}">
+            </div>
+          </div>
+        </div>
+      </details>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn-secondary" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn-primary" type="submit"><i data-lucide="Save"></i> Save</button>
+    </div>
+  </form>
+</th:block>
+</body>
+</html>

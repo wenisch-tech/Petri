@@ -92,6 +92,30 @@ public class ProjectMirrorService {
     }
   }
 
+  private static final java.util.regex.Pattern PROVIDER_PULL_REF =
+      java.util.regex.Pattern.compile("refs/(pull|merge-requests)/[0-9]{1,9}/head");
+  private static final java.util.regex.Pattern LOCAL_PULL_REF =
+      java.util.regex.Pattern.compile("refs/petri/pr/[0-9]{1,9}");
+
+  /**
+   * Fetches a provider's pull request head (which also covers forks) into a local Petri ref, using
+   * the project's stored or connected-account credentials.
+   */
+  public void fetchPullRequestRef(UUID projectId, String providerRef, String localRef) {
+    if (!PROVIDER_PULL_REF.matcher(providerRef).matches()
+        || !LOCAL_PULL_REF.matcher(localRef).matches()) {
+      throw new IllegalArgumentException("Invalid pull request ref");
+    }
+    try {
+      Path mirror = paths.mirror(projectId);
+      requireSuccess(runRemote(projectId, paths.root(), List.of(
+          "--git-dir=" + mirror, "fetch", "--no-tags", "origin",
+          "+" + providerRef + ":" + localRef)), "fetch pull request");
+    } catch (IOException exception) {
+      throw new GitOperationException("Could not fetch pull request", exception);
+    }
+  }
+
   GitCommandResult runRemote(UUID projectId, Path workingDirectory, List<String> arguments)
       throws IOException {
     Project project = project(projectId);

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(|${project.name} automations|)}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('projects')}"></header>
+
+<main class="page-narrow">
+  <a class="back-link" th:href="@{/projects/{id}/settings(id=${project.id})}"><i data-lucide="ArrowLeft"></i> Project settings</a>
+  <div class="page-header">
+    <div>
+      <h1 class="page-title" th:text="${project.name}">Project</h1>
+      <p class="page-description">Automations start a fixed workflow on their own and report back. Settings apply to this project only.</p>
+    </div>
+  </div>
+
+  <div th:replace="~{fragments/layout :: alert('success', ${notice})}"></div>
+  <div th:replace="~{fragments/layout :: alert('error', ${error})}"></div>
+
+  <section>
+    <div class="section-header">
+      <div>
+        <h2 class="section-title">Automations</h2>
+        <p class="section-description">Each automation starts a skill by itself, either on pull requests or on a schedule.</p>
+      </div>
+      <button class="btn-primary" type="button" data-dialog-open="automation-new" th:disabled="${unavailable != null}"><i data-lucide="Plus"></i> Add automation</button>
+    </div>
+    <p th:if="${unavailable != null}" class="hint mb-3" th:text="${unavailable}">Unavailable.</p>
+
+    <div th:if="${#lists.isEmpty(automations)}" class="empty-state">
+      <i data-lucide="Bot"></i><h2>No automations yet</h2>
+      <p>Add one to review pull requests automatically.</p>
+    </div>
+    <ul th:unless="${#lists.isEmpty(automations)}" class="list">
+      <li th:each="automation : ${automations}" class="list-row">
+        <span class="list-icon"><i data-lucide="Bot"></i></span>
+        <div class="list-main">
+          <span class="list-title" th:text="${automation.kind.title}">Code review</span>
+          <span class="list-meta">
+            <span th:text="${automation.trigger.name() == 'CRON'} ? |Schedule: ${automation.cronExpression} (UTC)| : 'On pull requests'">On pull requests</span>
+            <span th:if="${automation.trigger.name() == 'CRON' and nextFires.get(automation.id) != null}" th:text="|Next: ${#temporals.format(nextFires.get(automation.id), 'yyyy-MM-dd HH:mm')} UTC|">Next</span>
+            <span th:text="${automation.postMode.name() == 'AUTO'} ? 'Completes without approval' : 'Needs approval'">Needs approval</span>
+          </span>
+        </div>
+        <span class="badge" th:classappend="${automation.enabled} ? '' : 'badge-neutral'" th:text="${automation.enabled} ? 'Enabled' : 'Disabled'">Enabled</span>
+        <div class="list-actions">
+          <form th:if="${automation.enabled}" method="post" th:action="@{/projects/{id}/automations/{automationId}/run-now(id=${project.id}, automationId=${automation.id})}">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <button class="btn-ghost" type="submit" title="Review open pull requests now"><i data-lucide="Play"></i> Run now</button>
+          </form>
+          <button class="btn-ghost" type="button" th:attr="data-dialog-open=|automation-${automation.id}|"><i data-lucide="Pencil"></i> Edit</button>
+          <form method="post" th:action="@{/projects/{id}/automations/{automationId}/delete(id=${project.id}, automationId=${automation.id})}" data-confirm="Remove this automation? Past runs are kept.">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <button class="icon-button" type="submit" title="Remove" aria-label="Remove"><i data-lucide="Trash2"></i></button>
+          </form>
+        </div>
+      </li>
+    </ul>
+  </section>
+
+  <section class="section">
+    <div class="section-header"><div><h2 class="section-title">Recent runs</h2></div></div>
+    <div th:if="${#lists.isEmpty(runs)}" class="empty-state"><i data-lucide="Bot"></i><h2>No automation runs yet</h2></div>
+    <ul th:unless="${#lists.isEmpty(runs)}" class="list">
+      <li th:each="run : ${runs}" class="list-row">
+        <div class="list-main">
+          <span class="list-title">
+            <a th:if="${run.webUrl != null}" th:href="${run.webUrl}" target="_blank" rel="noopener noreferrer" th:text="|#${run.externalRef} ${run.title}|">#1 Title</a>
+            <span th:unless="${run.webUrl != null}" th:text="|#${run.externalRef} ${run.title}|">#1 Title</span>
+          </span>
+          <span class="list-meta">
+            <code th:text="${#strings.substring(run.headSha, 0, run.headSha.length() < 8 ? run.headSha.length() : 8)}">abc1234</code>
+            <span th:text="${#temporals.format(run.createdAt, 'yyyy-MM-dd HH:mm')}">date</span>
+            <a th:if="${run.commentUrl != null}" th:href="${run.commentUrl}" target="_blank" rel="noopener noreferrer">Comment</a>
+            <span th:if="${run.error != null}" th:text="${run.error}">error</span>
+          </span>
+        </div>
+        <span class="badge" th:classappend="${run.status.name() == 'FAILED'} ? 'badge-neutral' : ''" th:text="${run.status}">POSTED</span>
+        <div class="list-actions" th:if="${run.status.name() == 'AWAITING_APPROVAL'}">
+          <button class="btn-ghost" type="button" th:attr="data-dialog-open=|review-${run.id}|"><i data-lucide="Eye"></i> Review</button>
+          <dialog class="dialog dialog-wide" th:id="|review-${run.id}|">
+            <form class="dialog-panel" method="post" th:action="@{/projects/{id}/automations/runs/{runId}/approve(id=${project.id}, runId=${run.id})}">
+              <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+              <div class="dialog-header">
+                <div><h2>Review draft</h2><p>Posted to the pull request as written below.</p></div>
+                <button class="icon-button" formmethod="dialog" formnovalidate aria-label="Close"><i data-lucide="X"></i></button>
+              </div>
+              <div class="dialog-body"><pre class="font-mono text-sm whitespace-pre-wrap" th:text="${run.reviewMarkdown}">markdown</pre></div>
+              <div class="dialog-footer">
+                <button class="btn-secondary" formmethod="dialog" formnovalidate>Close</button>
+                <button class="btn-primary" type="submit"><i data-lucide="Send"></i> Approve and post</button>
+              </div>
+            </form>
+          </dialog>
+        </div>
+      </li>
+    </ul>
+  </section>
+</main>
+
+<dialog id="automation-new" class="dialog dialog-wide">
+  <th:block th:replace="~{fragments/automation :: automationForm(null, 'new')}"></th:block>
+</dialog>
+<dialog th:each="automation : ${automations}" th:id="|automation-${automation.id}|" class="dialog dialog-wide">
+  <th:block th:replace="~{fragments/automation :: automationForm(${automation}, ${'a' + automation.id})}"></th:block>
+</dialog>
+</body>
+</html>

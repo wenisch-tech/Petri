@@ -12,6 +12,7 @@
       <p class="page-description">Repository source, mirror and credentials for this project.</p>
     </div>
     <div class="page-actions">
+      <a class="btn-secondary" th:href="@{/projects/{id}/automations(id=${project.id})}"><i data-lucide="Bot"></i> Automations</a>
       <a class="btn-secondary" th:href="@{/workspace/projects/{id}(id=${project.id})}"><i data-lucide="FileCode2"></i> Open workspace</a>
     </div>
   </div>

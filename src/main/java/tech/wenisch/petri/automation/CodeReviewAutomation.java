@@ -1,0 +1,244 @@
+package tech.wenisch.petri.automation;
+
+import java.util.List;
+import java.util.UUID;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Value;
+import org.springframework.stereotype.Service;
+import tech.wenisch.petri.agent.model.ModelCredentialService;
+import tech.wenisch.petri.agent.model.ModelCredentialStatus;
+import tech.wenisch.petri.agent.orchestration.AgentRunExecutor;
+import tech.wenisch.petri.agent.orchestration.AgentRunService;
+import tech.wenisch.petri.agent.orchestration.AgentRunStatus;
+import tech.wenisch.petri.agent.orchestration.AgentRunView;
+import tech.wenisch.petri.agent.orchestration.CreateAgentRunCommand;
+import tech.wenisch.petri.agent.skill.SkillService;
+import tech.wenisch.petri.audit.AuditLogService;
+import tech.wenisch.petri.git.ProjectMirrorService;
+import tech.wenisch.petri.git.ProjectWorktreeService;
+import tech.wenisch.petri.git.ProjectWorktreeView;
+import tech.wenisch.petri.git.PullRequestDiffService;
+import tech.wenisch.petri.git.provider.GitAccountConnectionService;
+import tech.wenisch.petri.git.provider.ProjectProviderSource;
+import tech.wenisch.petri.git.provider.ProjectProviderSourceService;
+import tech.wenisch.petri.git.provider.PullRequestRef;
+import tech.wenisch.petri.project.Project;
+import tech.wenisch.petri.project.ProjectRepository;
+import tech.wenisch.petri.security.AppUser;
+import tech.wenisch.petri.security.AppUserRepository;
+
+/**
+ * Runs one code review: fetches the pull request head, checks it out in a throw-away worktree,
+ * lets a read-only agent review it with the {@code code-review} skill and publishes the result.
+ */
+@Service
+public class CodeReviewAutomation {
+  private static final Logger log = LoggerFactory.getLogger(CodeReviewAutomation.class);
+  private static final int MAX_LISTED_FILES = 300;
+
+  /** Everything a review needs; the settings are snapshotted when the job is queued. */
+  public record Job(
+      UUID runId, UUID projectId, PullRequestRef pr, AutomationPostMode postMode,
+      UUID providerInstanceId, String model, int maxModelTurns) {}
+
+  private final AutomationRunService runs;
+  private final AutomationReviewService reviews;
+  private final ProjectRepository projects;
+  private final AppUserRepository users;
+  private final ProjectProviderSourceService sources;
+  private final GitAccountConnectionService connections;
+  private final ProjectMirrorService mirrors;
+  private final PullRequestDiffService diffs;
+  private final ProjectWorktreeService worktrees;
+  private final SkillService skills;
+  private final AgentRunService agentRuns;
+  private final AgentRunExecutor executor;
+  private final ModelCredentialService models;
+  private final AuditLogService audit;
+  private final int maxDiffBytes;
+
+  CodeReviewAutomation(
+      AutomationRunService runs, AutomationReviewService reviews, ProjectRepository projects,
+      AppUserRepository users,
+      ProjectProviderSourceService sources, GitAccountConnectionService connections,
+      ProjectMirrorService mirrors, PullRequestDiffService diffs, ProjectWorktreeService worktrees,
+      SkillService skills, AgentRunService agentRuns, AgentRunExecutor executor,
+      ModelCredentialService models, AuditLogService audit,
+      @Value("${petri.automation.max-diff-bytes:120000}") int maxDiffBytes) {
+    this.runs = runs;
+    this.reviews = reviews;
+    this.projects = projects;
+    this.users = users;
+    this.sources = sources;
+    this.connections = connections;
+    this.mirrors = mirrors;
+    this.diffs = diffs;
+    this.worktrees = worktrees;
+    this.skills = skills;
+    this.agentRuns = agentRuns;
+    this.executor = executor;
+    this.models = models;
+    this.audit = audit;
+    this.maxDiffBytes = maxDiffBytes;
+  }
+
+  /** Never throws: every outcome is recorded on the automation run. */
+  public void execute(Job job) {
+    UUID worktreeId = null;
+    Project project = null;
+    AppUser owner = null;
+    try {
+      runs.running(job.runId());
+      project = projects.findById(job.projectId())
+          .orElseThrow(() -> new IllegalStateException("Project no longer exists"));
+      owner = users.findById(project.getCreatedBy())
+          .orElseThrow(() -> new IllegalStateException("Project owner no longer exists"));
+      ProjectProviderSource source = sources.find(job.projectId());
+      if (source == null) {
+        throw new IllegalStateException("Project is no longer linked to a connected Git account");
+      }
+      // The pull request may have changed since it was queued: converted to a draft, closed or
+      // pushed to. Look again before spending any work on it.
+      String stale = staleReason(source, job.pr());
+      if (stale != null) {
+        runs.skipped(job.runId(), stale);
+        return;
+      }
+      acknowledge(source, job.pr());
+      audit.record("automation", "AUTOMATION_RUN_STARTED", "PROJECT", job.projectId(),
+          "Code review of pull request #" + job.pr().number() + " started");
+
+      mirrors.synchronize(job.projectId(), owner.getEmail());
+      mirrors.fetchPullRequestRef(
+          job.projectId(), job.pr().headFetchRef(), "refs/petri/pr/" + job.pr().number());
+      PullRequestDiffService.PullRequestDiff diff = diffs.diff(
+          job.projectId(), job.pr().number(), job.pr().baseRef(), maxDiffBytes);
+      if (!diff.headSha().equals(job.pr().headSha())) {
+        runs.skipped(job.runId(), "The pull request was updated while this review was queued; "
+            + "the new head is reviewed on the next poll.");
+        return;
+      }
+      if (diff.changedFiles().isEmpty()) {
+        runs.skipped(job.runId(), "The pull request has no changes against its base branch.");
+        return;
+      }
+
+      ProjectWorktreeView worktree = worktrees.create(job.projectId(), diff.headSha(), owner.getEmail());
+      worktreeId = worktree.id();
+      runs.workspace(job.runId(), worktreeId, diff.changedFiles());
+
+      ReviewSubmission.Previous previous = reviews.previous(job.runId()).orElse(null);
+      String sinceDiff = previous == null ? null : diffs.sinceCommit(
+          job.projectId(), job.pr().number(), previous.headSha(), maxDiffBytes / 2);
+      String instructions = CodeReviewPrompts.instructions(
+          skills.load(AutomationKind.CODE_REVIEW.skill()).content());
+      String task = CodeReviewPrompts.task(job.pr(), diff.changedFiles(), diff.diff(),
+          diff.truncated(), MAX_LISTED_FILES, previous, sinceDiff);
+      ModelCredentialStatus model = model(job, owner.getId());
+      AgentRunView created = agentRuns.createAutomationRun(
+          worktreeId,
+          new CreateAgentRunCommand(task, model.provider(), job.maxModelTurns(), blankToNull(job.model()),
+              null, null, null, null, model.id()),
+          owner.getId(), "automation:" + job.runId(), job.runId(), instructions);
+      runs.agentRun(job.runId(), created.id());
+      AgentRunView finished = executor.execute(
+          created.id(), worktreeId, owner.getId(), "automation:" + job.runId());
+
+      AutomationRun result = runs.require(job.runId());
+      if (result.getReviewMarkdown() == null) {
+        String reason = finished.status() == AgentRunStatus.COMPLETED
+            ? "The review agent finished without submitting a review."
+            : "The review agent ended as " + finished.status()
+                + (finished.errorMessage() == null ? "." : ": " + finished.errorMessage());
+        runs.failed(job.runId(), reason);
+        audit.record("automation", "AUTOMATION_RUN_FAILED", "PROJECT", job.projectId(), reason);
+        return;
+      }
+      if (job.postMode() == AutomationPostMode.DRAFT) {
+        runs.awaitingApproval(job.runId());
+      } else {
+        publish(job.runId(), "automation");
+      }
+    } catch (RuntimeException exception) {
+      log.warn("Code review run {} failed", job.runId(), exception);
+      String reason = exception.getMessage() == null ? exception.getClass().getSimpleName()
+          : exception.getMessage();
+      runs.failed(job.runId(), reason);
+      audit.record("automation", "AUTOMATION_RUN_FAILED", "PROJECT", job.projectId(),
+          "Code review of pull request #" + job.pr().number() + " failed: " + reason);
+    } finally {
+      if (worktreeId != null && owner != null) {
+        try {
+          worktrees.remove(worktreeId, job.projectId(), owner.getEmail());
+        } catch (RuntimeException exception) {
+          log.warn("Could not remove review worktree {}", worktreeId, exception);
+        }
+      }
+    }
+  }
+
+  /** Posts a stored review to its pull request. Used for automatic posting and for approvals. */
+  public void publish(UUID runId, String actor) {
+    AutomationRun run = runs.require(runId);
+    if (run.getReviewMarkdown() == null) throw new IllegalStateException("The run has no review");
+    ProjectProviderSource source = sources.find(run.getProjectId());
+    if (source == null) throw new IllegalStateException("Project is no longer linked to a Git account");
+    try {
+      String url = connections.postPullRequestComment(
+          source.getConnectionId(), source.getExternalRepositoryId(), source.getFullName(),
+          Long.parseLong(run.getExternalRef()), run.getWebUrl(), run.getReviewMarkdown());
+      runs.posted(runId, url);
+      audit.record(actor, "AUTOMATION_COMMENT_POSTED", "PROJECT", run.getProjectId(),
+          "Posted review on pull request #" + run.getExternalRef());
+    } catch (RuntimeException exception) {
+      String reason = "Could not post the review comment: "
+          + (exception.getMessage() == null ? "unknown error" : exception.getMessage())
+          + ". Check that the connected account's token may comment on pull requests.";
+      runs.failed(runId, reason);
+      audit.record(actor, "AUTOMATION_RUN_FAILED", "PROJECT", run.getProjectId(), reason);
+    }
+  }
+
+  /** Why the pull request should no longer be reviewed, or null when it still should. */
+  private String staleReason(ProjectProviderSource source, PullRequestRef queued) {
+    List<PullRequestRef> open = connections.openPullRequests(
+        source.getConnectionId(), source.getExternalRepositoryId(), source.getFullName())
+        .pullRequests();
+    PullRequestRef current = open.stream()
+        .filter(candidate -> candidate.number() == queued.number()).findFirst().orElse(null);
+    if (current == null) return "The pull request is closed or merged.";
+    if (current.draft()) return "The pull request is a draft; it is reviewed once it is ready.";
+    if (!current.headSha().equals(queued.headSha())) {
+      return "The pull request was updated while this review was queued; the new head is "
+          + "reviewed on the next poll.";
+    }
+    return null;
+  }
+
+  /** Marks the pull request with an eyes reaction. Cosmetic, so a failure never stops the review. */
+  private void acknowledge(ProjectProviderSource source, PullRequestRef pr) {
+    try {
+      connections.reactToPullRequest(source.getConnectionId(), source.getExternalRepositoryId(),
+          source.getFullName(), pr.number(), "eyes");
+    } catch (RuntimeException exception) {
+      log.info("Could not add the eyes reaction to pull request #{}: {}",
+          pr.number(), exception.getMessage());
+    }
+  }
+
+  private ModelCredentialStatus model(Job job, UUID ownerId) {
+    if (job.providerInstanceId() != null) {
+      return models.resolve(ownerId, null, job.providerInstanceId());
+    }
+    List<ModelCredentialStatus> usable = models.usable(ownerId);
+    return usable.stream().filter(ModelCredentialStatus::global).findFirst()
+        .or(() -> usable.stream().findFirst())
+        .orElseThrow(() -> new IllegalStateException(
+            "No usable model provider is available for the project owner"));
+  }
+
+  private static String blankToNull(String value) {
+    return value == null || value.isBlank() ? null : value;
+  }
+}
