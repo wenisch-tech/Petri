@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.6.0 - 2026-10-12
+
+## [0.6.0](https://github.com/wenisch-tech/Petri/compare/v0.5.0...v0.6.0) (2026-10-12)
+
+
+### Features
+
+* Introducing support for multiple OIDC provider ([77c939b](https://github.com/wenisch-tech/Petri/commit/77c939b1b49dbabdfbf8a0831638b5d816f87c9c))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.6.0
+
+
 ## v0.5.0 - 2026-10-12
 
 ## [0.5.0](https://github.com/wenisch-tech/Petri/compare/v0.4.0...v0.5.0) (2026-10-12)
