@@ -100,3 +100,45 @@ branch name in the worktree selector (only the non-zero ones). They are measured
 branch's upstream. A branch that was never pushed has no upstream branch to compare with, so *ahead*
 counts the commits that exist on no remote branch yet: a first commit on a new branch shows `↑1`.
 
+## Git bar and project pages in the workspace
+
+Under the application header the project has three **tabs**: *Workspace* (explorer, editor,
+terminal), *Automations*, *Runs* and *Settings*. The git bar sits next to them and is only visible on the
+Workspace tab: the branch selector and *New branch* on the left, then the indicators (`↑ ↓`,
+clean/changes, rebase) and the git actions Fetch, Pull, Rebase, Push, Commit and More. There is one
+worktree per branch, so there is no separate worktree selector.
+
+The workflow visualization on the right of the header spans both the tab row and the git row, so it
+has the full header height and stays visible on every tab.
+
+Automations and Settings open **in place**: the explorer and editor are replaced by the project
+page while the chat stays where it is. Forms on these pages (adding an automation, saving a
+credential, syncing the mirror) are submitted in the background and the page refreshes with its
+confirmation message; links between the two pages switch the view. The *Workspace* tab returns to the explorer and
+editor. The open page is kept in the address as
+`?view=automations` or `?view=settings`.
+
+The standalone pages `/projects/{id}/automations` and `/projects/{id}/settings` still exist and are
+what the project list links to. They render the same content with the usual application chrome; the
+workspace requests it with `?embedded=true` to receive only the content.
+
+### Runs tab
+
+*Runs* lists the agent runs of this project only (runs on any of its worktrees, including removed
+ones, started by the signed-in user), newest first and limited to 200. Chats and workflow stages
+are one list with a *Type* column; filters above the table narrow it by type, status and a text
+search over prompt and model, without reloading. *Inspect* opens the run detail page. The global
+list of all runs remains at `/runs`; the project list is also available standalone at
+`/projects/{id}/runs`.
+
+The pages shown in the workspace use the whole panel width with a 20px gutter.
+
+### Run details and breadcrumb
+
+Opening a run from the *Runs* tab shows its detail page in the same panel (the standalone
+`/runs/{id}` page is unchanged). Approving or rejecting its proposals and tests works in place.
+
+The breadcrumb in the header follows the view: `Project / Workspace`, `Project / Automations`,
+`Project / Runs` and `Project / Runs / Run 1a2b3c4d` while a run is open. The project name and
+*Runs* in the trail are links back. The open run is kept in the address (`?view=runs&run=<id>`).
+

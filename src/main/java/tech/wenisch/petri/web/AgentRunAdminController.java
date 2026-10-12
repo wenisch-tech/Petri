@@ -47,13 +47,18 @@ public class AgentRunAdminController {
   }
 
   @GetMapping("/{runId}")
-  String run(@PathVariable UUID runId, Principal principal, Model model) {
+  String run(
+      @PathVariable UUID runId,
+      @RequestParam(defaultValue = "false") boolean embedded,
+      Principal principal,
+      Model model) {
     AgentRunView run = runs.get(runId);
     runs.chat(run.chatId(), actorId(principal));
     model.addAttribute("run", run);
     model.addAttribute("changeProposals", changes.listForAgentRun(runId));
     model.addAttribute("testRuns", testRuns.listForAgentRun(runId));
-    return "run-detail";
+    // The workspace shows the run in its Runs tab and asks for the content only.
+    return embedded ? "run-detail :: content" : "run-detail";
   }
 
   @PostMapping("/{runId}/changes/{proposalId}/approve")

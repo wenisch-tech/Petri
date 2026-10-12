@@ -49,7 +49,11 @@ public class AutomationController {
   }
 
   @GetMapping("/projects/{projectId}/automations")
-  String automations(@PathVariable UUID projectId, Principal principal, Model model) {
+  String automations(
+      @PathVariable UUID projectId,
+      @RequestParam(defaultValue = "false") boolean embedded,
+      Principal principal,
+      Model model) {
     Project project = access.requireProject(projectId, principal.getName());
     List<ProjectAutomation> automations = settings.list(projectId, principal.getName());
     Instant now = Instant.now();
@@ -66,7 +70,7 @@ public class AutomationController {
     model.addAttribute("unavailable", settings.unavailableReason(projectId));
     model.addAttribute("providers", models.usable(project.getCreatedBy()));
     model.addAttribute("runs", runs.recent(projectId));
-    return "project-automations";
+    return embedded ? "project-automations :: content" : "project-automations";
   }
 
   @PostMapping("/projects/{projectId}/automations")

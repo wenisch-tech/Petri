@@ -1,4 +1,4 @@
-import { renderIcon } from './icons';
+import { hydrateIcons, renderIcon } from './icons';
 import { renderNet, goalStatusLabels, stageLabel } from './petrinet';
 import { applyMarkdown, scheduleMarkdown } from './markdown';
 
@@ -69,6 +69,7 @@ export function initializeWorkspace() {
   };
   start('layout', () => initializeLayout(state), '[data-editor-status]');
   start('git', () => initializeGit(state), '[data-git-indicators]');
+  start('views', () => initializeEmbeddedViews(state), '[data-workspace-embedded]');
   if (!worktreeId) return;
   const key = `project:${state.projectId}:worktree:${worktreeId}`;
   try { localStorage.setItem(`petri:last-worktree:${state.projectId}`, worktreeId); } catch {}
@@ -79,8 +80,191 @@ export function initializeWorkspace() {
   localRead(key).then(value => { state.local = value; state.tabs = (value.tabs || []).slice(0, 12); state.drafts = value.drafts || {}; if (root.dataset.selectedFile) openFile(state, root.dataset.selectedFile); else if (state.tabs[0]) openFile(state, state.tabs[0]); });
 }
 
+// Project pages (automations, settings) open in place of the explorer and editor. The standalone
+// pages keep working; this loads the same content and keeps forms and links inside the workspace.
+function initializeEmbeddedViews(state) {
+  const panel = state.root.querySelector('[data-workspace-embedded]');
+  const content = panel?.querySelector('[data-workspace-embedded-content]');
+  if (!panel || !content) return;
+  const base = `/projects/${state.projectId}`;
+  const urls = { automations: `${base}/automations`, runs: `${base}/runs`, settings: `${base}/settings` };
+  const titles = { automations: 'Automations', runs: 'Runs', settings: 'Settings' };
+  const runPath = /^\/runs\/([0-9a-fA-F-]{36})$/;
+  const buttons = [...document.querySelectorAll('.workspace-view-tab[data-workspace-view]')];
+  const gitBar = document.querySelector('[data-git-bar]');
+  const trail = document.querySelector('[data-breadcrumb-trail]');
+  // `current` is the project view; `detail` is the run shown inside the Runs view, if any.
+  let current = null;
+  let detail = null;
+  let currentSearch = '';
+
+  const separator = () => el('span', 'text-ink-700', '/');
+  // Breadcrumb after the project name: "Workspace", "Runs" or "Runs / Run 1a2b3c4d".
+  const renderCrumbs = () => {
+    if (!trail) return;
+    const items = [];
+    if (!current) items.push({ label: 'Workspace' });
+    else if (detail) {
+      items.push({ label: titles[current], view: current });
+      items.push({ label: `Run ${detail.slice(0, 8)}` });
+    } else items.push({ label: titles[current] });
+    trail.replaceChildren();
+    items.forEach((item, index) => {
+      if (index > 0) trail.append(separator());
+      if (item.view) {
+        const link = el('a', 'text-ink-500 transition hover:text-ink-100', item.label);
+        link.href = urls[item.view];
+        link.dataset.crumbView = item.view;
+        trail.append(link);
+      } else trail.append(el('span', 'truncate font-medium text-ink-100', item.label));
+    });
+  };
+  const markActive = () => {
+    buttons.forEach(button => {
+      const active = button.dataset.workspaceView === (current || 'workspace');
+      button.classList.toggle('is-active', active);
+      button.setAttribute('aria-selected', String(active));
+    });
+    gitBar?.classList.toggle('is-page-view', Boolean(current));
+    renderCrumbs();
+  };
+  const setUrl = () => {
+    try {
+      const url = new URL(location.href);
+      if (current) url.searchParams.set('view', current); else url.searchParams.delete('view');
+      if (current && detail) url.searchParams.set('run', detail); else url.searchParams.delete('run');
+      history.replaceState(null, '', url);
+    } catch { /* the address bar is cosmetic */ }
+  };
+  const pagePath = () => (detail ? `/runs/${detail}` : urls[current]);
+  const close = () => {
+    current = null;
+    detail = null;
+    currentSearch = '';
+    panel.hidden = true;
+    state.root.classList.remove('is-embedded-view');
+    content.replaceChildren();
+    markActive();
+    setUrl();
+    // The editor was hidden while the page was open and must measure itself again.
+    requestAnimationFrame(() => window.dispatchEvent(new Event('resize')));
+  };
+  const render = html => {
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const nodes = [...doc.querySelectorAll('main.page-narrow, main.page, dialog')]
+      .filter(node => !node.parentElement?.closest('dialog'));
+    content.replaceChildren(...nodes.map(node => document.importNode(node, true)));
+    hydrateIcons(content);
+    // Server-side validation re-renders with the failing dialog; reopen it.
+    content.querySelectorAll('dialog.dialog').forEach(dialog => {
+      if (dialog.querySelector('.field-error, .alert-error')) dialog.showModal();
+    });
+  };
+  const load = async () => {
+    const token = `${current}|${detail}`;
+    content.setAttribute('aria-busy', 'true');
+    try {
+      const extra = currentSearch ? `&${currentSearch.replace(/^\?/, '')}` : '';
+      const response = await fetch(`${pagePath()}?embedded=true${extra}`,
+        { headers: { Accept: 'text/html' }, cache: 'no-store', credentials: 'same-origin' });
+      if (!response.ok) throw new Error(`The page could not be loaded (HTTP ${response.status})`);
+      const html = await response.text();
+      if (token === `${current}|${detail}`) render(html);
+    } catch (error) {
+      if (token === `${current}|${detail}`) content.replaceChildren(el('div', 'workspace-error', error.message));
+    } finally { content.removeAttribute('aria-busy'); }
+  };
+  const show = (name, runId = null, search = '') => {
+    if (name === 'workspace' || !name) { if (current) close(); return; }
+    if (!urls[name]) return;
+    current = name;
+    detail = runId;
+    currentSearch = search;
+    panel.hidden = false;
+    state.root.classList.add('is-embedded-view');
+    markActive();
+    content.replaceChildren(el('div', 'workspace-loading', 'Loading…'));
+    setUrl();
+    load();
+  };
+
+  buttons.forEach(button => button.addEventListener('click', event => {
+    if (event.metaKey || event.ctrlKey || event.shiftKey || event.button === 1) return;
+    event.preventDefault();
+    const name = button.dataset.workspaceView;
+    if (name === (current || 'workspace') && !detail) return;
+    show(name);
+  }));
+  // The project name and the breadcrumb trail navigate inside the workspace as well.
+  document.querySelector('[data-crumb-workspace]')?.addEventListener('click', event => {
+    event.preventDefault();
+    close();
+  });
+  trail?.addEventListener('click', event => {
+    const link = event.target.closest?.('a[data-crumb-view]');
+    if (!link) return;
+    event.preventDefault();
+    show(link.dataset.crumbView);
+  });
+
+  // Links of the embedded pages switch the view (or open a run) instead of leaving the workspace.
+  content.addEventListener('click', event => {
+    const link = event.target.closest?.('a[href]');
+    if (!link || link.target === '_blank' || event.metaKey || event.ctrlKey) return;
+    const url = new URL(link.href, location.href);
+    if (url.origin !== location.origin) return;
+    const name = Object.keys(urls).find(key => urls[key] === url.pathname);
+    const run = runPath.exec(url.pathname);
+    if (name) {
+      event.preventDefault();
+      show(name, null, url.search);
+    } else if (run) {
+      event.preventDefault();
+      show('runs', run[1]);
+    } else if (url.pathname === '/runs') {
+      event.preventDefault();
+      show('runs');
+    } else if (url.pathname === `/workspace/projects/${state.projectId}`) {
+      event.preventDefault();
+      close();
+    }
+  });
+
+  // Forms post in the background and the page is refreshed in place, flash message included.
+  content.addEventListener('submit', async event => {
+    const form = event.target;
+    if (!(form instanceof HTMLFormElement) || !current) return;
+    if ((form.getAttribute('method') || 'get').toLowerCase() !== 'post') return;
+    if (event.submitter?.getAttribute('formmethod') === 'dialog') return;
+    const message = form.dataset.confirm;
+    event.preventDefault();
+    event.stopPropagation();
+    if (message && !window.confirm(message)) return;
+    const token = `${current}|${detail}`;
+    const submitter = event.submitter;
+    if (submitter) submitter.disabled = true;
+    try {
+      const response = await fetch(form.action, {
+        method: 'POST', body: new URLSearchParams(new FormData(form)), redirect: 'manual', credentials: 'same-origin',
+        headers: { Accept: 'text/html' }
+      });
+      if (token !== `${current}|${detail}`) return;
+      if (response.type === 'opaqueredirect' || response.status === 0 || response.redirected) await load();
+      else if (response.ok) render(await response.text());
+      else throw new Error(`The change could not be saved (HTTP ${response.status})`);
+    } catch (error) {
+      content.prepend(el('div', 'alert alert-error mx-4 mt-4', error.message));
+    } finally { if (submitter?.isConnected) submitter.disabled = false; }
+  });
+
+  const params = new URLSearchParams(location.search);
+  const requested = params.get('view');
+  const requestedRun = params.get('run');
+  if (requested && urls[requested]) show(requested, runPath.test(`/runs/${requestedRun}`) ? requestedRun : null);
+  else renderCrumbs();
+}
+
 function initializeLayout(state) {
-  document.querySelector('[data-worktree-selector]')?.addEventListener('change', event => { const query = new URLSearchParams({ worktree: event.target.value }); location.assign(`/workspace/projects/${state.projectId}?${query}`); });
   document.querySelector('[data-toggle-chat]')?.addEventListener('click', () => state.root.classList.toggle('chat-collapsed'));
   initializeResizers(state);
   initializeTerminal(state);
@@ -323,8 +507,8 @@ function renderGitIndicators(state, status) {
   const bar = state.gitBar;
   if (!bar || !status) return;
   bar.querySelector('[data-git-sync]').textContent = `↑${status.ahead} ↓${status.behind}`;
-  // Also next to the branch name in the worktree selector, where it is easy to see.
-  const selected = state.root.querySelector('[data-worktree-selector]')?.selectedOptions?.[0];
+  // Also next to the branch name in the branch selector, where it is easy to see.
+  const selected = state.root.querySelector('[data-branch-selector]')?.selectedOptions?.[0];
   if (selected && selected.value) {
     if (selected.dataset.baseLabel === undefined) selected.dataset.baseLabel = selected.textContent;
     const parts = [];

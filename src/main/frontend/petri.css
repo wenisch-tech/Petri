@@ -210,8 +210,14 @@
 
   .workspace-body { @apply h-dvh overflow-hidden; }
   .workspace-topbar { @apply h-14; }
-  .workspace-gitbar { @apply relative grid h-28 min-w-0 grid-cols-2 border-b border-ink-700/70 bg-ink-900 text-xs text-ink-300; }
-  .workspace-git-pane { @apply relative flex min-w-0 flex-col justify-center gap-1 overflow-hidden px-3 py-2; }
+  /* Header block: view tabs and git row on the left, the workflow visualization spanning both rows. */
+  .workspace-gitbar { @apply relative grid h-28 min-w-0 border-b border-ink-700/70 bg-ink-900 text-xs text-ink-300; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); grid-template-rows: 2.5rem minmax(0, 1fr); }
+  .workspace-viewbar { grid-column: 1; grid-row: 1; @apply flex h-10 min-w-0 items-stretch gap-1 overflow-x-auto border-b border-ink-700/50 px-3; }
+  .workspace-view-tab { @apply inline-flex items-center gap-1.5 border-b-2 border-transparent px-3 text-xs font-medium text-ink-500 transition hover:text-ink-100; }
+  .workspace-view-tab svg { @apply size-4; }
+  .workspace-view-tab.is-active { @apply border-brand-500 text-ink-100; }
+  .workspace-gitbar.is-page-view > .workspace-git-pane { @apply invisible; }
+  .workspace-git-pane { grid-column: 1; grid-row: 2; @apply relative flex min-w-0 flex-col justify-center gap-1 overflow-hidden px-3 py-2; }
   .workspace-gitbar-primary, .workspace-gitbar-secondary { @apply flex min-w-0 shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden; }
   .workspace-gitbar-group { @apply flex shrink-0 items-center gap-1.5; }
   .workspace-gitbar-group > svg { @apply size-4 text-ink-500; }
@@ -239,9 +245,19 @@
     grid-template-columns: var(--explorer-width) 6px minmax(0, 1fr) 6px var(--chat-width);
     grid-template-rows: minmax(0, 1fr);
     overflow: hidden;
-    height: calc(100dvh - 10.5rem);
+    height: calc(100dvh - 10.75rem);
     min-height: 0;
   }
+  /* A project page (automations, settings) shown in place of the explorer and editor. */
+  .workspace-embedded { grid-column: 1 / 4; grid-row: 1; @apply flex min-h-0 min-w-0 flex-col overflow-hidden bg-ink-950; }
+  .workspace-embedded[hidden] { display: none; }
+  .workspace-embedded-content { @apply min-h-0 flex-1 overflow-y-auto; }
+  /* Pages shown in the workspace use the whole panel with a modest gutter. */
+  .workspace-embedded-content .page-narrow, .workspace-embedded-content .page { max-width: none; padding: 20px; }
+  .workspace-embedded-content .back-link, .workspace-embedded-content > .topbar { @apply hidden; }
+  .workspace-shell.is-embedded-view > .workspace-explorer,
+  .workspace-shell.is-embedded-view > .workspace-resizer[data-resize="explorer"],
+  .workspace-shell.is-embedded-view > .workspace-editor { display: none; }
   .workspace-explorer, .workspace-chat { @apply min-h-0 bg-ink-900; }
   .workspace-explorer { @apply flex min-w-0 flex-col border-r border-ink-700/70; }
   .workspace-chat { @apply flex min-w-0 flex-col border-l border-ink-700/70; }
@@ -370,7 +386,7 @@
   .workspace-package-output pre { @apply mt-1 max-h-40 overflow-auto whitespace-pre-wrap text-[10px]; }
   .workspace-review-state { @apply rounded bg-ink-800 px-1.5 py-0.5 text-[10px] text-ink-500; }
   .workspace-workflow { @apply mb-4 overflow-hidden rounded-xl border border-brand-500/25 bg-ink-900 shadow-sm; }
-  .workspace-workflow-top { @apply min-w-0 overflow-hidden px-3 py-1; }
+  .workspace-workflow-top { grid-column: 2; grid-row: 1 / span 2; @apply min-w-0 overflow-hidden border-l border-ink-700/50 px-3 py-1; }
   .workspace-workflow-top-empty { @apply flex h-full items-center justify-center gap-2 text-ink-500; }
   .workspace-workflow-top-empty > svg { @apply size-5; }
   .workspace-workflow-top-empty > span { @apply grid; }

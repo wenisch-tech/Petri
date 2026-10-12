@@ -4,6 +4,7 @@
 <body>
 <header th:replace="~{fragments/layout :: topbar('runs')}"></header>
 
+<th:block th:fragment="content">
 <main class="page">
   <a class="back-link" href="/runs"><i data-lucide="ArrowLeft"></i> Runs</a>
   <div class="page-header">
@@ -105,5 +106,6 @@
     </div>
   </section>
 </main>
+</th:block>
 </body>
 </html>

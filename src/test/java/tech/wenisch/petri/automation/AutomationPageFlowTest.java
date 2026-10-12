@@ -127,4 +127,25 @@ class AutomationPageFlowTest {
     mockMvc.perform(asAdmin(get("/projects/{id}/automations", projectId)))
         .andExpect(content().string(containsString("No automations yet")));
   }
+
+  @Test
+  void theProjectPagesCanBeRenderedAsContentOnlyForTheWorkspace() throws Exception {
+    // Full pages keep the application chrome for visitors coming from the dashboard.
+    mockMvc.perform(asAdmin(get("/projects/{id}/automations", projectId)))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("<html")))
+        .andExpect(content().string(containsString("Add automation")));
+
+    // The workspace asks for the same page without it and shows it in place.
+    mockMvc.perform(asAdmin(get("/projects/{id}/automations", projectId).param("embedded", "true")))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Add automation")))
+        .andExpect(content().string(org.hamcrest.Matchers.not(containsString("<html"))))
+        .andExpect(content().string(org.hamcrest.Matchers.not(containsString("topbar"))));
+
+    mockMvc.perform(asAdmin(get("/projects/{id}/settings", projectId).param("embedded", "true")))
+        .andExpect(status().isOk())
+        .andExpect(content().string(containsString("Repository mirror")))
+        .andExpect(content().string(org.hamcrest.Matchers.not(containsString("<html"))));
+  }
 }

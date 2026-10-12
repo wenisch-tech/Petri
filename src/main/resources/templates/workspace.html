@@ -20,12 +20,11 @@
         <span class="hidden text-ink-700 sm:inline">/</span>
         <a href="/projects" class="hidden text-ink-500 transition hover:text-ink-100 sm:inline">Projects</a>
         <span class="text-ink-700">/</span>
-        <span class="truncate font-medium text-ink-100" th:text="${project.name}">Project</span>
-        <a class="icon-button shrink-0" th:href="@{/projects/{id}/automations(id=${project.id})}" title="Automations" aria-label="Automations"><i data-lucide="Bot"></i></a>
-        <a class="icon-button shrink-0" th:href="@{/projects/{id}/settings(id=${project.id})}" title="Project settings" aria-label="Project settings"><i data-lucide="Settings"></i></a>
+        <a class="truncate font-medium text-ink-100 hover:text-brand-400" data-crumb-workspace th:href="@{/workspace/projects/{id}(id=${project.id})}" th:text="${project.name}">Project</a>
+        <span class="text-ink-700">/</span>
+        <span class="flex min-w-0 items-center gap-2" data-breadcrumb-trail><span class="truncate font-medium text-ink-100">Workspace</span></span>
       </nav>
       <div class="flex items-center gap-1.5">
-        <a class="btn-ghost hidden !min-h-8 lg:inline-flex" href="/runs">Runs</a>
         <a th:if="${isInstanceAdmin}" href="/admin" class="app-admin-link" title="Instance administration"><i data-lucide="ShieldCheck"></i><span class="hidden sm:inline">Admin</span></a>
         <button class="icon-button" type="button" data-toggle-chat title="Toggle chat" aria-label="Toggle chat"><i data-lucide="PanelRight"></i></button>
         <button th:replace="~{fragments/layout :: themeToggle}"></button>
@@ -35,6 +34,12 @@
   </header>
 
   <section class="workspace-gitbar" data-git-bar>
+    <nav class="workspace-viewbar" role="tablist" aria-label="Project views">
+      <a class="workspace-view-tab is-active" role="tab" th:href="@{/workspace/projects/{id}(id=${project.id})}" data-workspace-view="workspace"><i data-lucide="FileCode2"></i><span>Workspace</span></a>
+      <a class="workspace-view-tab" role="tab" th:href="@{/projects/{id}/automations(id=${project.id})}" data-workspace-view="automations"><i data-lucide="Bot"></i><span>Automations</span></a>
+      <a class="workspace-view-tab" role="tab" th:href="@{/projects/{id}/runs(id=${project.id})}" data-workspace-view="runs"><i data-lucide="Workflow"></i><span>Runs</span></a>
+      <a class="workspace-view-tab" role="tab" th:href="@{/projects/{id}/settings(id=${project.id})}" data-workspace-view="settings"><i data-lucide="Settings"></i><span>Settings</span></a>
+    </nav>
     <div class="workspace-git-pane">
       <div class="workspace-gitbar-primary">
       <div class="workspace-gitbar-group">
@@ -56,15 +61,6 @@
       <button class="workspace-git-button workspace-git-new-branch" type="button" data-git-new-branch title="Create a new branch and worktree">
         <i data-lucide="GitBranchPlus"></i><span>New branch</span>
       </button>
-      <div class="workspace-gitbar-group">
-        <i data-lucide="FolderGit2"></i>
-        <select class="workspace-select" data-worktree-selector th:disabled="${#lists.isEmpty(worktrees)}" aria-label="Active worktree">
-          <option th:if="${#lists.isEmpty(worktrees)}" value="">No active worktree</option>
-          <option th:each="item : ${worktrees}" th:value="${item.id}"
-                  th:selected="${selectedWorktree != null && item.id == selectedWorktree.id}"
-                  th:text="${item.detached ? 'detached · ' + #strings.substring(item.id.toString(), 0, 8) : item.branchName}">worktree</option>
-        </select>
-      </div>
       <div class="workspace-git-indicators" data-git-indicators>
         <span data-git-sync th:text="${gitStatus == null ? 'No worktree' : '↑' + gitStatus.ahead + ' ↓' + gitStatus.behind}">↑0 ↓0</span>
         <span data-git-dirty th:classappend="${gitStatus != null && !gitStatus.clean} ? ' is-dirty'"
@@ -72,8 +68,6 @@
         <span class="workspace-rebase-badge" data-git-rebase
               th:hidden="${gitStatus == null || gitStatus.operation.name() != 'REBASE_IN_PROGRESS'}">Rebase in progress</span>
       </div>
-      </div>
-      <div class="workspace-gitbar-secondary">
       <div class="workspace-git-actions">
         <button class="workspace-git-button" type="button" data-git-fetch><i data-lucide="CloudDownload"></i><span>Fetch</span></button>
         <button class="workspace-git-button" type="button" data-git-pull th:disabled="${selectedWorktree == null || selectedWorktree.detached}"><i data-lucide="GitPullRequestArrow"></i><span>Pull</span></button>
@@ -102,6 +96,9 @@
 
   <main class="workspace-shell" data-workspace
         th:attr="data-project-id=${project.id},data-worktree-id=${selectedWorktree != null ? selectedWorktree.id : null},data-branch=${selectedWorktree != null ? selectedWorktree.branchName : null},data-default-branch=${project.defaultBranch},data-detached=${selectedWorktree != null ? selectedWorktree.detached : true},data-chat-id=${selectedChat != null ? selectedChat.id : null},data-selected-file=${selectedFile}">
+    <section class="workspace-embedded" data-workspace-embedded hidden aria-label="Project page">
+      <div class="workspace-embedded-content" data-workspace-embedded-content></div>
+    </section>
     <aside class="workspace-explorer" data-workspace-explorer>
       <div class="workspace-panel-header">
         <div class="workspace-switcher">

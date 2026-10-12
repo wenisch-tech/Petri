@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(|${project.name} runs|)}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('projects')}"></header>
+
+<th:block th:fragment="content">
+<main class="page-narrow" x-data="{ type: '', status: '', q: '' }">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title" th:text="${project.name}">Project</h1>
+      <p class="page-description">Agent runs of this project: every model and tool execution, persisted so it can be inspected.</p>
+    </div>
+  </div>
+
+  <div th:if="${#lists.isEmpty(runs)}" class="empty-state">
+    <i data-lucide="Workflow"></i>
+    <h2>No runs yet</h2>
+    <p>Runs of this project appear here once you send a message from its workspace.</p>
+  </div>
+
+  <th:block th:unless="${#lists.isEmpty(runs)}">
+    <div class="mb-3 flex flex-wrap items-end gap-3">
+      <div>
+        <label class="label" for="runs-filter-type">Type</label>
+        <select id="runs-filter-type" class="field" x-model="type">
+          <option value="">All</option>
+          <option value="chat">Chat</option>
+          <option value="workflow">Workflow stage</option>
+        </select>
+      </div>
+      <div>
+        <label class="label" for="runs-filter-status">Status</label>
+        <select id="runs-filter-status" class="field" x-model="status">
+          <option value="">All</option>
+          <option th:each="value : ${T(tech.wenisch.petri.agent.orchestration.AgentRunStatus).values()}" th:value="${value}" th:text="${value}">COMPLETED</option>
+        </select>
+      </div>
+      <div class="min-w-48 flex-1">
+        <label class="label" for="runs-filter-text">Search prompt or model</label>
+        <input id="runs-filter-text" class="field" type="search" x-model="q" placeholder="Filter…" autocomplete="off">
+      </div>
+    </div>
+
+    <div class="table-shell bg-ink-900">
+      <table class="data-table">
+        <thead><tr><th>Status</th><th>Type</th><th>Prompt</th><th>Model</th><th class="text-right">Turns</th><th>Created</th><th></th></tr></thead>
+        <tbody>
+          <tr th:each="run : ${runs}" class="transition hover:bg-ink-800/40"
+              th:attr="data-kind=${run.workflowId != null ? 'workflow' : 'chat'},data-status=${run.status}"
+              x-show="(!type || $el.dataset.kind === type) && (!status || $el.dataset.status === status) && (!q || $el.textContent.toLowerCase().includes(q.toLowerCase()))">
+            <td><span th:replace="~{fragments/layout :: statusBadge(${run.status})}"></span></td>
+            <td class="whitespace-nowrap text-xs text-ink-500"
+                th:text="${run.workflowId != null ? 'Workflow · ' + #strings.capitalize(#strings.toLowerCase(run.workflowRole)) + ' #' + run.workflowAttempt : 'Chat'}">Chat</td>
+            <td class="max-w-xl">
+              <a class="line-clamp-2 text-ink-100 hover:text-brand-400" th:href="@{/runs/{id}(id=${run.id})}" th:text="${#strings.abbreviate(run.prompt, 400)}" th:title="${#strings.abbreviate(run.prompt, 1000)}">prompt</a>
+            </td>
+            <td><span class="block text-xs text-ink-500" th:text="${run.provider.displayName()}">OpenAI</span><code class="text-xs" th:text="${run.model}">model</code></td>
+            <td class="whitespace-nowrap text-right tabular-nums" th:text="|${run.modelTurnCount} / ${run.maxModelTurns}|">0 / 20</td>
+            <td class="whitespace-nowrap text-xs"><time data-local th:attr="datetime=${run.createdAt}" th:text="${run.createdAt}">time</time></td>
+            <td class="text-right"><a class="btn-ghost" th:href="@{/runs/{id}(id=${run.id})}">Inspect</a></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+  </th:block>
+</main>
+</th:block>
+</body>
+</html>

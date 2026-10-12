@@ -19,6 +19,14 @@ interface AgentRunRepository extends JpaRepository<AgentRun, UUID> {
   List<AgentRun> findByWorktreeIdOrderByCreatedAtDesc(UUID worktreeId);
   List<AgentRun> findByWorktreeIdAndWorkflowIdIsNullOrderByCreatedAtDesc(UUID worktreeId);
 
+  /** A user's runs on any worktree (also removed ones) of one project, newest first. */
+  @Query("select run from AgentRun run where run.createdBy = :userId "
+      + "and run.worktreeId in (select tree.id from ProjectWorktree tree where tree.projectId = :projectId) "
+      + "and (:withWorkflowStages = true or run.workflowId is null) order by run.createdAt desc")
+  List<AgentRun> findForProject(
+      @Param("projectId") UUID projectId, @Param("userId") UUID userId,
+      @Param("withWorkflowStages") boolean withWorkflowStages);
+
   List<AgentRun> findByChatIdOrderByChatMessageIndexAsc(UUID chatId);
 
   List<AgentRun> findByChatIdAndWorkflowIdIsNullOrderByChatMessageIndexAsc(UUID chatId);

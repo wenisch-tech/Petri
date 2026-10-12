@@ -4,6 +4,7 @@
 <body>
 <header th:replace="~{fragments/layout :: topbar('projects')}"></header>
 
+<th:block th:fragment="content">
 <main class="page-narrow">
   <a class="back-link" href="/projects"><i data-lucide="ArrowLeft"></i> Projects</a>
   <div class="page-header">
@@ -109,5 +110,6 @@
     </div>
   </form>
 </dialog>
+</th:block>
 </body>
 </html>

@@ -41,13 +41,18 @@ public class ProjectSettingsController {
   }
 
   @GetMapping("/projects/{projectId}/settings")
-  String settings(@PathVariable UUID projectId, Principal principal, Model model) {
+  String settings(
+      @PathVariable UUID projectId,
+      @org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean embedded,
+      Principal principal,
+      Model model) {
     access.requireProject(projectId, principal.getName());
     if (!model.containsAttribute("gitCredentialForm")) {
       model.addAttribute("gitCredentialForm", new GitCredentialForm());
     }
     populate(model, projectId, principal.getName());
-    return "project-settings";
+    // The workspace shows this page in place; only the content is rendered then.
+    return embedded ? "project-settings :: content" : "project-settings";
   }
 
   @PostMapping("/projects/{projectId}/credential")

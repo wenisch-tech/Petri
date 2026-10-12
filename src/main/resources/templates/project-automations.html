@@ -4,6 +4,7 @@
 <body>
 <header th:replace="~{fragments/layout :: topbar('projects')}"></header>
 
+<th:block th:fragment="content">
 <main class="page-narrow">
   <a class="back-link" th:href="@{/projects/{id}/settings(id=${project.id})}"><i data-lucide="ArrowLeft"></i> Project settings</a>
   <div class="page-header">
@@ -103,5 +104,6 @@
 <dialog th:each="automation : ${automations}" th:id="|automation-${automation.id}|" class="dialog dialog-wide">
   <th:block th:replace="~{fragments/automation :: automationForm(${automation}, ${'a' + automation.id})}"></th:block>
 </dialog>
+</th:block>
 </body>
 </html>

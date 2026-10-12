@@ -333,6 +333,16 @@ public class AgentRunService {
         .toList();
   }
 
+  /** The user's runs of one project, most recent first, bounded for display. */
+  @Transactional(readOnly = true)
+  public List<AgentRunView> listForProject(
+      UUID projectId, UUID actorId, boolean includeWorkflowStages) {
+    return runs.findForProject(projectId, actorId, includeWorkflowStages).stream()
+        .limit(200)
+        .map(run -> view(run, List.of()))
+        .toList();
+  }
+
   @Transactional(readOnly = true)
   public boolean hasActiveForWorktree(UUID worktreeId) {
     return runs.existsByWorktreeIdAndStatusIn(worktreeId, java.util.EnumSet.of(
