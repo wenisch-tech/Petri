@@ -24,6 +24,7 @@ import org.springframework.security.web.util.matcher.NegatedRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 import tech.wenisch.petri.apikey.ApiKeyService;
 import tech.wenisch.petri.config.PetriProperties;
+import tech.wenisch.petri.security.oidc.OidcHttpSupport;
 import tech.wenisch.petri.security.oidc.PetriOidcUserService;
 
 @Configuration
@@ -53,13 +54,25 @@ public class SecurityConfiguration {
       HttpSecurity http,
       ApiKeyService apiKeys,
       ObjectProvider<ClientRegistrationRepository> clientRegistrations,
-      PetriOidcUserService oidcUsers) throws Exception {
+      PetriOidcUserService oidcUsers,
+      OidcHttpSupport oidcHttp) throws Exception {
     RequestMatcher apiRequests = request -> request.getRequestURI()
         .startsWith(request.getContextPath() + "/api/");
     if (clientRegistrations.getIfAvailable() != null) {
-      http.oauth2Login(login -> login
-          .loginPage("/login")
-          .userInfoEndpoint(userInfo -> userInfo.oidcUserService(oidcUsers)));
+      http.oauth2Login(login -> {
+        login.loginPage("/login")
+            // Technical failures (state mismatch, TLS errors talking to the provider) would
+            // otherwise redirect silently and leave nothing in the logs.
+            .failureHandler((request, response, exception) -> {
+              log.warn("OIDC login failed: {}", exception.getMessage(), exception);
+              response.sendRedirect(request.getContextPath() + "/login?error");
+            })
+            .userInfoEndpoint(userInfo -> userInfo.oidcUserService(oidcUsers));
+        var tokenClient = oidcHttp.tokenResponseClient();
+        if (tokenClient != null) {
+          login.tokenEndpoint(token -> token.accessTokenResponseClient(tokenClient));
+        }
+      });
     }
     return http
         .csrf(csrf -> csrf.ignoringRequestMatchers(apiRequests))

@@ -76,20 +76,52 @@ Provider URLs and credentials are normally configured at `/model-settings` and p
 ## OIDC
 
 Local login remains enabled when OIDC is configured. A provider must return a verified email address.
+Petri requests the `openid`, `profile` and `email` scopes.
 
-```yaml
-spring:
-  security:
-    oauth2:
-      client:
-        registration:
-          keycloak:
-            client-id: petri
-            client-secret: replace-me
-            scope: openid,profile,email
-        provider:
-          keycloak:
-            issuer-uri: https://sso.example.test/realms/platform
+Set `OIDC_ENABLED=true` and configure one or more providers. For several providers use indexed
+variables and repeat with `_1_`, `_2_`, and so on; each provider gets its own sign-in button:
+
+```bash
+OIDC_ENABLED=true
+OIDC_PROVIDERS_0_NAME="Company SSO"
+OIDC_PROVIDERS_0_CLIENT_ID=petri
+OIDC_PROVIDERS_0_CLIENT_SECRET=replace-me
+OIDC_PROVIDERS_0_ISSUER_URI=https://sso.example.test/realms/platform
+OIDC_PROVIDERS_1_NAME="GitLab"
+OIDC_PROVIDERS_1_CLIENT_ID=petri
+OIDC_PROVIDERS_1_CLIENT_SECRET=replace-me
+OIDC_PROVIDERS_1_ISSUER_URI=https://gitlab.example.test
 ```
 
+| Variable | Default | Purpose |
+|---|---|---|
+| `OIDC_ENABLED` | `false` | Enable the `OIDC_*` provider configuration |
+| `OIDC_PROVIDERS_<n>_NAME` | `Provider <n+1>` | Label on the sign-in button |
+| `OIDC_PROVIDERS_<n>_CLIENT_ID` / `_CLIENT_SECRET` | | OIDC client credentials |
+| `OIDC_PROVIDERS_<n>_ISSUER_URI` | | Issuer discovery URL |
+| `OIDC_PROVIDERS_<n>_REGISTRATION_ID` | derived from the name | Spring registration id; the callback is `/login/oauth2/code/<id>` |
+| `OIDC_PROVIDERS_<n>_USER_NAME_ATTRIBUTE` | `sub` | Claim Spring Security uses as the principal name |
+| `OIDC_PROVIDER_NAME`, `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`, `OIDC_ISSUER_URI` | | Single-provider shorthand, used when no indexed provider is set |
+| `OIDC_CREATEUSERS` | `true` | Create a local `USER` account for unknown identities; `false` requires an administrator to create the account first |
+| `OIDC_INSECURE_SKIP_TLS_VERIFY` | `false` | Skip certificate and hostname verification for OIDC provider connections only |
+
+Providers with a private CA or self-signed certificate can be reached with
+`OIDC_INSECURE_SKIP_TLS_VERIFY=true`, or by the global `IGNORE_TLS` flag below. Both are meant for
+self-hosted environments and troubleshooting; prefer adding the CA to the Java trust store.
+Failed OIDC logins are logged at `WARN` with the underlying cause.
+
+Without `OIDC_ENABLED`, the standard Spring Boot `spring.security.oauth2.client.registration.*` and
+`...provider.*` properties continue to work.
+
 An OIDC identity matching an existing local email keeps that Petri account's role.
+
+When a proxy terminates TLS, keep `SERVER_FORWARD_HEADERS_STRATEGY=framework` so redirect URIs use
+the public HTTPS origin.
+
+## Ignoring TLS errors
+
+`IGNORE_TLS=true` (default `false`) disables TLS certificate and hostname verification for all
+outbound HTTPS connections made by Petri: OIDC providers, Git provider APIs, model providers and
+`git` subprocesses (`GIT_SSL_NO_VERIFY`). It is meant for self-hosted environments behind a private
+CA or self-signed certificates. It does not affect inbound TLS, test containers or package
+installs. Petri logs a warning at startup when it is on.

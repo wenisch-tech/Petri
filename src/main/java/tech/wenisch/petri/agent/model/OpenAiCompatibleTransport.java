@@ -14,6 +14,7 @@ import java.util.function.Consumer;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import tech.wenisch.petri.config.PetriProperties;
+import tech.wenisch.petri.config.TlsSettings;
 
 @Component
 final class OpenAiCompatibleTransport {
@@ -24,12 +25,12 @@ final class OpenAiCompatibleTransport {
 
   @Autowired
   OpenAiCompatibleTransport(
-      ModelCredentialService credentials, PetriProperties properties) {
+      ModelCredentialService credentials, PetriProperties properties, TlsSettings tls) {
     this(
         credentials,
-        HttpClient.newBuilder()
+        tls.apply(HttpClient.newBuilder()
             .connectTimeout(properties.agent().modelRequestTimeout())
-            .followRedirects(HttpClient.Redirect.NEVER)
+            .followRedirects(HttpClient.Redirect.NEVER))
             .build(),
         properties.agent().modelRequestTimeout(),
         properties.agent().maxModelResponseBytes());

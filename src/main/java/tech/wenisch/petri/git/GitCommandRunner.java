@@ -16,8 +16,10 @@ import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 import java.util.regex.Pattern;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import tech.wenisch.petri.config.PetriProperties;
+import tech.wenisch.petri.config.TlsSettings;
 import tech.wenisch.petri.workspace.WorkspacePaths;
 
 @Component
@@ -28,11 +30,18 @@ public class GitCommandRunner {
   private final WorkspacePaths paths;
   private final Duration timeout;
   private final int outputLimit;
+  private final boolean ignoreTls;
 
-  public GitCommandRunner(WorkspacePaths paths, PetriProperties properties) {
+  @Autowired
+  public GitCommandRunner(WorkspacePaths paths, PetriProperties properties, TlsSettings tls) {
     this.paths = paths;
+    this.ignoreTls = tls.ignoreTls();
     this.timeout = properties.workspace().gitCommandTimeout();
     this.outputLimit = properties.workspace().maxCommandOutputBytes();
+  }
+
+  public GitCommandRunner(WorkspacePaths paths, PetriProperties properties) {
+    this(paths, properties, TlsSettings.verifying());
   }
 
   GitCommandResult run(Path workingDirectory, List<String> arguments) throws IOException {
@@ -58,6 +67,7 @@ public class GitCommandRunner {
     processEnvironment.put("GIT_CONFIG_NOSYSTEM", "1");
     processEnvironment.put("GIT_CONFIG_GLOBAL", platformNullDevice());
     processEnvironment.put("LC_ALL", "C");
+    if (ignoreTls) processEnvironment.put("GIT_SSL_NO_VERIFY", "true");
     processEnvironment.putAll(environment);
 
     Process process = builder.start();

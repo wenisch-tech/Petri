@@ -2,6 +2,7 @@ package tech.wenisch.petri.security.oidc;
 
 import java.time.Instant;
 import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
 import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
@@ -16,12 +17,26 @@ public class OidcAccountService {
   private final UserIdentityRepository identities;
   private final AppUserRepository users;
   private final AuditLogService auditLog;
+  private final boolean createUsers;
+
+  @Autowired
+  public OidcAccountService(
+      UserIdentityRepository identities,
+      AppUserRepository users,
+      AuditLogService auditLog,
+      OidcProperties properties) {
+    this(identities, users, auditLog, properties.isCreateUsers());
+  }
 
   public OidcAccountService(
-      UserIdentityRepository identities, AppUserRepository users, AuditLogService auditLog) {
+      UserIdentityRepository identities,
+      AppUserRepository users,
+      AuditLogService auditLog,
+      boolean createUsers) {
     this.identities = identities;
     this.users = users;
     this.auditLog = auditLog;
+    this.createUsers = createUsers;
   }
 
   @Transactional
@@ -42,8 +57,11 @@ public class OidcAccountService {
       throw rejected("OIDC login requires a verified email address");
     }
     String email = required(oidcUser.getEmail(), "verified email", 320);
-    AppUser user = users.findByEmailIgnoreCase(email)
-        .orElseGet(() -> users.save(AppUser.oidcUser(UUID.randomUUID(), email, "USER")));
+    AppUser user = users.findByEmailIgnoreCase(email).orElse(null);
+    if (user == null) {
+      if (!createUsers) throw rejected("No Petri account exists for this identity");
+      user = users.save(AppUser.oidcUser(UUID.randomUUID(), email, "USER"));
+    }
     identities.save(new UserIdentity(UUID.randomUUID(), user.getId(), provider, subject, Instant.now()));
     auditLog.record(
         user.getEmail(),

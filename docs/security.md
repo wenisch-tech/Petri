@@ -53,6 +53,8 @@ Use HTTPS whenever bearer credentials cross an untrusted network. Plain HTTP is 
 - Restrict workspace permissions and network egress.
 - Put Petri behind TLS and a trusted reverse proxy.
 - Configure OIDC for centralized identity when appropriate.
+- Leave `IGNORE_TLS` and `OIDC_INSECURE_SKIP_TLS_VERIFY` off; trust your private CA instead. Both disable
+  man-in-the-middle protection for bearer tokens and provider credentials.
 - Review audit events and revoke unused API keys.
 
 ## Local executor and package installs

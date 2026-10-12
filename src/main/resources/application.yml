@@ -24,6 +24,17 @@ management:
       probes:
         enabled: true
 
+# OIDC sign-in. Several providers: OIDC_PROVIDERS_0_NAME / _CLIENT_ID / _CLIENT_SECRET / _ISSUER_URI
+# (optional _REGISTRATION_ID, _USER_NAME_ATTRIBUTE), then _1_, _2_, ...
+oidc:
+  enabled: ${OIDC_ENABLED:false}
+  provider-name: ${OIDC_PROVIDER_NAME:Single Sign-On}
+  client-id: ${OIDC_CLIENT_ID:}
+  client-secret: ${OIDC_CLIENT_SECRET:}
+  issuer-uri: ${OIDC_ISSUER_URI:}
+  create-users: ${OIDC_CREATEUSERS:true}
+  insecure-skip-tls-verify: ${OIDC_INSECURE_SKIP_TLS_VERIFY:false}
+
 petri:
   imports:
     max-parallel: ${PETRI_IMPORT_MAX_PARALLEL:4}

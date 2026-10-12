@@ -16,6 +16,9 @@
         "env": {
             "type": "object",
             "properties": {
+                "IGNORE_TLS": {
+                    "type": "string"
+                },
                 "PETRI_ADMIN_EMAIL": {
                     "type": "string"
                 },

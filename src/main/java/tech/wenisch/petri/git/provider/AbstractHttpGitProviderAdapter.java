@@ -12,6 +12,7 @@ import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import tech.wenisch.petri.config.TlsSettings;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
 
@@ -22,10 +23,10 @@ abstract class AbstractHttpGitProviderAdapter implements GitProviderAdapter {
   private final HttpClient client;
   protected final ObjectMapper json;
 
-  AbstractHttpGitProviderAdapter(ObjectMapper json) {
-    this(json, HttpClient.newBuilder()
+  AbstractHttpGitProviderAdapter(ObjectMapper json, TlsSettings tls) {
+    this(json, tls.apply(HttpClient.newBuilder()
         .connectTimeout(Duration.ofSeconds(10))
-        .followRedirects(HttpClient.Redirect.NEVER)
+        .followRedirects(HttpClient.Redirect.NEVER))
         .build());
   }
 

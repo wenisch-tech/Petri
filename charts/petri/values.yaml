@@ -87,17 +87,22 @@ env:
   # PETRI_OPENAI_BASE_URL: ""
   # PETRI_MODEL_REQUEST_TIMEOUT: "2m"
   # PETRI_SKILLS_ROOT: "/app/skills"
-  # OIDC uses standard Spring Security client registration properties, for example:
-  # SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_ID: "petri"
-  # SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_SCOPE: "openid,profile,email"
-  # SPRING_SECURITY_OAUTH2_CLIENT_PROVIDER_KEYCLOAK_ISSUER_URI: "https://sso.example.test/realms/platform"
+  # Skip TLS certificate/hostname verification for all outbound HTTPS (self-hosted, private CA).
+  IGNORE_TLS: "false"
+  # OIDC, one or more providers (repeat with _1_, _2_, ...); put client secrets under `secrets`:
+  # OIDC_ENABLED: "true"
+  # OIDC_PROVIDERS_0_NAME: "Company SSO"
+  # OIDC_PROVIDERS_0_CLIENT_ID: "petri"
+  # OIDC_PROVIDERS_0_ISSUER_URI: "https://sso.example.test/realms/platform"
+  # OIDC_CREATEUSERS: "true"
+  # OIDC_INSECURE_SKIP_TLS_VERIFY: "false"   # only OIDC provider connections
 # Secrets for sensitive data.
 # If a key is set in both `env` and `secrets`, the Secret-backed value wins.
 secrets: {}
 # PETRI_ADMIN_PASSWORD: "change-me"
 # PETRI_SECRETS_MASTER_KEY: "<base64 of 32 random bytes>"   # back this up; losing it loses stored secrets
 # SPRING_DATASOURCE_PASSWORD: "your-password"
-# SPRING_SECURITY_OAUTH2_CLIENT_REGISTRATION_KEYCLOAK_CLIENT_SECRET: "your-secret"
+# OIDC_PROVIDERS_0_CLIENT_SECRET: "your-secret"
 
 # Name of an externally managed Secret (e.g. populated by Vault Secrets Operator)
 # to load as env vars via envFrom. Leave empty to disable.

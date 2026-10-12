@@ -24,5 +24,7 @@ helm install petri wenisch-tech/petri -n petri --create-namespace \
   back it up either way.
 - **Tests:** Petri runs tests in rootless Podman. The container image does not ship Podman, so
   sandboxed test execution needs a node/runtime that provides it and is out of scope for this chart.
-- **OIDC** is configured through standard `SPRING_SECURITY_OAUTH2_CLIENT_*` environment variables;
-  see `values.yaml`.
+- **OIDC** is configured through `OIDC_ENABLED` and `OIDC_PROVIDERS_<n>_*` environment variables
+  (multiple providers supported); see `values.yaml`.
+- **`IGNORE_TLS`** disables TLS certificate/hostname verification for all outbound HTTPS, for
+  self-hosted setups with a private CA. `OIDC_INSECURE_SKIP_TLS_VERIFY` limits that to OIDC providers.

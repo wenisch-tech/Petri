@@ -6,6 +6,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 import tools.jackson.databind.JsonNode;
+import tech.wenisch.petri.config.TlsSettings;
 import tools.jackson.databind.ObjectMapper;
 import java.net.http.HttpClient;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,7 +14,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 @Component
 final class GitlabProviderAdapter extends AbstractHttpGitProviderAdapter {
   @Autowired
-  GitlabProviderAdapter(ObjectMapper json) { super(json); }
+  GitlabProviderAdapter(ObjectMapper json, TlsSettings tls) { super(json, tls); }
   GitlabProviderAdapter(ObjectMapper json, HttpClient client) { super(json, client); }
 
   @Override public GitProviderType type() { return GitProviderType.GITLAB; }

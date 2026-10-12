@@ -15,6 +15,7 @@ import org.springframework.security.oauth2.core.oidc.user.DefaultOidcUser;
 import org.springframework.security.oauth2.core.oidc.user.OidcUser;
 import org.springframework.transaction.annotation.Transactional;
 import tech.wenisch.petri.audit.AuditEventRepository;
+import tech.wenisch.petri.audit.AuditLogService;
 import tech.wenisch.petri.security.AppUser;
 import tech.wenisch.petri.security.AppUserRepository;
 import tech.wenisch.petri.security.oidc.OidcAccountService;
@@ -31,6 +32,7 @@ class OidcAccountServiceTest {
   @Autowired AppUserRepository users;
   @Autowired UserIdentityRepository identities;
   @Autowired AuditEventRepository auditEvents;
+  @Autowired AuditLogService auditLog;
 
   @Test
   void verifiedIdentityCreatesAndThenReusesALocalUser() {
@@ -51,6 +53,16 @@ class OidcAccountServiceTest {
     assertThat(users.findByEmailIgnoreCase("changed.email@petri.local")).isEmpty();
     assertThat(auditEvents.findTop100ByOrderByOccurredAtDesc())
         .anySatisfy(event -> assertThat(event.getAction()).isEqualTo("OIDC_ACCOUNT_LINKED"));
+  }
+
+  @Test
+  void unknownIdentityIsRejectedWhenUserCreationIsDisabled() {
+    OidcAccountService strict = new OidcAccountService(identities, users, auditLog, false);
+
+    assertThatThrownBy(() -> strict.resolveUser(
+        "keycloak", oidcUser("subject-99", "stranger@petri.local", true)))
+        .isInstanceOf(OAuth2AuthenticationException.class);
+    assertThat(users.findByEmailIgnoreCase("stranger@petri.local")).isEmpty();
   }
 
   @Test
