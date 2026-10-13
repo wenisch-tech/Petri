@@ -36,6 +36,9 @@ oidc:
   insecure-skip-tls-verify: ${OIDC_INSECURE_SKIP_TLS_VERIFY:false}
 
 petri:
+  # Filled in by Maven resource filtering, so it matches the artifact that is running.
+  version: "@project.version@"
+  repository-url: https://github.com/wenisch-tech/Petri
   imports:
     max-parallel: ${PETRI_IMPORT_MAX_PARALLEL:4}
   automation:

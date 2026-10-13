@@ -337,6 +337,13 @@
   .dash-idle > summary::before { content: '+ '; }
   .dash-idle[open] > summary::before { content: '− '; }
   .dash-empty { @apply px-2.5 py-3 text-xs text-ink-500; }
+  .app-menu-version { @apply mt-1 border-t border-ink-700/70 px-3 pb-1 pt-2 text-[10px] leading-4 tracking-wide text-ink-500; }
+  .app-footer { @apply mx-auto flex w-full max-w-7xl justify-end px-5 pb-6 pt-10 sm:px-8; }
+  .app-footer-note { @apply text-[11px] leading-4 text-ink-500; }
+  .app-footer-note a { @apply inline-block py-1.5 underline decoration-ink-700 underline-offset-2 transition-colors hover:text-ink-100 hover:decoration-ink-500; }
+  .app-footer-note.is-inline { @apply ml-3 hidden whitespace-nowrap sm:inline-block; }
+  .app-footer-note.is-inline a { @apply py-0; }
+  .app-footer.is-centered { @apply justify-center; }
   .subnav { @apply mb-6 flex gap-1 overflow-x-auto border-b border-ink-700/70; }
   .subnav a { @apply -mb-px inline-flex shrink-0 items-center gap-2 border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-ink-500 transition hover:text-ink-100; }
   .subnav a svg { @apply size-4; }

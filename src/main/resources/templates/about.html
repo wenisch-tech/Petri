@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('About')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('about')}"></header>
+<div th:if="${isInstanceAdmin}" th:replace="~{fragments/layout :: adminBanner}"></div>
+
+<div th:if="${isInstanceAdmin}" class="area-layout">
+  <nav th:replace="~{fragments/layout :: adminNav('about')}"></nav>
+  <main class="min-w-0"><div th:replace="~{about :: content}"></div></main>
+</div>
+<main th:unless="${isInstanceAdmin}" class="page-narrow"><div th:replace="~{about :: content}"></div></main>
+
+<th:block th:remove="all">
+<th:block th:fragment="content">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">About Petri</h1>
+      <p class="page-description">A self-hosted agentic coding harness, multi-agent orchestrator and development environment.</p>
+    </div>
+    <div class="page-actions">
+      <a class="btn-secondary" th:href="${petriRepository}" target="_blank" rel="noopener noreferrer"><i data-lucide="ExternalLink"></i> Source on GitHub</a>
+    </div>
+  </div>
+
+  <section class="card">
+    <div class="card-body">
+      <h2 class="section-title">This instance</h2>
+      <dl class="dl-grid mt-4">
+        <div><dt>Version</dt><dd class="flex items-center gap-2"><span class="font-mono text-sm" th:text="${petriVersion}">0.10.0</span>
+          <button type="button" class="btn-ghost btn-sm" th:attr="data-copy=|Petri ${petriVersion}|" title="Copy the version for a bug report"><i data-lucide="Copy"></i> <span>Copy</span></button></dd></div>
+        <div><dt>Running since</dt><dd><time data-local th:attr="datetime=${startedAt}" th:text="${startedAt}">date</time></dd></div>
+        <div><dt>Java</dt><dd th:text="|${javaVersion} · ${javaVendor}|">25</dd></div>
+        <div><dt>Spring Boot</dt><dd th:text="${springBootVersion}">4.1</dd></div>
+        <div><dt>Database</dt><dd th:text="${database}">PostgreSQL</dd></div>
+      </dl>
+    </div>
+  </section>
+
+  <section class="card mt-4">
+    <div class="card-body space-y-3">
+      <h2 class="section-title">Open source</h2>
+      <p class="text-sm leading-6 text-ink-300">
+        Petri is free software, licensed under the
+        <a class="text-brand-400 hover:underline" th:href="|${petriRepository}/blob/main/LICENSE.md|" target="_blank" rel="noopener noreferrer">GNU Affero General Public License v3.0</a>.
+        You may use, study, modify and share it. If you run a modified version for others over a network, the AGPL
+        requires you to offer them its source code.
+      </p>
+      <ul class="flex flex-wrap gap-x-5 gap-y-2 text-sm">
+        <li><a class="text-brand-400 hover:underline" th:href="${petriRepository}" target="_blank" rel="noopener noreferrer">Source code <i data-lucide="ExternalLink" class="inline size-3.5 align-text-bottom"></i></a></li>
+        <li><a class="text-brand-400 hover:underline" th:href="|${petriRepository}/issues|" target="_blank" rel="noopener noreferrer">Report an issue <i data-lucide="ExternalLink" class="inline size-3.5 align-text-bottom"></i></a></li>
+        <li><a class="text-brand-400 hover:underline" th:href="|${petriRepository}/tree/main/docs|" target="_blank" rel="noopener noreferrer">Documentation <i data-lucide="ExternalLink" class="inline size-3.5 align-text-bottom"></i></a></li>
+        <li><a class="text-brand-400 hover:underline" th:href="|${petriRepository}/blob/main/CHANGELOG.md|" target="_blank" rel="noopener noreferrer">Changelog <i data-lucide="ExternalLink" class="inline size-3.5 align-text-bottom"></i></a></li>
+      </ul>
+    </div>
+  </section>
+
+  <section class="card mt-4">
+    <div class="card-body space-y-3">
+      <h2 class="section-title">Built with</h2>
+      <p class="text-sm leading-6 text-ink-300">
+        Spring Boot, Alpine.js, Tailwind CSS, Monaco Editor, Lucide icons, marked, highlight.js, DOMPurify and the
+        Inter typeface (SIL Open Font License). Thanks to everyone who maintains them.
+      </p>
+    </div>
+  </section>
+</th:block>
+</th:block>
+</body>
+</html>

@@ -6,6 +6,8 @@
   <meta name="_csrf" th:if="${_csrf != null}" th:content="${_csrf.token}">
   <meta name="_csrf_header" th:if="${_csrf != null}" th:content="${_csrf.headerName}">
   <title th:text="${title != null} ? |${title} · Petri| : 'Petri'">Petri</title>
+  <meta name="petri-version" th:content="${petriVersion}">
+  <meta name="petri-repository" th:content="${petriRepository}">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
   <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
@@ -39,10 +41,15 @@
       <a class="is-admin" href="/admin" role="menuitem"><i data-lucide="ShieldCheck"></i> Administration</a>
     </th:block>
     <div class="app-menu-separator"></div>
+    <a th:href="|${petriRepository}/issues|" target="_blank" rel="noopener noreferrer" role="menuitem"><i data-lucide="Bug"></i> Report a bug <i data-lucide="ExternalLink" class="ml-auto !size-3.5 text-ink-500"></i></a>
+    <a th:href="|${petriRepository}/tree/main/docs|" target="_blank" rel="noopener noreferrer" role="menuitem"><i data-lucide="BookOpen"></i> Documentation <i data-lucide="ExternalLink" class="ml-auto !size-3.5 text-ink-500"></i></a>
+    <a th:href="|${petriRepository}/blob/main/CHANGELOG.md|" target="_blank" rel="noopener noreferrer" role="menuitem"><i data-lucide="ScrollText"></i> Changelog <i data-lucide="ExternalLink" class="ml-auto !size-3.5 text-ink-500"></i></a>
+    <div class="app-menu-separator"></div>
     <form method="post" action="/logout">
       <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
       <button type="submit" role="menuitem"><i data-lucide="LogOut"></i> Sign out</button>
     </form>
+    <p class="app-menu-version" th:text="|Petri v${petriVersion}|">Petri v0.0.0</p>
   </div>
 </div>
 
@@ -97,6 +104,7 @@
   <a href="/sandbox-profiles" th:classappend="${active == 'sandboxes'} ? 'is-active'"><i data-lucide="Box"></i> Test sandboxes</a>
   <a href="/git-provider-instances" th:classappend="${active == 'git-instances'} ? 'is-active'"><i data-lucide="ServerCog"></i> Git providers</a>
   <a href="/audit" th:classappend="${active == 'audit'} ? 'is-active'"><i data-lucide="ScrollText"></i> Audit log</a>
+  <a href="/about" th:classappend="${active == 'about'} ? 'is-active'"><i data-lucide="Info"></i> About</a>
 </nav>
 
 <!-- Status pill with a colour that reflects the meaning of a run, test or proposal state. -->

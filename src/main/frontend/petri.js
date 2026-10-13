@@ -80,11 +80,49 @@ function relativeTimes(scope = document) {
   });
 }
 
+/** A small version and licence note: page footer, or the right end of the workspace status bar. */
+function initializeFooter() {
+  const version = document.querySelector('meta[name="petri-version"]')?.content;
+  const repository = document.querySelector('meta[name="petri-repository"]')?.content;
+  if (!version || document.querySelector('.app-footer')) return;
+  const note = document.createElement('span');
+  note.className = 'app-footer-note';
+  const label = document.createElement('a');
+  label.href = '/about';
+  label.textContent = `Petri v${version}`;
+  label.setAttribute('aria-label', `Petri ${version}, about this instance`);
+  const sep = document.createTextNode(' · ');
+  const license = document.createElement('a');
+  license.href = repository || 'https://github.com/wenisch-tech/Petri';
+  license.target = '_blank';
+  license.rel = 'noopener noreferrer';
+  license.textContent = 'Open source under AGPL-3.0';
+  license.setAttribute('aria-label', 'Petri is open source under the AGPL-3.0, opens the GitHub repository');
+  note.append(label, sep, license);
+  const status = document.querySelector('.workspace-statusbar');
+  if (status) { note.classList.add('is-inline'); status.append(note); return; }
+  const footer = document.createElement('footer');
+  footer.className = 'app-footer';
+  if (!document.querySelector('.app-topbar, .workspace-topbar')) footer.classList.add('is-centered');
+  footer.append(note);
+  document.body.append(footer);
+}
+
 function bootPetri() {
+  initializeFooter();
   hydrateIcons();
   relativeTimes();
   setInterval(() => relativeTimes(), 30000);
   document.querySelector('.app-nav a.is-active')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+  document.querySelector('.side-nav a.is-active, .subnav a.is-active')?.scrollIntoView({ inline: 'center', block: 'nearest' });
+  document.addEventListener('click', event => {
+    const button = event.target.closest?.('[data-copy]');
+    if (!button) return;
+    navigator.clipboard?.writeText(button.dataset.copy).then(() => {
+      const label = button.querySelector('span');
+      if (label) { const previous = label.textContent; label.textContent = 'Copied'; setTimeout(() => { label.textContent = previous; }, 1500); }
+    }).catch(() => {});
+  });
   initializeDialogs();
   // Pages that follow something in progress (an agent run) reload themselves until it ends.
   if (document.querySelector('[data-live-refresh]') && !document.querySelector('[data-workspace]')) {

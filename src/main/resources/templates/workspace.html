@@ -6,11 +6,13 @@
   <meta name="_csrf" th:content="${_csrf.token}">
   <meta name="_csrf_header" th:content="${_csrf.headerName}">
   <title th:text="|${project.name} · Workspace · Petri|">Workspace · Petri</title>
+  <meta name="petri-version" th:content="${petriVersion}">
+  <meta name="petri-repository" th:content="${petriRepository}">
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
   <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
-  <link rel="stylesheet" href="/css/petri.css?v=52">
-  <script defer src="/js/petri.js?v=47"></script>
+  <link rel="stylesheet" href="/css/petri.css?v=55">
+  <script defer src="/js/petri.js?v=50"></script>
 </head>
 <body class="workspace-body">
   <header class="topbar workspace-topbar relative z-40">
