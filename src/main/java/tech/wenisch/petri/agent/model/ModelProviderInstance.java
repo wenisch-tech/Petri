@@ -52,6 +52,9 @@ class ModelProviderInstance {
   @Column(name = "owner_id")
   private UUID ownerId;
 
+  @Column(name = "models_refreshed_at")
+  private Instant modelsRefreshedAt;
+
   @Column(nullable = false)
   private boolean enabled;
 
@@ -104,6 +107,8 @@ class ModelProviderInstance {
 
   void replaceSharedKey(String ciphertext) { this.sharedApiKeyCiphertext = ciphertext; }
 
+  void markModelsRefreshed(Instant now) { this.modelsRefreshedAt = now; }
+
   UUID id() { return id; }
   ModelProvider kind() { return kind; }
   String displayName() { return displayName; }
@@ -117,6 +122,7 @@ class ModelProviderInstance {
   UUID ownerId() { return ownerId; }
   boolean global() { return ownerId == null; }
   boolean enabled() { return enabled; }
+  Instant modelsRefreshedAt() { return modelsRefreshedAt; }
   Instant createdAt() { return createdAt; }
   Instant updatedAt() { return updatedAt; }
 }

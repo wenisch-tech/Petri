@@ -37,7 +37,7 @@
 - Bounded Git time, output, file reads, searches and tool results.
 - Default-worktree creation falls back to the mirror's actual `HEAD` branch when the configured default does not exist.
 
-## Model providers
+## LLM providers
 
 - OpenAI Responses API.
 - LiteLLM Responses API.
@@ -46,6 +46,7 @@
 - Several administrator-defined providers per kind, each with its own base URL, model and output budget.
 - Per-user API keys per provider, with an optional shared key.
 - Optional personal providers, enabled by an administrator and private to their owner.
+- Model catalogue per provider: models discovered from the endpoint's `/models` listing plus free-text custom models (shared by administrators or personal).
 - Optional reasoning effort and text verbosity controls.
 - Per-run model setting snapshots and per-task overrides.
 - Full persisted conversation reconstruction for stateless Chat Completions servers.

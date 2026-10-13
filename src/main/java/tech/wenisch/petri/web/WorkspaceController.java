@@ -11,6 +11,7 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import tech.wenisch.petri.agent.change.ChangeProposalService;
 import tech.wenisch.petri.agent.tool.FileEntry;
+import tech.wenisch.petri.agent.model.ModelCatalogService;
 import tech.wenisch.petri.agent.model.ModelCredentialService;
 import tech.wenisch.petri.agent.model.ModelCredentialStatus;
 import tech.wenisch.petri.agent.model.ModelProvider;
@@ -45,6 +46,7 @@ public class WorkspaceController {
   private final ProjectWorktreeService worktrees;
   private final AgentRunService runs;
   private final ModelCredentialService modelCredentials;
+  private final ModelCatalogService modelCatalog;
   private final AppUserRepository users;
   private final ChangeProposalService changes;
   private final TestRunService testRuns;
@@ -59,6 +61,7 @@ public class WorkspaceController {
       ProjectWorktreeService worktrees,
       AgentRunService runs,
       ModelCredentialService modelCredentials,
+      ModelCatalogService modelCatalog,
       AppUserRepository users,
       ChangeProposalService changes,
       TestRunService testRuns,
@@ -71,6 +74,7 @@ public class WorkspaceController {
     this.worktrees = worktrees;
     this.runs = runs;
     this.modelCredentials = modelCredentials;
+    this.modelCatalog = modelCatalog;
     this.users = users;
     this.changes = changes;
     this.testRuns = testRuns;
@@ -128,6 +132,17 @@ public class WorkspaceController {
     ModelCredentialStatus selectedModel = savedMatch != null ? savedMatch : preferredModel;
     String selectedModelName = savedMatch != null ? savedPreference.model() : selectedModel.model();
     boolean savedModelUnavailable = savedPreference != null && savedMatch == null;
+    var modelIds = modelCatalog.modelIds(actor.getId(), configuredModels);
+    List<ModelOption> modelOptions = new java.util.ArrayList<>();
+    for (ModelCredentialStatus configured : configuredModels) {
+      List<String> names = new java.util.ArrayList<>(modelIds.getOrDefault(configured.id(), List.of()));
+      // A saved or typed model that the catalogue does not list must stay selectable.
+      if (selectedModel.id() != null && selectedModel.id().equals(configured.id())
+          && selectedModelName != null && !names.contains(selectedModelName)) {
+        names.add(selectedModelName);
+      }
+      for (String name : names) modelOptions.add(new ModelOption(configured, name));
+    }
     List<GitBranchView> branches = gitData(() -> git.branches(projectId), List.of());
     WorkspaceGitStatusView gitStatus = selectedWorktree == null ? null
         : gitData(() -> git.status(selectedWorktree.id()), null);
@@ -150,6 +165,7 @@ public class WorkspaceController {
     model.addAttribute("testRunsByRun", chatRuns.stream().collect(java.util.stream.Collectors.toMap(
         AgentRunView::id, value -> testRuns.listForAgentRun(value.id()))));
     model.addAttribute("configuredModels", configuredModels);
+    model.addAttribute("modelOptions", modelOptions);
     model.addAttribute("modelCredential", preferredModel);
     model.addAttribute("selectedModelCredential", selectedModel);
     model.addAttribute("selectedModelName", selectedModelName);
@@ -190,4 +206,7 @@ public class WorkspaceController {
       return fallback;
     }
   }
+
+  /** One selectable entry of the workspace model picker: an instance and a model ID on it. */
+  public record ModelOption(ModelCredentialStatus credential, String model) {}
 }

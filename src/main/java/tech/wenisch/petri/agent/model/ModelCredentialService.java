@@ -181,7 +181,7 @@ public class ModelCredentialService {
         instance, userKeys.findByInstanceIdAndUserId(instance.id(), viewerId).isPresent());
     if (!status.usable()) {
       throw new IllegalStateException(
-          "Add your API key for " + instance.displayName() + " under Model providers first");
+          "Add your API key for " + instance.displayName() + " under LLM providers first");
     }
     return status;
   }
@@ -351,7 +351,7 @@ public class ModelCredentialService {
     if (ciphertext == null && instance.kind().apiKeyRequired()) {
       throw new IllegalStateException(
           "No API key is available for " + instance.displayName()
-              + ". Add your key under Model providers.");
+              + ". Add your key under LLM providers.");
     }
     return material(instance, ciphertext);
   }
@@ -494,6 +494,15 @@ public class ModelCredentialService {
   private Set<UUID> keyedInstances(UUID userId) {
     return userKeys.findByUserId(userId).stream()
         .map(ModelUserApiKey::instanceId).collect(Collectors.toCollection(HashSet::new));
+  }
+
+  /** An instance the viewer may select, for catalogue operations. */
+  @Transactional(readOnly = true)
+  ModelProviderInstance visibleInstance(UUID instanceId, UUID viewerId) {
+    ModelProviderInstance instance = instances.findById(instanceId)
+        .orElseThrow(() -> new IllegalArgumentException("Unknown model provider"));
+    requireVisible(instance, viewerId);
+    return instance;
   }
 
   private void requireVisible(ModelProviderInstance instance, UUID viewerId) {

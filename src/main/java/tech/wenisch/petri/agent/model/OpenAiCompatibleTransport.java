@@ -89,6 +89,39 @@ final class OpenAiCompatibleTransport {
     }
   }
 
+  /** Lists what the instance's endpoint offers, using the viewer's key before the shared one. */
+  byte[] get(ModelCredentialRef ref, String resource) {
+    ModelCredentialMaterial credential = credentials.requireMaterial(ref);
+    HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(credential.baseUrl() + resource))
+        .timeout(timeout)
+        .header("Accept", "application/json");
+    if (credential.apiKey() != null && !credential.apiKey().isBlank()) {
+      request.header("Authorization", "Bearer " + credential.apiKey());
+    }
+    String name = credential.provider().displayName();
+    try {
+      HttpResponse<InputStream> response =
+          httpClient.send(request.GET().build(), HttpResponse.BodyHandlers.ofInputStream());
+      byte[] body;
+      try (InputStream input = response.body()) {
+        body = input.readNBytes(responseLimit + 1);
+      }
+      if (body.length > responseLimit) {
+        throw new ModelClientException(name + " response exceeded the configured byte limit");
+      }
+      if (response.statusCode() < 200 || response.statusCode() >= 300) {
+        throw new ModelClientException(
+            name + " request failed with HTTP " + response.statusCode());
+      }
+      return body;
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      throw new ModelClientException(name + " request was interrupted", exception);
+    } catch (IOException exception) {
+      throw new ModelClientException(name + " request failed", exception);
+    }
+  }
+
   void postSse(ModelProvider provider, String resource, String json, Consumer<String> eventData) {
     postSse(provider, null, resource, json, eventData);
   }

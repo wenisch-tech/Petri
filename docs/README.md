@@ -7,7 +7,7 @@ Petri is a self-hosted agentic coding harness, multi-agent orchestrator and deve
 - [Getting started](getting-started.md) — run Petri and complete the first coding task.
 - [Implemented features](implemented-features.md) — current capabilities and known boundaries.
 - [Configuration](configuration.md) — environment variables, storage and authentication.
-- [Model providers](model-providers.md) — OpenAI, LiteLLM, Ollama and compatible local servers.
+- [LLM providers](model-providers.md) — OpenAI, LiteLLM, Ollama and compatible local servers.
 - [Git mirrors and worktrees](git-workspaces.md) — repository setup, branch resolution and lifecycle.
 - [Git provider accounts](git-provider-accounts.md) — personal GitHub, GitLab and Forgejo connections and bulk import.
 - [Rootless Podman test sandboxes](test-sandboxes.md) — isolated test execution and administrator profiles.
@@ -28,7 +28,7 @@ Petri is a self-hosted agentic coding harness, multi-agent orchestrator and deve
 | `/git-provider-instances` | Configure personal self-hosted GitHub, GitLab or Forgejo endpoints; admins maintain global instances. |
 | `/projects/{projectId}/automations` | Enable and review automations such as the pull request code review. |
 | `/sandbox-profiles` | Administer rootless Podman test profiles. |
-| `/model-settings` | Configure model providers and local endpoints. |
+| `/model-settings` | Configure LLM providers, their models and local endpoints. |
 | `/runs` | Inspect persisted runs and approvals. |
 | `/api-keys` | Create or revoke API-client credentials. |
 | `/audit` | Inspect security and lifecycle events. |

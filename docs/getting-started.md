@@ -24,7 +24,7 @@ On first startup, Petri creates an encryption key at `./data/petri-master.key` w
 
 ## Configure a local model
 
-1. Sign in as the administrator and open `/model-settings` (Admin → Model providers).
+1. Sign in as the administrator and open `/model-settings` (Admin → LLM providers).
 2. Choose **Add provider** and pick the **Ollama** kind.
 3. Keep `http://localhost:11434/v1` when Ollama runs on the same host.
 4. Enter an installed model ID, for example your preferred coding model.
@@ -32,7 +32,7 @@ On first startup, Petri creates an encryption key at `./data/petri-master.key` w
 6. Add the provider.
 
 Providers that need a key (for example OpenAI) are usable once each user adds their own key under
-**Model providers** in the avatar menu, or once you store a shared key on the provider.
+**LLM providers** in the avatar menu, or once you store a shared key on the provider.
 
 When Petri runs in a container, `localhost` refers to that container. Use the Ollama container name, `host.docker.internal`, or another reachable host instead.
 

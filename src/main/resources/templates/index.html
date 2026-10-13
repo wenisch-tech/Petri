@@ -19,7 +19,8 @@
     <section class="min-w-0">
       <div class="section-header">
         <div><h2 class="section-title">Recent projects</h2></div>
-        <a th:unless="${#lists.isEmpty(recentProjects)}" class="text-sm font-medium text-brand-400 hover:underline" href="/projects">View all <span th:text="${projectCount}">0</span></a>
+        <a th:unless="${#lists.isEmpty(recentProjects)}" class="text-sm font-medium text-brand-400 hover:underline" href="/projects"
+           th:text="${projectCount == 1} ? 'View all 1 project' : |View all ${projectCount} projects|">View all projects</a>
       </div>
       <div th:if="${#lists.isEmpty(recentProjects)}" class="empty-state">
         <i data-lucide="FolderGit2"></i>
@@ -32,34 +33,36 @@
           <a class="list-row list-row-link" th:href="@{/workspace/projects/{id}(id=${project.id})}">
             <span class="list-icon"><i data-lucide="FolderGit2"></i></span>
             <span class="list-main">
-              <span class="list-title" th:text="${project.name}">Project</span>
-              <span class="list-meta"><span class="truncate" th:text="${project.repositoryUri}">repository</span></span>
+              <span class="list-title" th:text="${project.name}" th:title="${project.name}">Project</span>
+              <span class="list-meta"><span class="truncate" th:text="${project.repositoryUri}" th:title="${project.repositoryUri}">repository</span></span>
             </span>
-            <span class="hidden items-center gap-1 text-sm font-medium text-ink-500 sm:flex">Open workspace <i data-lucide="ArrowRight"></i></span>
+            <span class="flex items-center gap-1 text-sm font-medium text-ink-500">
+              <span class="hidden sm:inline">Open workspace</span><i data-lucide="ArrowRight"></i>
+            </span>
           </a>
         </li>
       </ul>
     </section>
 
-    <aside class="space-y-3">
-      <h2 class="section-title mb-3">Shortcuts</h2>
-      <a class="card card-body flex items-center gap-3 transition hover:border-ink-500" href="/git-accounts">
+    <nav class="space-y-3" aria-labelledby="shortcuts-title">
+      <h2 id="shortcuts-title" class="section-title mb-3">Shortcuts</h2>
+      <a class="card card-body flex items-center gap-3 transition hover:border-ink-500 hover:bg-ink-800/50" href="/git-accounts">
         <span class="list-icon"><i data-lucide="PlugZap"></i></span>
         <span><span class="block text-sm font-semibold">Git accounts</span><span class="block text-xs text-ink-500">Connect GitHub, GitLab or Forgejo</span></span>
       </a>
-      <a class="card card-body flex items-center gap-3 transition hover:border-ink-500" href="/runs">
+      <a class="card card-body flex items-center gap-3 transition hover:border-ink-500 hover:bg-ink-800/50" href="/runs">
         <span class="list-icon"><i data-lucide="Workflow"></i></span>
         <span><span class="block text-sm font-semibold">Agent runs</span><span class="block text-xs text-ink-500">Inspect turns, changes and tests</span></span>
       </a>
-      <a class="card card-body flex items-center gap-3 transition hover:border-ink-500" href="/api-keys">
+      <a class="card card-body flex items-center gap-3 transition hover:border-ink-500 hover:bg-ink-800/50" href="/api-keys">
         <span class="list-icon"><i data-lucide="KeyRound"></i></span>
         <span><span class="block text-sm font-semibold">API keys</span><span class="block text-xs text-ink-500">Connect editors and automation</span></span>
       </a>
-      <a th:if="${isInstanceAdmin}" class="card card-body flex items-center gap-3 border-admin-400/30 transition hover:border-admin-400/60" href="/admin">
+      <a th:if="${isInstanceAdmin}" class="card card-body flex items-center gap-3 border-admin-400/30 transition hover:border-admin-400/60 hover:bg-admin-400/5" href="/admin">
         <span class="list-icon !bg-admin-400/10 !text-admin-400"><i data-lucide="ShieldCheck"></i></span>
         <span><span class="block text-sm font-semibold">Administration</span><span class="block text-xs text-ink-500">Models, sandboxes, Git providers, audit</span></span>
       </a>
-    </aside>
+    </nav>
   </div>
 </main>
 </body>

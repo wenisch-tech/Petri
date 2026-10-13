@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: head('Model providers')}"></head>
+<head th:replace="~{fragments/layout :: head('LLM providers')}"></head>
 <body>
 <header th:replace="~{fragments/layout :: topbar('settings')}"></header>
 
@@ -10,7 +10,7 @@
   <main class="min-w-0">
     <div class="page-header">
       <div>
-        <h1 class="page-title">Model providers</h1>
+        <h1 class="page-title">LLM providers</h1>
         <p class="page-description">Add your own API key for the providers your administrator set up. Your keys are encrypted and only used for your runs.</p>
       </div>
       <div class="page-actions" th:if="${allowUserProviders}">
@@ -26,7 +26,7 @@
       <div th:if="${#lists.isEmpty(shared)}" class="empty-state">
         <i data-lucide="Cpu"></i>
         <h2>No providers available</h2>
-        <p>Your administrator has not enabled any model provider yet.</p>
+        <p>Your administrator has not enabled any LLM provider yet.</p>
       </div>
       <ul th:unless="${#lists.isEmpty(shared)}" class="list">
         <li th:each="inst : ${shared}" class="list-row">
@@ -43,10 +43,13 @@
           <span class="badge badge-warn" th:if="${!inst.hasUserKey && !inst.hasSharedKey && inst.keyRequired}">Key needed</span>
           <span class="badge badge-neutral" th:if="${!inst.hasUserKey && !inst.hasSharedKey && !inst.keyRequired}" title="Works without a key; add one if your endpoint needs it">Key optional</span>
           <div class="list-actions">
+            <button class="btn-ghost" type="button" th:attr="data-dialog-open=|models-${inst.id}|"><i data-lucide="List"></i> <span th:text="|Models (${#lists.size(catalogs[inst.id].models)})|">Models</span></button>
             <button th:class="${!inst.usable} ? 'btn-primary btn-sm' : 'btn-ghost'" type="button" th:attr="data-dialog-open=|key-${inst.id}|">
               <i data-lucide="KeyRound"></i> <span th:text="${inst.hasUserKey} ? 'Replace key' : 'Add key'">Add key</span>
             </button>
           </div>
+
+          <dialog th:replace="~{fragments/model-catalog :: dialog(${inst}, ${catalogs[inst.id]}, '/model-providers')}"></dialog>
 
           <dialog class="dialog" th:id="|key-${inst.id}|">
             <form class="dialog-panel" method="post" th:action="@{/model-providers/{id}/key(id=${inst.id})}" autocomplete="off">
@@ -99,8 +102,11 @@
           </div>
           <span class="badge badge-warn" th:if="${inst.keyRequired && !inst.hasUserKey}">Key needed</span>
           <div class="list-actions">
+            <button class="btn-ghost" type="button" th:attr="data-dialog-open=|models-${inst.id}|"><i data-lucide="List"></i> <span th:text="|Models (${#lists.size(catalogs[inst.id].models)})|">Models</span></button>
             <button class="btn-ghost" type="button" th:attr="data-dialog-open=|own-${inst.id}|"><i data-lucide="Pencil"></i> Edit</button>
           </div>
+
+          <dialog th:replace="~{fragments/model-catalog :: dialog(${inst}, ${catalogs[inst.id]}, '/model-providers')}"></dialog>
 
           <dialog class="dialog dialog-wide" th:id="|own-${inst.id}|">
             <form class="dialog-panel" method="post" action="/model-providers/own" autocomplete="off">

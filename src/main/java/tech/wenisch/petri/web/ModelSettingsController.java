@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import tech.wenisch.petri.agent.model.ModelCatalogService;
 import tech.wenisch.petri.agent.model.ModelCredentialService;
 import tech.wenisch.petri.agent.model.ModelProvider;
 import tech.wenisch.petri.agent.model.ReasoningEffort;
@@ -19,14 +20,19 @@ import tech.wenisch.petri.agent.model.TextVerbosity;
 @Controller
 public class ModelSettingsController {
   private final ModelCredentialService credentials;
+  private final ModelCatalogService catalog;
 
-  public ModelSettingsController(ModelCredentialService credentials) {
+  public ModelSettingsController(ModelCredentialService credentials, ModelCatalogService catalog) {
     this.credentials = credentials;
+    this.catalog = catalog;
   }
 
   @GetMapping("/model-settings")
   String settings(Principal principal, Model model) {
-    model.addAttribute("instances", credentials.globalInstances(principal.getName()));
+    var instances = credentials.globalInstances(principal.getName());
+    model.addAttribute("instances", instances);
+    model.addAttribute("catalogs", catalog.views(principal.getName(),
+        instances.stream().map(value -> value.id()).toList()));
     model.addAttribute("providerKinds", ModelProvider.values());
     model.addAttribute("reasoningEfforts", ReasoningEffort.values());
     model.addAttribute("textVerbosities", TextVerbosity.values());
@@ -55,6 +61,46 @@ public class ModelSettingsController {
           provider, displayName, baseUrl, model, apiKey, clearApiKey, maxOutputTokens,
           contextWindowTokens, reasoningEffort, textVerbosity, enabled), principal.getName());
       redirect.addFlashAttribute("notice", "Saved " + saved.displayName());
+    } catch (IllegalArgumentException | IllegalStateException exception) {
+      redirect.addFlashAttribute("error", exception.getMessage());
+    }
+    return "redirect:/model-settings";
+  }
+
+  @PostMapping("/model-settings/providers/{id}/models/refresh")
+  String refreshModels(@PathVariable UUID id, Principal principal, RedirectAttributes redirect) {
+    try {
+      int count = catalog.refresh(id, principal.getName());
+      redirect.addFlashAttribute("notice", "Found " + count + " models");
+    } catch (IllegalArgumentException | IllegalStateException
+        | tech.wenisch.petri.agent.model.ModelClientException exception) {
+      redirect.addFlashAttribute("error", exception.getMessage());
+    }
+    return "redirect:/model-settings";
+  }
+
+  @PostMapping("/model-settings/providers/{id}/models")
+  String addModel(
+      @PathVariable UUID id,
+      @RequestParam String modelId,
+      @RequestParam(defaultValue = "false") boolean shared,
+      Principal principal,
+      RedirectAttributes redirect) {
+    try {
+      catalog.addCustom(id, modelId, shared, principal.getName());
+      redirect.addFlashAttribute("notice", "Model added");
+    } catch (IllegalArgumentException | IllegalStateException exception) {
+      redirect.addFlashAttribute("error", exception.getMessage());
+    }
+    return "redirect:/model-settings";
+  }
+
+  @PostMapping("/model-settings/providers/models/{modelRowId}/delete")
+  String removeModel(
+      @PathVariable UUID modelRowId, Principal principal, RedirectAttributes redirect) {
+    try {
+      catalog.removeCustom(modelRowId, principal.getName());
+      redirect.addFlashAttribute("notice", "Model removed");
     } catch (IllegalArgumentException | IllegalStateException exception) {
       redirect.addFlashAttribute("error", exception.getMessage());
     }

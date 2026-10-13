@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
-<head th:replace="~{fragments/layout :: head('Model providers')}"></head>
+<head th:replace="~{fragments/layout :: head('LLM providers')}"></head>
 <body>
 <header th:replace="~{fragments/layout :: topbar('admin')}"></header>
 <div th:replace="~{fragments/layout :: adminBanner}"></div>
@@ -11,7 +11,7 @@
   <main class="min-w-0">
     <div class="page-header">
       <div>
-        <h1 class="page-title">Model providers</h1>
+        <h1 class="page-title">LLM providers</h1>
         <p class="page-description">Endpoints every user can choose from. You can add several of the same kind, for example more than one LiteLLM gateway. Each user adds their own API key, or you can store a shared one.</p>
       </div>
       <div class="page-actions">
@@ -24,7 +24,7 @@
 
     <div th:if="${#lists.isEmpty(instances)}" class="empty-state">
       <i data-lucide="Cpu"></i>
-      <h2>No model providers yet</h2>
+      <h2>No LLM providers yet</h2>
       <p>Add an endpoint such as OpenAI, a LiteLLM gateway or a local Ollama server so users can start chatting.</p>
       <button class="btn-primary" type="button" data-dialog-open="provider-new"><i data-lucide="Plus"></i> Add provider</button>
     </div>
@@ -46,8 +46,11 @@
         <span class="badge badge-neutral" th:if="${!inst.hasSharedKey && inst.keyRequired}" title="Each user must add their own key">Users bring a key</span>
         <span class="badge badge-neutral" th:if="${!inst.hasSharedKey && !inst.keyRequired}" title="Works without a key; users may still add one">Key optional</span>
         <div class="list-actions">
+          <button class="btn-ghost" type="button" th:attr="data-dialog-open=|models-${inst.id}|"><i data-lucide="List"></i> <span th:text="|Models (${#lists.size(catalogs[inst.id].models)})|">Models</span></button>
           <button class="btn-ghost" type="button" th:attr="data-dialog-open=|provider-${inst.id}|"><i data-lucide="Pencil"></i> Edit</button>
         </div>
+
+        <dialog th:replace="~{fragments/model-catalog :: dialog(${inst}, ${catalogs[inst.id]}, '/model-settings/providers')}"></dialog>
 
         <dialog class="dialog dialog-wide" th:id="|provider-${inst.id}|">
           <form class="dialog-panel" method="post" action="/model-settings/providers" autocomplete="off">
@@ -81,7 +84,7 @@
           <label class="check cursor-pointer">
             <input type="checkbox" name="allowUserProviders" value="true" th:checked="${allowUserProviders}" onchange="this.form.submit()">
             <span>
-              <span class="block font-medium text-ink-100">Let users add their own model providers</span>
+              <span class="block font-medium text-ink-100">Let users add their own LLM providers</span>
               <span class="hint !mt-0.5">Personal providers and their keys are only visible to the user who created them. They are never shared with anyone else.</span>
             </span>
           </label>
@@ -99,7 +102,7 @@
   <form class="dialog-panel" method="post" action="/model-settings/providers" autocomplete="off">
     <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
     <div class="dialog-header">
-      <div><h2>Add model provider</h2><p>Users choose from the providers you add here.</p></div>
+      <div><h2>Add LLM provider</h2><p>Users choose from the providers you add here.</p></div>
       <button class="icon-button" formmethod="dialog" formnovalidate aria-label="Close"><i data-lucide="X"></i></button>
     </div>
     <div class="dialog-body">

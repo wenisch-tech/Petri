@@ -7,7 +7,10 @@ data/
 *.iml
 *.log
 .agents/
+.codex
 .mvn/
-mvnw
 mvnw.cmd
 skills-lock.json
+PRODUCT.md
+mvnw
+mvnw

@@ -2481,12 +2481,24 @@ function roleProfileRow(state, profile) {
   const row = el('section', 'workspace-role-profile'); row.dataset.role = profile.role;
   row.append(el('h3', '', profile.role.charAt(0) + profile.role.slice(1).toLowerCase()));
   const grid = el('div', 'workspace-role-grid');
-  const providerOptions = [...state.chat.querySelector('[data-model-selector]').options];
+  const modelOptions = [...state.chat.querySelector('[data-model-selector]').options];
+  // The picker lists one entry per instance and model; roles choose the instance and a model separately.
+  const providerOptions = modelOptions.filter((option, index) => modelOptions.findIndex(other => other.value === option.value) === index);
   // Rows saved before provider instances only know the kind; map those to the first matching instance.
   const selectedProvider = profile.providerInstanceId
     || providerOptions.find(option => option.dataset.kind === profile.provider)?.value || '';
-  const provider = labeledSelect('Provider', 'provider', providerOptions.map(option => [option.value, option.textContent]), selectedProvider);
+  const provider = labeledSelect('Provider', 'provider', providerOptions.map(option => [option.value, option.dataset.name || option.textContent]), selectedProvider);
   const model = labeledInput('Model', 'model', profile.model, 'text');
+  // Offer the provider's known models while still accepting any free-text model ID.
+  const modelList = document.createElement('datalist');
+  modelList.id = `role-models-${profile.role}`;
+  model.querySelector('input').setAttribute('list', modelList.id);
+  const fillModels = () => modelList.replaceChildren(...[...new Set(modelOptions
+    .filter(option => option.value === provider.querySelector('select').value).map(option => option.dataset.model))]
+    .map(value => new Option(value)));
+  provider.querySelector('select').addEventListener('change', fillModels);
+  fillModels();
+  model.append(modelList);
   const attempts = labeledInput('Attempts', 'maxAttempts', profile.maxAttempts, 'number', 1, 10);
   const turns = labeledInput('Turn budget', 'maxModelTurns', profile.maxModelTurns, 'number', 1, 100);
   const output = labeledInput('Output tokens', 'maxOutputTokens', profile.maxOutputTokens, 'number', 16, 1000000);

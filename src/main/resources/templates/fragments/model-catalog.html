@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<!--
+  Opens with data-dialog-open="models-<instance id>".
+  inst     provider instance status
+  catalog  ModelCatalogView of that instance
+  base     URL prefix of the catalogue endpoints, e.g. /model-providers
+-->
+<dialog th:fragment="dialog(inst, catalog, base)" class="dialog dialog-wide" th:id="|models-${inst.id}|">
+  <div class="dialog-panel">
+    <div class="dialog-header">
+      <div>
+        <h2 th:text="|Models of ${inst.displayName}|">Models</h2>
+        <p>Listed by the endpoint, plus model IDs you add by hand. Only these can be picked in the workspace.</p>
+      </div>
+      <form method="dialog"><button class="icon-button" aria-label="Close"><i data-lucide="X"></i></button></form>
+    </div>
+    <div class="dialog-body">
+      <div th:if="${catalog.canRefresh}" class="flex flex-wrap items-center justify-between gap-3">
+        <span class="text-sm text-ink-500">
+          <span th:if="${catalog.refreshedAt == null}">Not refreshed yet.</span>
+          <span th:if="${catalog.refreshedAt != null}">Refreshed <time data-local th:attr="datetime=${catalog.refreshedAt}" th:text="${catalog.refreshedAt}">date</time></span>
+        </span>
+        <form method="post" th:action="@{|${base}/${inst.id}/models/refresh|}">
+          <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+          <button class="btn-secondary btn-sm" type="submit"><i data-lucide="RefreshCw"></i> Refresh from provider</button>
+        </form>
+      </div>
+
+      <ul class="list">
+        <li th:each="entry : ${catalog.models}" class="list-row !py-2.5">
+          <div class="list-main"><code class="text-sm" th:text="${entry.modelId}">model</code></div>
+          <span class="badge badge-brand" th:if="${entry.modelId == inst.model}">Default</span>
+          <span class="badge badge-neutral" th:if="${entry.id != null && !entry.custom}">Discovered</span>
+          <span class="badge badge-neutral" th:if="${entry.custom && !entry.personal}">Shared</span>
+          <span class="badge badge-neutral" th:if="${entry.personal}">Only you</span>
+          <form th:if="${entry.removable}" method="post" th:action="@{|${base}/models/${entry.id}/delete|}">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <button class="icon-button" type="submit" title="Remove model" aria-label="Remove model"><i data-lucide="Trash2"></i></button>
+          </form>
+        </li>
+      </ul>
+
+      <form method="post" th:action="@{|${base}/${inst.id}/models|}" autocomplete="off" class="space-y-2">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        <label class="label" th:for="|model-add-${inst.id}|">Add a model by ID</label>
+        <div class="flex gap-2">
+          <input class="field font-mono text-sm" name="modelId" th:id="|model-add-${inst.id}|" maxlength="200" required spellcheck="false" placeholder="model-name">
+          <button class="btn-primary shrink-0" type="submit"><i data-lucide="Plus"></i> Add</button>
+        </div>
+        <label th:if="${catalog.canShare}" class="check">
+          <input type="checkbox" name="shared" value="true" checked><span>Offer to every user of this provider</span>
+        </label>
+        <span th:unless="${catalog.canShare}" class="hint">Only you will see models you add here.</span>
+      </form>
+    </div>
+    <div class="dialog-footer">
+      <form method="dialog"><button class="btn-secondary">Close</button></form>
+    </div>
+  </div>
+</dialog>
+</body>
+</html>

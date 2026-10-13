@@ -1,21 +1,38 @@
-# Model providers
+# LLM providers
 
 Petri has a provider-neutral model-client registry. A **provider** is a configured endpoint with its own
 base URL, model and defaults. Its **kind** (below) decides which API Petri speaks.
 
 ## Who configures what
 
-- **Administrators** add providers at `/model-settings` (Administration → Model providers). Several
+- **Administrators** add providers at `/model-settings` (Administration → LLM providers). Several
   providers of the same kind are allowed, for example two LiteLLM gateways with different models.
   A provider may carry an optional **shared key**; without one, every user brings their own.
-- **Users** add their own API key per provider at `/model-providers` (avatar menu → Model providers).
+- **Users** add their own API key per provider at `/model-providers` (avatar menu → LLM providers).
   A user's key is used for that user's runs and takes precedence over the shared key. Keys are
   encrypted at rest and never displayed again.
 - **Personal providers** are off by default. An administrator can enable
-  *Let users add their own model providers*; users can then add endpoints that only they can see and
+  *Let users add their own LLM providers*; users can then add endpoints that only they can see and
   use. A personal provider can make the Petri server call any HTTP(S) address it can reach, so enable
   this only when every user is trusted. Turning the setting off hides personal providers and makes
   runs that use them fail; the providers and keys are kept.
+
+## Models
+
+Each provider offers a list of models, shown under **Models** on its row:
+
+- **Discovered** models are read from the endpoint's `GET <base URL>/models` listing. An
+  administrator refreshes a global provider, an owner refreshes their personal provider
+  (**Refresh from provider**). A refresh replaces the discovered list and keeps hand-added models.
+  Entries that cannot hold a chat, such as embedding, speech and moderation models, are skipped.
+- **Custom** models are free-text model IDs for endpoints that do not list their models or hide
+  some. Administrators can offer them to every user of a global provider; any user can add models
+  that only they see, on any provider they can select.
+- The provider's **default model** is always listed.
+
+The workspace model picker shows one entry per provider and model, and workflow role profiles
+suggest the models of the chosen provider while still accepting any free-text ID. Petri does not
+verify that a typed model exists; the endpoint rejects unknown ones when the run starts.
 
 A provider appears in the workspace model picker only when the user can call it right now: it is
 enabled, and a key is available (their own or the shared one) when the kind requires one.
@@ -41,7 +58,7 @@ Configure:
 ```text
 Kind: Ollama
 Base URL: http://localhost:11434/v1
-Model ID: <installed Ollama model>
+Default model: <installed Ollama model>
 API key: empty
 ```
 
@@ -69,7 +86,7 @@ Provider-specific reasoning and verbosity fields are omitted from generic Chat C
 
 ## Generation settings
 
-- **Model ID** is passed unchanged to the provider.
+- **Model ID** (the default model, or the one picked in the workspace) is passed unchanged to the provider.
 - **Maximum output tokens** must be between 16 and 1,000,000.
 - **Context window tokens** defaults to 32,768. It must retain at least 2,048 input tokens after
   the output budget and Petri's 15% safety reserve.

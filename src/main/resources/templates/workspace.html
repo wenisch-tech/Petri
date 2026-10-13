@@ -186,9 +186,10 @@
           <option value="ORCHESTRATED">Workflow</option><option value="DIRECT">Direct</option>
         </select></label>
         <label class="workspace-model-field"><span>Model</span><select class="workspace-model-selector" data-model-selector th:disabled="${!modelConfigured}" aria-label="Workspace model">
-          <option th:each="item : ${configuredModels}" th:value="${item.id}" th:selected="${item.id == selectedModelCredential.id}"
-                  th:attr="data-kind=${item.provider},data-model=${item.model},data-tokens=${item.maxOutputTokens},data-context=${item.contextWindowTokens},data-reasoning=${item.reasoningEffort},data-verbosity=${item.textVerbosity}"
-                  th:text="|${item.displayName} · ${item.model}|">Model</option>
+          <option th:each="option : ${modelOptions}" th:value="${option.credential.id}"
+                  th:selected="${option.credential.id == selectedModelCredential.id && option.model == selectedModelName}"
+                  th:attr="data-kind=${option.credential.provider},data-name=${option.credential.displayName},data-model=${option.model},data-tokens=${option.credential.maxOutputTokens},data-context=${option.credential.contextWindowTokens},data-reasoning=${option.credential.reasoningEffort},data-verbosity=${option.credential.textVerbosity}"
+                  th:text="|${option.credential.displayName} · ${option.model}|">Model</option>
         </select></label>
         <span class="workspace-model-unavailable" data-model-unavailable th:hidden="${!savedModelUnavailable}">Saved model unavailable</span>
         <button class="icon-button" type="button" data-orchestration-settings title="Configure workflow roles" aria-label="Configure workflow roles"><i data-lucide="Workflow"></i></button>

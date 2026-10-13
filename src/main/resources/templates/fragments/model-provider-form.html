@@ -32,9 +32,10 @@
              th:value="${inst != null ? inst.displayName() : ''}" placeholder="Team LiteLLM">
     </div>
     <div>
-      <label class="label" th:for="|${prefix}-model|">Model ID</label>
+      <label class="label" th:for="|${prefix}-model|">Default model</label>
       <input class="field" name="model" th:id="|${prefix}-model|" maxlength="200" required
              th:value="${inst != null ? inst.model() : ''}" placeholder="model-name">
+      <span class="hint">Used when nothing else is chosen. More models are listed under <em>Models</em> once the provider is saved.</span>
     </div>
   </div>
 

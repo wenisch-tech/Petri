@@ -32,7 +32,7 @@
     <p class="app-menu-label">Your settings</p>
     <a href="/git-accounts" role="menuitem"><i data-lucide="PlugZap"></i> Git accounts</a>
     <a th:unless="${isInstanceAdmin}" href="/git-provider-instances" role="menuitem"><i data-lucide="Server"></i> Self-hosted Git</a>
-    <a href="/model-providers" role="menuitem"><i data-lucide="Cpu"></i> Model providers</a>
+    <a href="/model-providers" role="menuitem"><i data-lucide="Cpu"></i> LLM providers</a>
     <a href="/api-keys" role="menuitem"><i data-lucide="KeyRound"></i> API keys</a>
     <th:block th:if="${isInstanceAdmin}">
       <div class="app-menu-separator"></div>
@@ -79,14 +79,14 @@
   <p class="side-nav-label">Your settings</p>
   <a href="/git-accounts" th:classappend="${active == 'git-accounts'} ? 'is-active'"><i data-lucide="PlugZap"></i> Git accounts</a>
   <a th:unless="${isInstanceAdmin}" href="/git-provider-instances" th:classappend="${active == 'git-instances'} ? 'is-active'"><i data-lucide="Server"></i> Self-hosted Git</a>
-  <a href="/model-providers" th:classappend="${active == 'model-providers'} ? 'is-active'"><i data-lucide="Cpu"></i> Model providers</a>
+  <a href="/model-providers" th:classappend="${active == 'model-providers'} ? 'is-active'"><i data-lucide="Cpu"></i> LLM providers</a>
   <a href="/api-keys" th:classappend="${active == 'api-keys'} ? 'is-active'"><i data-lucide="KeyRound"></i> API keys</a>
 </nav>
 
 <!-- Instance administration navigation. -->
 <nav th:fragment="adminNav(active)" class="side-nav is-admin" aria-label="Administration">
   <p class="side-nav-label">Administration</p>
-  <a href="/model-settings" th:classappend="${active == 'models'} ? 'is-active'"><i data-lucide="Cpu"></i> Model providers</a>
+  <a href="/model-settings" th:classappend="${active == 'models'} ? 'is-active'"><i data-lucide="Cpu"></i> LLM providers</a>
   <a href="/sandbox-profiles" th:classappend="${active == 'sandboxes'} ? 'is-active'"><i data-lucide="Box"></i> Test sandboxes</a>
   <a href="/git-provider-instances" th:classappend="${active == 'git-instances'} ? 'is-active'"><i data-lucide="ServerCog"></i> Git providers</a>
   <a href="/audit" th:classappend="${active == 'audit'} ? 'is-active'"><i data-lucide="ScrollText"></i> Audit log</a>
