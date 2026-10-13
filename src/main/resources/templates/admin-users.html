@@ -1,0 +1,130 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Users')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('admin')}"></header>
+<div th:replace="~{fragments/layout :: adminBanner}"></div>
+
+<div class="area-layout">
+  <nav th:replace="~{fragments/layout :: adminNav('users')}"></nav>
+
+  <main class="min-w-0">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Users</h1>
+        <p class="page-description">Local accounts and everyone who signed in through an identity provider. Roles apply the next time a user signs in.</p>
+      </div>
+      <div class="page-actions">
+        <button class="btn-primary" type="button" data-dialog-open="user-new"><i data-lucide="Plus"></i> Add user</button>
+      </div>
+    </div>
+
+    <div th:replace="~{fragments/layout :: alert('success', ${notice})}"></div>
+    <div th:replace="~{fragments/layout :: alert('error', ${error})}"></div>
+
+    <ul class="list">
+      <li th:each="user : ${users}" class="list-row" th:classappend="${!user.enabled} ? 'opacity-70'">
+        <span class="app-avatar !size-10 !text-sm" th:text="${#strings.substring(user.email, 0, 1)}">U</span>
+        <div class="list-main">
+          <span class="list-title" th:text="${user.email}">user@example.com</span>
+          <span class="list-meta">
+            <span th:if="${user.local}">Local password</span>
+            <span th:each="provider : ${user.providers}" th:text="|SSO · ${provider}|">SSO · provider</span>
+            <span th:if="${!user.local and #lists.isEmpty(user.providers)}">No sign-in method</span>
+            <span>Joined <time data-local="date" th:attr="datetime=${user.createdAt}" th:text="${user.createdAt}">date</time></span>
+          </span>
+        </div>
+        <span class="badge badge-neutral" th:if="${user.self}">You</span>
+        <span class="badge badge-warn" th:if="${!user.enabled}">Disabled</span>
+        <span class="badge" th:classappend="${user.admin} ? 'badge-brand' : 'badge-neutral'" th:text="${user.admin} ? 'Administrator' : 'Member'">Member</span>
+        <div class="list-actions">
+          <button class="btn-ghost" type="button" th:attr="data-dialog-open=|user-${user.id}|"><i data-lucide="Pencil"></i> Manage</button>
+        </div>
+
+        <dialog class="dialog" th:id="|user-${user.id}|">
+          <div class="dialog-panel">
+            <div class="dialog-header">
+              <div><h2 th:text="${user.email}">user</h2><p th:text="${user.local} ? 'Local account' : 'Signs in through an identity provider'">Local account</p></div>
+              <form method="dialog"><button class="icon-button" aria-label="Close"><i data-lucide="X"></i></button></form>
+            </div>
+            <div class="dialog-body">
+              <form method="post" th:action="@{/admin/users/{id}/role(id=${user.id})}" class="space-y-2">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <label class="label" th:for="|role-${user.id}|">Role</label>
+                <div class="flex gap-2">
+                  <select class="field" name="role" th:id="|role-${user.id}|">
+                    <option value="USER" th:selected="${!user.admin}">Member</option>
+                    <option value="INSTANCE_ADMIN" th:selected="${user.admin}">Administrator</option>
+                  </select>
+                  <button class="btn-secondary shrink-0" type="submit">Save role</button>
+                </div>
+                <span class="hint">Administrators manage providers, sandboxes, Git providers, users and the audit log.</span>
+              </form>
+
+              <form th:if="${user.local}" method="post" th:action="@{/admin/users/{id}/password(id=${user.id})}" class="space-y-2" autocomplete="off">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <label class="label" th:for="|pw-${user.id}|">New password</label>
+                <div class="flex gap-2">
+                  <input class="field" type="password" name="password" th:id="|pw-${user.id}|" minlength="10" maxlength="128" required autocomplete="new-password" placeholder="At least 10 characters">
+                  <button class="btn-secondary shrink-0" type="submit">Set password</button>
+                </div>
+              </form>
+              <p th:unless="${user.local}" class="text-sm text-ink-500">The password is managed by the identity provider.</p>
+
+              <form method="post" th:action="@{/admin/users/{id}/enabled(id=${user.id})}" th:unless="${user.self}">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <input type="hidden" name="enabled" th:value="${!user.enabled}">
+                <div class="flex items-center justify-between gap-3">
+                  <span class="text-sm text-ink-300" th:text="${user.enabled} ? 'Disabled accounts cannot sign in but keep their data.' : 'This account is disabled.'">Disable</span>
+                  <button class="btn-secondary shrink-0" type="submit" th:text="${user.enabled} ? 'Disable account' : 'Enable account'">Disable account</button>
+                </div>
+              </form>
+            </div>
+            <div class="dialog-footer" th:unless="${user.self}">
+              <form method="post" th:action="@{/admin/users/{id}/delete(id=${user.id})}" class="spacer"
+                    onsubmit="return confirm('Delete this user? Users who own projects cannot be deleted; disable them instead.')">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button class="btn-danger btn-sm" type="submit"><i data-lucide="Trash2"></i> Delete user</button>
+              </form>
+              <form method="dialog"><button class="btn-secondary">Close</button></form>
+            </div>
+            <div class="dialog-footer" th:if="${user.self}"><form method="dialog"><button class="btn-secondary">Close</button></form></div>
+          </div>
+        </dialog>
+      </li>
+    </ul>
+  </main>
+</div>
+
+<dialog id="user-new" class="dialog">
+  <form class="dialog-panel" method="post" action="/admin/users" autocomplete="off">
+    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+    <div class="dialog-header">
+      <div><h2>Add local user</h2><p>They sign in with this email and password. SSO users appear here after their first sign-in.</p></div>
+      <button class="icon-button" formmethod="dialog" formnovalidate aria-label="Close"><i data-lucide="X"></i></button>
+    </div>
+    <div class="dialog-body">
+      <div>
+        <label class="label" for="new-email">Email</label>
+        <input class="field" type="email" id="new-email" name="email" maxlength="320" required autocomplete="off" placeholder="name@example.com">
+      </div>
+      <div>
+        <label class="label" for="new-password">Password</label>
+        <input class="field" type="password" id="new-password" name="password" minlength="10" maxlength="128" required autocomplete="new-password" placeholder="At least 10 characters">
+      </div>
+      <div>
+        <label class="label" for="new-role">Role</label>
+        <select class="field" id="new-role" name="role">
+          <option value="USER">Member</option>
+          <option value="INSTANCE_ADMIN">Administrator</option>
+        </select>
+      </div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn-secondary" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn-primary" type="submit"><i data-lucide="Plus"></i> Add user</button>
+    </div>
+  </form>
+</dialog>
+</body>
+</html>

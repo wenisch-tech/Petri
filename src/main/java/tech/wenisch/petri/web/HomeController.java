@@ -44,7 +44,7 @@ public class HomeController {
 
   @GetMapping("/admin")
   String admin() {
-    return "redirect:/model-settings";
+    return "redirect:/admin/users";
   }
 
   @GetMapping("/login")

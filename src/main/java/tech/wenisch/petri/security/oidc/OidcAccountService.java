@@ -49,6 +49,7 @@ public class OidcAccountService {
     if (knownIdentity != null) {
       AppUser user = users.findById(knownIdentity.getUserId())
           .orElseThrow(() -> rejected("The linked Petri account no longer exists"));
+      if (!user.isEnabled()) throw rejected("This Petri account is disabled");
       auditLogin(user, provider);
       return user;
     }
@@ -62,6 +63,7 @@ public class OidcAccountService {
       if (!createUsers) throw rejected("No Petri account exists for this identity");
       user = users.save(AppUser.oidcUser(UUID.randomUUID(), email, "USER"));
     }
+    if (!user.isEnabled()) throw rejected("This Petri account is disabled");
     identities.save(new UserIdentity(UUID.randomUUID(), user.getId(), provider, subject, Instant.now()));
     auditLog.record(
         user.getEmail(),

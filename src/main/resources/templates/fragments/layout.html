@@ -92,6 +92,7 @@
 <!-- Instance administration navigation. -->
 <nav th:fragment="adminNav(active)" class="side-nav is-admin" aria-label="Administration">
   <p class="side-nav-label">Administration</p>
+  <a href="/admin/users" th:classappend="${active == 'users'} ? 'is-active'"><i data-lucide="Users"></i> Users</a>
   <a href="/model-settings" th:classappend="${active == 'models'} ? 'is-active'"><i data-lucide="Cpu"></i> LLM providers</a>
   <a href="/sandbox-profiles" th:classappend="${active == 'sandboxes'} ? 'is-active'"><i data-lucide="Box"></i> Test sandboxes</a>
   <a href="/git-provider-instances" th:classappend="${active == 'git-instances'} ? 'is-active'"><i data-lucide="ServerCog"></i> Git providers</a>

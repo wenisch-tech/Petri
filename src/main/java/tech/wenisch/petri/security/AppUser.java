@@ -52,6 +52,15 @@ public class AppUser {
     this.createdAt = Instant.now();
   }
 
+  public void changeRole(String value) { this.role = value; }
+  public void changeEnabled(boolean value) { this.enabled = value; }
+
+  /** Stores an already encoded password; a person set it for them, so no forced change. */
+  public void changePassword(String encodedPassword) {
+    this.passwordHash = encodedPassword;
+    this.passwordChangeRequired = false;
+  }
+
   public UUID getId() { return id; }
   public String getEmail() { return email; }
   @JsonIgnore
