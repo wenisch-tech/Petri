@@ -48,6 +48,9 @@ PostgreSQL, and works with OpenAI, LiteLLM, Ollama and any OpenAI-compatible end
 - **Queueing and cancellation:** follow-up tasks queue in order; cancelling preserves applied
   changes and releases the worktree at a safe boundary.
 - **Direct mode** for plain single-agent chats with optional per-chat auto-approval.
+- **MCP servers:** each user connects their own remote MCP servers (bearer, headers or OAuth 2.1
+  sign-in) and switches them on per project; read-only tools run directly, other tool calls wait for
+  approval in the review tray.
 - **Skills:** lazy-loaded, operator-controlled `SKILL.md` workflows that add guidance but never
   capabilities.
 

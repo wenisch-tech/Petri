@@ -1,0 +1,187 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('MCP servers')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('settings')}"></header>
+
+<div class="area-layout">
+  <nav th:replace="~{fragments/layout :: settingsNav('mcp-servers')}"></nav>
+
+  <main class="min-w-0">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">MCP servers</h1>
+        <p class="page-description">Tool servers your agents can use. They are yours alone: switch them on per project under the project's MCP settings.</p>
+      </div>
+      <div class="page-actions">
+        <button class="btn-primary" type="button" data-dialog-open="mcp-new"><i data-lucide="Plus"></i> Add server</button>
+      </div>
+    </div>
+
+    <div th:replace="~{fragments/layout :: alert('success', ${notice})}"></div>
+    <div th:replace="~{fragments/layout :: alert('error', ${error})}"></div>
+
+    <div th:if="${#lists.isEmpty(servers)}" class="empty-state">
+      <i data-lucide="PlugZap"></i>
+      <h2>No MCP servers yet</h2>
+      <p>Connect a Model Context Protocol server over HTTP to give your agents extra tools, such as an issue tracker or a knowledge base.</p>
+      <button class="btn-primary" type="button" data-dialog-open="mcp-new"><i data-lucide="Plus"></i> Add server</button>
+    </div>
+
+    <ul th:unless="${#lists.isEmpty(servers)}" class="list">
+      <li th:each="server : ${servers}" class="list-row">
+        <span class="list-icon" th:classappend="${server.status.name() == 'ACTIVE'} ? '!bg-brand-500/15 !text-brand-400'"><i data-lucide="PlugZap"></i></span>
+        <div class="list-main">
+          <span class="list-title" th:text="${server.name}">Server</span>
+          <span class="list-meta">
+            <span class="truncate" th:text="${server.url}">https://mcp.example.com</span>
+            <span th:text="${server.authType.label()}">Bearer token</span>
+            <span th:text="|${#lists.size(server.tools)} tool${#lists.size(server.tools) == 1 ? '' : 's'}|">3 tools</span>
+          </span>
+          <span th:if="${server.lastError != null}" class="mt-1 block text-xs text-danger-400" th:text="${server.lastError}">error</span>
+          <span th:if="${server.insecure}" class="mt-1 block text-xs text-warn-400">Unencrypted HTTP — trusted networks only</span>
+        </div>
+        <span class="badge badge-warn" th:if="${server.status.name() == 'NEEDS_AUTH'}">Needs sign-in</span>
+        <span class="badge badge-danger" th:if="${server.status.name() == 'ERROR'}">Unreachable</span>
+        <span class="badge" th:if="${server.status.name() == 'ACTIVE' and server.toolsRefreshedAt != null}">Connected</span>
+        <span class="badge badge-neutral" th:if="${server.status.name() == 'ACTIVE' and server.toolsRefreshedAt == null}">Not tested</span>
+        <div class="list-actions">
+          <form method="post" th:action="@{/mcp-servers/{id}/refresh(id=${server.id})}">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <button class="btn-ghost" type="submit" title="Connect and list the server's tools"><i data-lucide="RefreshCw"></i> Test</button>
+          </form>
+          <button class="btn-ghost" type="button" th:attr="data-dialog-open=|mcp-tools-${server.id}|"><i data-lucide="List"></i> Tools</button>
+          <button class="btn-ghost" type="button" th:attr="data-dialog-open=|mcp-${server.id}|"><i data-lucide="Pencil"></i> Edit</button>
+        </div>
+
+        <dialog class="dialog" th:id="|mcp-tools-${server.id}|">
+          <div class="dialog-panel">
+            <div class="dialog-header">
+              <div><h2 th:text="|${server.name} tools|">Tools</h2><p>What the server offered the last time Petri connected. Tools marked read-only run without asking; the others need your approval.</p></div>
+              <form method="dialog"><button class="icon-button" aria-label="Close"><i data-lucide="X"></i></button></form>
+            </div>
+            <div class="dialog-body">
+              <p th:if="${#lists.isEmpty(server.tools)}" class="text-sm text-ink-500">No tools listed yet. Use Test to connect.</p>
+              <ul th:unless="${#lists.isEmpty(server.tools)}" class="list">
+                <li th:each="tool : ${server.tools}" class="list-row !py-2.5">
+                  <div class="list-main">
+                    <code class="break-all text-sm" th:text="${tool.name}">tool</code>
+                    <span th:if="${tool.description != ''}" class="mt-0.5 line-clamp-2 block text-xs text-ink-500" th:text="${tool.description}">description</span>
+                  </div>
+                  <span class="badge badge-neutral" th:text="${tool.readOnly} ? 'Read-only' : 'Needs approval'">Read-only</span>
+                </li>
+              </ul>
+            </div>
+            <div class="dialog-footer"><form method="dialog"><button class="btn-secondary">Close</button></form></div>
+          </div>
+        </dialog>
+
+        <dialog class="dialog dialog-wide" th:id="|mcp-${server.id}|">
+          <form class="dialog-panel" method="post" action="/mcp-servers" autocomplete="off"
+                th:attr="x-data=|{ auth: '${server.authType}' }|">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <input type="hidden" name="id" th:value="${server.id}">
+            <div class="dialog-header">
+              <div><h2 th:text="|Edit ${server.name}|">Edit</h2><p>Secrets are stored encrypted and never shown again.</p></div>
+              <button class="icon-button" formmethod="dialog" formnovalidate aria-label="Close"><i data-lucide="X"></i></button>
+            </div>
+            <div class="dialog-body">
+              <div th:replace="~{:: serverFields(${server})}"></div>
+            </div>
+            <div class="dialog-footer">
+              <button class="btn-danger btn-sm spacer" type="submit" formnovalidate
+                      th:attr="formaction=@{/mcp-servers/{id}/delete(id=${server.id})}"
+                      onclick="return confirm('Remove this MCP server? Projects stop using it.')"><i data-lucide="Trash2"></i> Remove</button>
+              <button class="btn-secondary" formmethod="dialog" formnovalidate>Cancel</button>
+              <button class="btn-primary" type="submit"><i data-lucide="Save"></i> Save</button>
+            </div>
+          </form>
+        </dialog>
+      </li>
+    </ul>
+  </main>
+</div>
+
+<dialog id="mcp-new" class="dialog dialog-wide">
+  <form class="dialog-panel" method="post" action="/mcp-servers" autocomplete="off" x-data="{ auth: 'NONE' }">
+    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+    <div class="dialog-header">
+      <div><h2>Add MCP server</h2><p>Petri connects to it from the server. Use an HTTPS URL for anything outside a trusted network.</p></div>
+      <button class="icon-button" formmethod="dialog" formnovalidate aria-label="Close"><i data-lucide="X"></i></button>
+    </div>
+    <div class="dialog-body">
+      <div th:replace="~{:: serverFields(null)}"></div>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn-secondary" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn-primary" type="submit"><i data-lucide="Plus"></i> Add server</button>
+    </div>
+  </form>
+</dialog>
+
+<!-- Shared by the add and edit dialogs; `auth` is the Alpine state of the surrounding form. -->
+<th:block th:remove="all">
+<div th:fragment="serverFields(server)" class="space-y-5">
+  <div class="form-grid">
+    <div>
+      <label class="label">Name</label>
+      <input class="field" name="name" maxlength="80" required placeholder="Issue tracker" th:value="${server != null ? server.name : ''}">
+    </div>
+    <div>
+      <label class="label">Transport</label>
+      <select class="field" name="transport">
+        <option th:each="transport : ${transports}" th:value="${transport}" th:text="${transport.label()}"
+                th:selected="${server != null and server.transport == transport}">Automatic</option>
+      </select>
+    </div>
+  </div>
+  <div>
+    <label class="label">Server URL</label>
+    <input class="field font-mono text-sm" type="url" name="url" maxlength="2048" required placeholder="https://mcp.example.com/mcp" th:value="${server != null ? server.url : ''}">
+    <span class="hint">The MCP endpoint. "Automatic" tries Streamable HTTP and falls back to the older SSE transport.</span>
+  </div>
+  <div>
+    <label class="label">Authentication</label>
+    <select class="field" name="authType" x-model="auth">
+      <option th:each="type : ${authTypes}" th:value="${type}" th:text="${type.label()}" th:selected="${server != null and server.authType == type}">None</option>
+    </select>
+  </div>
+  <div x-show="auth === 'BEARER'" x-cloak>
+    <label class="label">Token <span th:if="${server != null and server.hasSecret and server.authType.name() == 'BEARER'}" class="label-optional">(stored — leave blank to keep)</span></label>
+    <input class="field font-mono text-sm" type="password" name="secret" autocomplete="new-password" spellcheck="false" placeholder="Paste the token or API key">
+    <span class="hint">Sent as <code>Authorization: Bearer …</code>.</span>
+  </div>
+  <div x-show="auth === 'HEADERS'" x-cloak>
+    <label class="label">Headers</label>
+    <textarea class="field font-mono text-sm" name="headers" rows="3" spellcheck="false" autocomplete="off"
+              placeholder="X-Api-Key: …" th:text="${server != null ? server.maskedHeaders : ''}"></textarea>
+    <span class="hint">One <code>Name: value</code> per line. A saved value shows as <code>********</code>; leave it to keep the value.</span>
+  </div>
+  <div x-show="auth === 'OAUTH'" x-cloak class="space-y-4">
+    <p class="text-sm leading-6 text-ink-300">Petri signs in on your behalf with OAuth 2.1 and refreshes the token automatically. The server's authorization settings are discovered; leave the client fields empty to register Petri automatically.</p>
+    <div class="form-grid">
+      <div>
+        <label class="label">Client ID <span class="label-optional">(optional)</span></label>
+        <input class="field font-mono text-sm" name="oauthClientId" maxlength="512" th:value="${server != null ? server.oauthClientId : ''}">
+      </div>
+      <div>
+        <label class="label">Client secret <span class="label-optional">(optional)</span></label>
+        <input class="field font-mono text-sm" type="password" name="oauthClientSecret" autocomplete="new-password" th:placeholder="${server != null and server.hasClientSecret} ? 'Stored — leave blank to keep' : ''">
+      </div>
+    </div>
+    <div>
+      <label class="label">Scopes <span class="label-optional">(optional)</span></label>
+      <input class="field" name="oauthScopes" maxlength="512" placeholder="space separated" th:value="${server != null ? server.oauthScopes : ''}">
+    </div>
+    <div th:if="${server != null}" class="flex flex-wrap items-center gap-3 rounded-lg border border-ink-700/70 bg-raised px-3 py-2.5 text-sm">
+      <span th:text="${server.signedIn} ? 'Signed in.' : 'Not signed in yet.'">Not signed in</span>
+      <button class="btn-secondary btn-sm" type="submit" formnovalidate
+              th:attr="formaction=@{/mcp-servers/{id}/oauth/start(id=${server.id})}"><i data-lucide="LockKeyhole"></i> <span th:text="${server.signedIn} ? 'Sign in again' : 'Sign in'">Sign in</span></button>
+      <span class="text-xs text-ink-500">Save changes first; sign-in opens the server's authorization page.</span>
+    </div>
+    <p th:if="${server == null}" class="text-xs text-ink-500">After adding the server, open Edit and choose Sign in.</p>
+  </div>
+</div>
+</th:block>
+</body>
+</html>

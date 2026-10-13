@@ -35,6 +35,7 @@
     <a href="/git-accounts" role="menuitem"><i data-lucide="PlugZap"></i> Git accounts</a>
     <a th:unless="${isInstanceAdmin}" href="/git-provider-instances" role="menuitem"><i data-lucide="Server"></i> Self-hosted Git</a>
     <a href="/model-providers" role="menuitem"><i data-lucide="Cpu"></i> LLM providers</a>
+    <a href="/mcp-servers" role="menuitem"><i data-lucide="PlugZap"></i> MCP servers</a>
     <a href="/api-keys" role="menuitem"><i data-lucide="KeyRound"></i> API keys</a>
     <th:block th:if="${isInstanceAdmin}">
       <div class="app-menu-separator"></div>
@@ -81,11 +82,12 @@
   </div>
 </div>
 
-<!-- Sub-navigation of a project's settings. `active` is one of: general, roles, environment. -->
+<!-- Sub-navigation of a project's settings. `active` is one of: general, roles, environment, mcp. -->
 <nav th:fragment="projectSettingsTabs(projectId, active)" class="subnav" aria-label="Project settings">
   <a th:href="@{/projects/{id}/settings(id=${projectId})}" th:classappend="${active == 'general'} ? 'is-active'" th:attr="aria-current=${active == 'general'} ? 'page'"><i data-lucide="Settings"></i> General</a>
   <a th:href="@{/projects/{id}/settings/roles(id=${projectId})}" th:classappend="${active == 'roles'} ? 'is-active'" th:attr="aria-current=${active == 'roles'} ? 'page'"><i data-lucide="Cpu"></i> Model settings</a>
   <a th:href="@{/projects/{id}/settings/environment(id=${projectId})}" th:classappend="${active == 'environment'} ? 'is-active'" th:attr="aria-current=${active == 'environment'} ? 'page'"><i data-lucide="SquareTerminal"></i> Environment</a>
+  <a th:href="@{/projects/{id}/settings/mcp(id=${projectId})}" th:classappend="${active == 'mcp'} ? 'is-active'" th:attr="aria-current=${active == 'mcp'} ? 'page'"><i data-lucide="PlugZap"></i> MCP</a>
 </nav>
 
 <!-- Personal settings navigation. -->
@@ -94,6 +96,7 @@
   <a href="/git-accounts" th:classappend="${active == 'git-accounts'} ? 'is-active'"><i data-lucide="PlugZap"></i> Git accounts</a>
   <a th:unless="${isInstanceAdmin}" href="/git-provider-instances" th:classappend="${active == 'git-instances'} ? 'is-active'"><i data-lucide="Server"></i> Self-hosted Git</a>
   <a href="/model-providers" th:classappend="${active == 'model-providers'} ? 'is-active'"><i data-lucide="Cpu"></i> LLM providers</a>
+  <a href="/mcp-servers" th:classappend="${active == 'mcp-servers'} ? 'is-active'"><i data-lucide="PlugZap"></i> MCP servers</a>
   <a href="/api-keys" th:classappend="${active == 'api-keys'} ? 'is-active'"><i data-lucide="KeyRound"></i> API keys</a>
 </nav>
 

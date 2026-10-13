@@ -68,7 +68,7 @@ final class OpenAiResponsesCodec {
       tool.put("name", definition.name());
       tool.put("description", definition.description());
       tool.set("parameters", objectMapper.valueToTree(definition.inputSchema()));
-      tool.put("strict", true);
+      tool.put("strict", definition.strict());
     }
     try {
       return objectMapper.writeValueAsString(body);

@@ -7,6 +7,7 @@ Petri is a self-hosted agentic coding harness, multi-agent orchestrator and deve
 - [Getting started](getting-started.md) — run Petri and complete the first coding task.
 - [Implemented features](implemented-features.md) — current capabilities and known boundaries.
 - [Configuration](configuration.md) — environment variables, storage and authentication.
+- [MCP servers](mcp.md) — user-owned tool servers, OAuth sign-in and approvals.
 - [LLM providers](model-providers.md) — OpenAI, LiteLLM, Ollama and compatible local servers.
 - [Git mirrors and worktrees](git-workspaces.md) — repository setup, branch resolution and lifecycle.
 - [Git provider accounts](git-provider-accounts.md) — personal GitHub, GitLab and Forgejo connections and bulk import.

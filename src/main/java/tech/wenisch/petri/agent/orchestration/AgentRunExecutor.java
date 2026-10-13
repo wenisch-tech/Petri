@@ -46,6 +46,7 @@ public class AgentRunExecutor {
   private final AgentChatSummaryService summaries;
   private final AgentChatStream chatStream;
   private final ApprovalGate approvalGate;
+  private final McpToolBridge mcp;
   private final java.time.Duration approvalWait;
 
   public AgentRunExecutor(
@@ -58,6 +59,7 @@ public class AgentRunExecutor {
       AgentChatSummaryService summaries,
       AgentChatStream chatStream,
       ApprovalGate approvalGate,
+      McpToolBridge mcp,
       LoopGuardMetrics loopGuardMetrics,
       @org.springframework.beans.factory.annotation.Value("${petri.agent.approval-wait:${PETRI_AGENT_APPROVAL_WAIT:12h}}")
           java.time.Duration approvalWait) {
@@ -70,6 +72,7 @@ public class AgentRunExecutor {
     this.summaries = summaries;
     this.chatStream = chatStream;
     this.approvalGate = approvalGate;
+    this.mcp = mcp;
     this.loopGuardMetrics = loopGuardMetrics;
     this.approvalWait = approvalWait;
   }
@@ -111,7 +114,9 @@ public class AgentRunExecutor {
                 chatStream.toolLifecycle(state.chatId(), runId, call.name(), "failed");
                 continue;
               }
-              String toolOutput = stateService.executeTool(runId, claimId, call);
+              String toolOutput = tech.wenisch.petri.mcp.McpToolNaming.isMcpTool(call.name())
+                  ? mcp.execute(state, claimId, call)
+                  : stateService.executeTool(runId, claimId, call);
               approvalGate.detect(call.name(), call.callId(), toolOutput).ifPresent(gated::add);
               events.record(
                   state.worktreeId(), runId, AgentRunEventType.TOOL_SUCCEEDED, call.name(), runActor,
@@ -266,6 +271,12 @@ public class AgentRunExecutor {
         ? tools.definitions(AutomationToolPolicy.allowed())
         : role == null
             ? tools.definitions() : tools.definitions(AgentWorkflowToolPolicy.allowed(role));
+    var extra = mcp.definitions(state);
+    if (!extra.isEmpty()) {
+      var combined = new java.util.ArrayList<>(definitions);
+      combined.addAll(extra);
+      definitions = combined;
+    }
     if (state.repetitionStrikes() > 0) {
       instructions = instructions + LoopGuard.guidance(state.repetitionStrikes());
       // Every tool is withdrawn, also in automations: the model has to answer with what it has.

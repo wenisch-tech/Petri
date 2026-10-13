@@ -222,6 +222,22 @@ class AgentRunStateService {
     run.refreshExecutionClaim(claimId, now);
   }
 
+  /** Stores the result of a tool that ran outside the transaction (a remote MCP call). */
+  @Transactional
+  void recordToolResult(UUID runId, UUID claimId, AgentPendingToolCall call, String output) {
+    AgentRun run = locked(runId);
+    requireActiveClaim(run, claimId);
+    if (run.status() == AgentRunStatus.CANCELLATION_REQUESTED) {
+      throw new AgentRunCancellationException();
+    }
+    requirePendingCall(allTurns(run.id()), call);
+    Instant now = Instant.now(clock);
+    turns.save(new AgentTurn(
+        UUID.randomUUID(), run.id(), run.nextTurnIndex(), AgentTurnKind.TOOL_RESULT,
+        call.responseId(), call.callId(), call.name(), output, now));
+    run.refreshExecutionClaim(claimId, now);
+  }
+
   /** Stores one loop guard intervention as a turn (shown like a tool call) and in the run counters. */
   @Transactional
   void recordLoopGuard(UUID runId, UUID claimId, int strikes, boolean toolsWithdrawn) {

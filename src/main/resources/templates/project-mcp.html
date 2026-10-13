@@ -1,0 +1,64 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(|${project.name} MCP|)}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('projects')}"></header>
+
+<th:block th:fragment="content">
+<main class="page-narrow">
+  <a class="back-link" href="/projects"><i data-lucide="ArrowLeft"></i> Projects</a>
+  <div class="page-header">
+    <div>
+      <h1 class="page-title" th:text="${project.name}">Project</h1>
+      <p class="page-description">Choose which of your MCP servers this project's agents may use.</p>
+    </div>
+  </div>
+
+  <nav th:replace="~{fragments/layout :: projectSettingsTabs(${project.id}, 'mcp')}"></nav>
+
+  <div th:replace="~{fragments/layout :: alert('success', ${mcpSaved} ? 'MCP settings saved. They apply to runs started from now on.' : null)}"></div>
+  <div th:replace="~{fragments/layout :: alert('error', ${mcpError})}"></div>
+
+  <div th:if="${#lists.isEmpty(servers)}" class="empty-state">
+    <i data-lucide="PlugZap"></i>
+    <h2>No MCP servers yet</h2>
+    <p>MCP servers belong to you, not to a project. Add one first, then switch it on here.</p>
+    <a class="btn-primary" href="/mcp-servers"><i data-lucide="Plus"></i> Add an MCP server</a>
+  </div>
+
+  <form th:unless="${#lists.isEmpty(servers)}" method="post" th:action="@{/projects/{id}/settings/mcp(id=${project.id})}" autocomplete="off">
+    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+    <ul class="list">
+      <li th:each="server : ${servers}" class="list-row">
+        <span class="list-icon"><i data-lucide="PlugZap"></i></span>
+        <div class="list-main">
+          <span class="list-title" th:text="${server.name}">Server</span>
+          <span class="list-meta">
+            <span class="truncate" th:text="${server.url}">url</span>
+            <span th:text="|${server.toolCount} tools · ${server.readOnlyCount} read-only|">3 tools</span>
+          </span>
+          <span th:if="${server.status.name() == 'NEEDS_AUTH'}" class="mt-1 block text-xs text-warn-400">Needs sign-in. <a class="underline" href="/mcp-servers">Open MCP servers</a></span>
+          <span th:if="${server.status.name() == 'ERROR'}" class="mt-1 block text-xs text-danger-400">Unreachable at the last test. <a class="underline" href="/mcp-servers">Open MCP servers</a></span>
+          <span th:if="${server.toolCount == 0 and server.status.name() == 'ACTIVE'}" class="mt-1 block text-xs text-ink-500">No tools known yet. <a class="underline" href="/mcp-servers">Test the server</a> first.</span>
+        </div>
+        <label class="check shrink-0" title="Run this server's tools without asking for each call">
+          <input type="checkbox" th:name="|auto-${server.serverId}|" value="true" th:checked="${server.autoApprove}"><span class="text-xs">Auto-approve</span>
+        </label>
+        <label class="check shrink-0">
+          <input type="checkbox" th:name="|enabled-${server.serverId}|" value="true" th:checked="${server.enabled}"><span class="text-sm font-medium">Use in this project</span>
+        </label>
+      </li>
+    </ul>
+    <p class="mt-3 text-xs leading-5 text-ink-500">
+      Read-only tools run directly. Any other tool call waits in the review tray until you approve it, unless
+      <em>Auto-approve</em> is on for that server. Tool results are untrusted data to the agent.
+    </p>
+    <div class="mt-5 flex items-center justify-between gap-3 border-t border-ink-700/70 pt-3">
+      <a class="text-xs text-brand-400 hover:underline" href="/mcp-servers">Manage your MCP servers</a>
+      <button class="btn-primary" type="submit"><i data-lucide="Save"></i> Save MCP settings</button>
+    </div>
+  </form>
+</main>
+</th:block>
+</body>
+</html>

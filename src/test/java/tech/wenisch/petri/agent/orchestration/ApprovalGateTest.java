@@ -16,7 +16,7 @@ import tools.jackson.databind.ObjectMapper;
 class ApprovalGateTest {
   private final PackageInstallService installs = mock(PackageInstallService.class);
   private final ApprovalGate gate = new ApprovalGate(
-      null, null, installs, null, new ObjectMapper());
+      null, null, installs, null, null, new ObjectMapper());
 
   private PackageInstallView view(UUID id, PackageInstallStatus status, String output) {
     return new PackageInstallView(id, UUID.randomUUID(), UUID.randomUUID(), List.of("jq"), "need jq",

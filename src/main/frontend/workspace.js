@@ -87,10 +87,10 @@ function initializeEmbeddedViews(state) {
   const content = panel?.querySelector('[data-workspace-embedded-content]');
   if (!panel || !content) return;
   const base = `/projects/${state.projectId}`;
-  const urls = { automations: `${base}/automations`, runs: `${base}/runs`, settings: `${base}/settings`, roles: `${base}/settings/roles`, environment: `${base}/settings/environment` };
-  const titles = { automations: 'Automations', runs: 'Runs', settings: 'Settings', roles: 'Model settings', environment: 'Environment' };
+  const urls = { automations: `${base}/automations`, runs: `${base}/runs`, settings: `${base}/settings`, roles: `${base}/settings/roles`, environment: `${base}/settings/environment`, mcp: `${base}/settings/mcp` };
+  const titles = { automations: 'Automations', runs: 'Runs', settings: 'Settings', roles: 'Model settings', environment: 'Environment', mcp: 'MCP' };
   // Pages that belong under a tab of the view bar.
-  const parentView = { roles: 'settings', environment: 'settings' };
+  const parentView = { roles: 'settings', environment: 'settings', mcp: 'settings' };
   const runPath = /^\/runs\/([0-9a-fA-F-]{36})$/;
   const buttons = [...document.querySelectorAll('.workspace-view-tab[data-workspace-view]')];
   const gitBar = document.querySelector('[data-git-bar]');
@@ -1941,7 +1941,7 @@ function initializeApprovalSettings(state, chat) {
   });
 }
 async function saveAutomation(state) { const chat = state.chat; try { const result = await request(`/workspace/api/chats/${state.chatId}/automation`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ autoApproveChanges: chat.querySelector('[data-auto-changes]').checked, autoApproveTests: chat.querySelector('[data-auto-tests]').checked }) }); renderSnapshot(state, result); } catch (error) { chat.querySelector('[data-chat-status]').textContent = error.message; } }
-async function snapshot(state, preservePosition = false) { if (!state.chatId) { renderSnapshot(state, null); return; } try { renderSnapshot(state, await request(`/workspace/api/chats/${state.chatId}/snapshot`), preservePosition); refreshExplorerSoon(state, 800); } catch (error) { state.chat.querySelector('[data-chat-status]').textContent = error.message; } }
+async function snapshot(state, preservePosition = false) { if (!state.chatId) { state.mcpCalls = []; renderSnapshot(state, null); return; } try { renderSnapshot(state, await request(`/workspace/api/chats/${state.chatId}/snapshot`), preservePosition); refreshExplorerSoon(state, 800); loadMcpCalls(state); } catch (error) { state.chat.querySelector('[data-chat-status]').textContent = error.message; } }
 function renderSnapshot(state, data, preservePosition = false) {
   const chat = state.chat, timeline = state.scroller, previousTop = timeline.scrollTop;
   const wasBottom = timeline.scrollHeight - previousTop - timeline.clientHeight < 100;
@@ -2352,7 +2352,17 @@ function workflowToolDetail(turn) {
 }
 
 /** Label for a tool in the given state: running tools use the present tense. */
+function parseMcpName(toolName) {
+  const match = /^mcp__(.+?)__(.+)$/.exec(toolName || '');
+  return match ? { server: match[1], tool: match[2] } : null;
+}
+
 function toolLabel(toolName, state) {
+  const mcp = parseMcpName(toolName);
+  if (mcp) {
+    const verb = state === 'running' ? 'Calling' : state === 'failed' ? 'Failed calling' : state === 'warning' ? 'Waiting for approval to call' : 'Called';
+    return ['PlugZap', `${verb} ${mcp.tool} on ${mcp.server}`];
+  }
   const entry = workflowToolPresentation[toolName];
   if (!entry) return ['Wrench', humanizeToolName(toolName)];
   if (state === 'running') return [entry[0], entry[1]];
@@ -2364,7 +2374,7 @@ const TOOL_CATEGORIES = {
   run_tests: 'exec', run_command: 'exec', install_packages: 'exec',
   submit_review: 'review'
 };
-function toolCategory(toolName) { return TOOL_CATEGORIES[toolName] || 'read'; }
+function toolCategory(toolName) { return parseMcpName(toolName) ? 'exec' : (TOOL_CATEGORIES[toolName] || 'read'); }
 
 function loopGuardText(run, info) {
   const who = run.workflowRole ? roleLabel(run.workflowRole) : 'The agent';
@@ -2395,7 +2405,8 @@ function renderToolTurn(run, turn) {
     const result = turn.kind === 'TOOL_RESULT' ? turn : turns.find(value => value.kind === 'TOOL_RESULT' && value.toolCallId === turn.toolCallId);
     const name = turn.toolName || call?.toolName;
     if (!result) state = ['FAILED', 'CANCELLED', 'BUDGET_EXHAUSTED'].includes(run.status) ? 'interrupted' : 'running';
-    else if (parsedObject(result.content).error) state = 'failed';
+    else if (parsedObject(result.content).error || parsedObject(result.content).isError) state = 'failed';
+    else if (parseMcpName(name) && parsedObject(result.content).status === 'PROPOSED') state = 'warning';
     [icon, title] = toolLabel(name, state);
     detail = call ? workflowToolDetail(call) : '';
     if (name === 'submit_review') detail = truncate(stringValue(parsedObject(call?.content).verdict) || detail);
@@ -2688,8 +2699,38 @@ function packageCard(state, install) {
   }
   return card;
 }
+async function loadMcpCalls(state) {
+  if (!state.chatId) return;
+  try {
+    state.mcpCalls = await request(`/workspace/api/chats/${state.chatId}/mcp-calls`);
+    renderReviews(state);
+  } catch { /* the tray simply shows the other reviews */ }
+}
+
+function mcpCard(state, call) {
+  const card = el('article', 'workspace-review-card');
+  card.append(renderIcon('PlugZap'));
+  const title = el('strong', '', `${call.serverName} · ${call.toolName}`);
+  title.title = call.arguments;
+  card.append(title, el('span', 'workspace-review-state', 'MCP'));
+  const preview = el('span', 'workspace-package-reason', call.arguments.length > 160 ? `${call.arguments.slice(0, 159)}…` : call.arguments);
+  const decide = action => async () => {
+    try {
+      state.mcpCalls = await request(`/workspace/api/chats/${state.chatId}/mcp-calls/${call.id}/${action}`, { method: 'POST', headers: csrfHeaders() });
+      renderReviews(state);
+      snapshot(state, true);
+    } catch (error) { state.chat.querySelector('[data-chat-status]').textContent = error.message; }
+  };
+  const approve = el('button', 'btn-primary !min-h-8 !px-2 text-xs', 'Approve & run'); approve.type = 'button';
+  approve.addEventListener('click', decide('approve'));
+  const reject = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'Reject'); reject.type = 'button';
+  reject.addEventListener('click', decide('reject'));
+  card.append(preview, approve, reject);
+  return card;
+}
+
 function testCard(state, test) { const card = el('article', 'workspace-review-card'); card.append(el('strong', '', test.command), el('span', 'workspace-review-state', test.status)); if (test.status === 'PROPOSED' || test.status === 'APPROVED') { const run = el('button', 'btn-primary !min-h-8 !px-2 text-xs', 'Run'); run.type = 'button'; run.addEventListener('click', () => reviewAction(state, run, async () => { await request(`/workspace/api/chats/${state.chatId}/tests/${test.id}/run`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); const reject = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'Reject'); reject.type = 'button'; reject.addEventListener('click', () => reviewAction(state, reject, async () => { await request(`/workspace/api/chats/${state.chatId}/tests/${test.id}/reject`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); card.append(run, reject); } else if (test.output || test.status === 'RUNNING') { card.append(outputDetails(test.output, test.status === 'RUNNING' ? 'Running…' : (test.exitCode != null ? `Output (exit ${test.exitCode})` : 'Output'), test.status === 'RUNNING')); } return card; }
 async function reviewAction(state, button, operation) { button.disabled = true; try { await operation(); } catch (error) { state.chat.querySelector('[data-chat-status]').textContent = error.message; } finally { if (button.isConnected) button.disabled = false; } }
-function renderReviews(state) { const tray = state.chat.querySelector('[data-review-tray]'), items = tray.querySelector('[data-review-items]'); const pending = state.snapshot.runs.flatMap(value => [...value.proposals, ...value.tests, ...(value.packageInstalls || []), ...(value.terminalCommands || [])]).filter(value => value.status === 'PROPOSED' || value.status === 'APPROVED'); tray.hidden = pending.length === 0; tray.querySelector('[data-review-count]').textContent = `${pending.length} review${pending.length === 1 ? '' : 's'} waiting`; items.replaceChildren(); for (const proposal of pending.filter(value => value.filePath)) items.append(proposalCard(state, proposal)); for (const test of pending.filter(value => value.command && !value.source)) items.append(testCard(state, test)); for (const command of pending.filter(value => value.command && value.source)) items.append(terminalCard(state, command)); for (const install of pending.filter(value => value.packages)) items.append(packageCard(state, install)); }
+function renderReviews(state) { const tray = state.chat.querySelector('[data-review-tray]'), items = tray.querySelector('[data-review-items]'); const pending = state.snapshot.runs.flatMap(value => [...value.proposals, ...value.tests, ...(value.packageInstalls || []), ...(value.terminalCommands || [])]).filter(value => value.status === 'PROPOSED' || value.status === 'APPROVED'); const mcpOpen = (state.mcpCalls || []).filter(value => value.status === 'PROPOSED'); const waiting = pending.length + mcpOpen.length; tray.hidden = waiting === 0; tray.querySelector('[data-review-count]').textContent = `${waiting} review${waiting === 1 ? '' : 's'} waiting`; items.replaceChildren(); for (const proposal of pending.filter(value => value.filePath)) items.append(proposalCard(state, proposal)); for (const test of pending.filter(value => value.command && !value.source)) items.append(testCard(state, test)); for (const command of pending.filter(value => value.command && value.source)) items.append(terminalCard(state, command)); for (const install of pending.filter(value => value.packages)) items.append(packageCard(state, install)); for (const call of mcpOpen) items.append(mcpCard(state, call)); }
 
 function connectStream(state) { state.stream?.close(); if (!state.chatId) return; const stream = new EventSource(`/chat/${state.chatId}/stream`); state.stream = stream; const refresh = () => { clearTimeout(state.streamRefresh); state.streamRefresh = setTimeout(() => snapshot(state, true), 150); }; ['snapshot','run-status','tool-lifecycle','summary-status','workflow-status','workflow-stage','workflow-artifact','workflow-question','workflow-transition'].forEach(name => stream.addEventListener(name, refresh)); stream.addEventListener('assistant-delta', event => { const follow = state.scroller.scrollHeight - state.scroller.scrollTop - state.scroller.clientHeight < 100; try { const value = JSON.parse(event.data); let output = state.scroller.querySelector(`[data-run-output="${value.runId}"]`); if (!output) { const card = el('article', 'workspace-message workspace-message-assistant'); card.append(el('small', 'workspace-writing', 'Petri · writing…')); output = el('p'); output.dataset.runOutput = value.runId; card.append(output); state.scroller.append(card); } const raw = (output.dataset.raw ?? output.textContent ?? '') + value.delta; clearTimeout(state.deltaSettle); state.deltaSettle = setTimeout(() => snapshot(state, true), 2500); scheduleMarkdown(output, raw); if (follow) state.scroller.scrollTop = state.scroller.scrollHeight; else state.chat.querySelector('[data-new-response]').hidden = false; } catch {} }); stream.onerror = () => { stream.close(); clearTimeout(state.poll); state.poll = setTimeout(() => { if (!document.hidden) snapshot(state, true); connectStream(state); }, 1800); }; }
