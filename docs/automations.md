@@ -126,7 +126,7 @@ kept.
 ### Model and limits
 
 The run uses the model selected for the project's **orchestrator**: the *Orchestrator* role of the
-workflow role profiles (the model dialog next to the workflow in the workspace) of the project owner,
+workflow role profiles (project Settings → Model settings) of the project owner,
 including its output token and context window settings and reasoning options. When no role profile
 was saved, the project's last chosen workspace model applies, as it does for workflows. An
 automation that names a model provider and/or model in its *Model* section overrides this. The

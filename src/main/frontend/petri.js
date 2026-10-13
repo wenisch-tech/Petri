@@ -180,3 +180,24 @@ else bootPetri();
 
 window.Alpine = Alpine;
 Alpine.start();
+
+// Model settings: the model picker lists the models of the chosen provider; "Other model ID…"
+// reveals the text field that is actually submitted.
+document.addEventListener('change', event => {
+  const provider = event.target.closest?.('[data-role-provider]');
+  const picker = event.target.closest?.('[data-role-model-select]');
+  const section = (provider || picker)?.closest('section');
+  const input = section?.querySelector('[data-role-model]');
+  const select = section?.querySelector('[data-role-model-select]');
+  if (!input || !select) return;
+  if (provider) {
+    const names = [...document.querySelectorAll(`#role-models-${CSS.escape(provider.value)} option`)].map(option => option.value);
+    select.replaceChildren(...names.map(name => new Option(name, name)), new Option('Other model ID…', ''));
+    select.value = names[0] ?? '';
+    input.value = names[0] ?? '';
+  } else {
+    input.value = select.value || input.value;
+  }
+  input.hidden = select.value !== '';
+  if (input.hidden === false) { if (picker) input.value = ''; input.focus(); }
+});

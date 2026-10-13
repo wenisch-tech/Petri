@@ -129,7 +129,7 @@ path was applied.
 
 ## Roles and model profiles
 
-The workflow icon in the workspace configures Orchestrator, Planner, Implementer and Reviewer
+**Settings → Model settings** of a project configures Orchestrator, Planner, Implementer and Reviewer
 independently. Per-user/per-project profiles include provider, model, generation/context budgets,
 attempt limit and a prompt addendum. Petri snapshots those values when the task is submitted.
 

@@ -125,6 +125,12 @@
   .page-title { @apply text-2xl font-semibold tracking-tight text-ink-100; }
   .page-description { @apply mt-1.5 max-w-2xl text-sm leading-6 text-ink-500; }
   .page-actions { @apply flex flex-wrap items-center gap-2; }
+  .role-field { @apply !py-2 text-sm; }
+  .role-field + .hint { @apply hidden; }
+  .subnav { @apply mb-6 flex gap-1 overflow-x-auto border-b border-ink-700/70; }
+  .subnav a { @apply -mb-px inline-flex shrink-0 items-center gap-2 border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-ink-500 transition hover:text-ink-100; }
+  .subnav a svg { @apply size-4; }
+  .subnav a.is-active { @apply border-brand-500 text-ink-100; }
   .back-link { @apply mb-4 inline-flex items-center gap-1.5 text-sm text-ink-500 transition hover:text-ink-100; }
   .back-link svg { @apply size-4; }
   .section { @apply mt-8; }
@@ -221,7 +227,7 @@
   .workspace-gitbar-primary, .workspace-gitbar-secondary { @apply flex min-w-0 shrink-0 items-center gap-2 overflow-x-auto overflow-y-hidden; }
   .workspace-gitbar-group { @apply flex shrink-0 items-center gap-1.5; }
   .workspace-gitbar-group > svg { @apply size-4 text-ink-500; }
-  .workspace-branch-select { @apply min-w-40; }
+  .workspace-branch-select { @apply w-56 min-w-40 max-w-56; }
   .workspace-git-indicators { @apply flex shrink-0 items-center gap-2 font-mono text-[11px] text-ink-500; }
   .workspace-git-indicators .is-dirty { @apply text-amber-300; }
   .workspace-rebase-badge { @apply rounded-full border border-amber-400/30 bg-amber-400/10 px-2 py-1 font-sans font-semibold text-amber-200; }
@@ -233,19 +239,23 @@
   .workspace-git-menu button { @apply flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-xs text-ink-300 hover:bg-ink-800 disabled:opacity-40; }
   .workspace-git-menu svg { @apply size-4; }
   .workspace-git-rebase-actions { @apply flex shrink-0 items-center gap-1; }
-  .workspace-git-output { @apply fixed left-4 right-4 top-36 z-50 mx-auto max-w-3xl rounded-lg border border-red-400/40 bg-ink-950 p-3 text-red-200 shadow-2xl; }
+  .workspace-git-output { @apply fixed left-4 right-4 top-44 z-50 mx-auto max-w-3xl rounded-lg border border-red-400/40 bg-ink-950 p-3 text-red-200 shadow-2xl; }
   .workspace-git-output[hidden] { @apply hidden; }
   .workspace-git-output-header { @apply flex items-center justify-between gap-2 font-semibold; }
   .workspace-git-output pre { @apply mt-2 max-h-60 overflow-auto whitespace-pre-wrap break-words text-xs; }
   .workspace-shell {
-    --explorer-width: 17rem;
+    --explorer-width: 19rem;
     --chat-width: 450px;
     --terminal-height: 240px;
     display: grid;
-    grid-template-columns: var(--explorer-width) 6px minmax(0, 1fr) 6px var(--chat-width);
+    --explorer-col: var(--explorer-width);
+    --explorer-gap: 6px;
+    --chat-col: var(--chat-width);
+    --chat-gap: 6px;
+    grid-template-columns: var(--explorer-col) var(--explorer-gap) minmax(0, 1fr) var(--chat-gap) var(--chat-col);
     grid-template-rows: minmax(0, 1fr);
     overflow: hidden;
-    height: calc(100dvh - 10.75rem);
+    height: calc(100dvh - 10.5rem);
     min-height: 0;
   }
   /* A project page (automations, settings) shown in place of the explorer and editor. */
@@ -263,10 +273,15 @@
   .workspace-chat { @apply flex min-w-0 flex-col border-l border-ink-700/70; }
   .workspace-editor { @apply flex min-h-0 min-w-0 flex-col overflow-hidden bg-ink-950; }
   .workspace-editor > [data-editor-host] { @apply min-h-0 flex-1 overflow-hidden; }
-  .workspace-resizer { @apply cursor-col-resize bg-ink-800 transition hover:bg-brand-500/70 focus-visible:bg-brand-500/70; }
-  .workspace-resizer.is-dragging { @apply bg-brand-500/70; }
-  .workspace-terminal-resizer { @apply h-1.5 shrink-0 cursor-row-resize bg-ink-800 transition hover:bg-brand-500/70 focus-visible:bg-brand-500/70; }
-  .workspace-terminal-resizer.is-dragging { @apply bg-brand-500/70; }
+  /* Wide grab area, hairline divider: the 6px track stays draggable while only 1px is drawn. */
+  .workspace-resizer, .workspace-terminal-resizer { @apply relative shrink-0 bg-ink-950 outline-none; }
+  .workspace-resizer { @apply cursor-col-resize; }
+  .workspace-terminal-resizer { @apply h-1.5 cursor-row-resize; }
+  .workspace-resizer::after, .workspace-terminal-resizer::after { content: ''; @apply absolute bg-ink-700 transition; }
+  .workspace-resizer::after { @apply inset-y-0 left-1/2 w-px -translate-x-1/2; }
+  .workspace-terminal-resizer::after { @apply inset-x-0 top-1/2 h-px -translate-y-1/2; }
+  .workspace-resizer:hover::after, .workspace-resizer:focus-visible::after, .workspace-resizer.is-dragging::after { @apply w-0.5 bg-brand-500; }
+  .workspace-terminal-resizer:hover::after, .workspace-terminal-resizer:focus-visible::after, .workspace-terminal-resizer.is-dragging::after { @apply h-0.5 bg-brand-500; }
   .workspace-terminal-resizer[hidden], .workspace-terminal[hidden] { @apply hidden; }
   .workspace-terminal { @apply flex shrink-0 flex-col border-t border-ink-700/70 bg-ink-950; height: var(--terminal-height); min-height: 6rem; max-height: 70%; }
   .workspace-terminal-header { @apply flex h-8 shrink-0 items-center justify-between gap-2 border-b border-ink-700/70 bg-ink-900 px-3 text-[11px] font-bold uppercase tracking-wide text-ink-300; }
@@ -286,7 +301,7 @@
   .workspace-tabs { @apply flex h-10 min-w-0 items-stretch overflow-x-auto border-b border-ink-700/70 bg-ink-900 text-xs; }
   .workspace-tab { @apply flex max-w-48 shrink-0 items-center gap-2 border-r border-ink-700/70 px-3 text-ink-500 hover:bg-ink-800 hover:text-ink-100; }
   .workspace-tab.is-active { @apply border-t-2 border-t-brand-400 bg-ink-950 text-ink-100; }
-  .workspace-tab-close { @apply -mr-1 rounded px-1 text-ink-500 hover:bg-ink-700 hover:text-ink-100; }
+  .workspace-tab-close { @apply -mr-1 grid size-5 place-items-center rounded text-ink-500 hover:bg-ink-700 hover:text-ink-100; }
   .workspace-tree-row { @apply relative block min-w-max text-[13px]; }
   .workspace-tree-entry { @apply flex h-6 w-full min-w-0 items-center gap-0.5 rounded-none px-1 text-left text-ink-300 outline-none hover:bg-ink-800; }
   .workspace-tree-entry.is-selected { @apply bg-brand-500/20 text-ink-100; }
@@ -296,14 +311,15 @@
   .workspace-tree-action { @apply grid size-6 place-items-center rounded hover:bg-ink-700 hover:text-ink-100; }
   .workspace-tree-action svg { @apply size-3.5; }
   .workspace-tree-children { @apply ml-3.5 border-l border-ink-700/40 pl-1.5; }
-  .workspace-select, .workspace-model-selector, .workspace-chat-selector, .workspace-mode-selector { @apply rounded-lg border border-ink-700 bg-ink-900 px-2 py-1.5 text-xs text-ink-300; }
-  .workspace-panel-header { @apply flex h-12 items-center justify-between border-b border-ink-700/70 px-2; }
+  .workspace-select, .workspace-model-selector, .workspace-chat-selector, .workspace-mode-selector { @apply h-8 rounded-lg border border-ink-700 bg-ink-900 px-2 text-xs text-ink-300; }
+  .workspace-panel-header .icon-button { @apply size-7; }
+  .workspace-panel-header { @apply flex h-10 shrink-0 items-center justify-between gap-1 border-b border-ink-700/70 px-2; }
   .workspace-panel-content { @apply min-h-0 flex-1 overflow-auto py-1; }
-  .workspace-switcher { @apply flex items-center gap-1 text-xs font-semibold; }
-  .workspace-switcher button { @apply rounded-md px-2 py-1.5 text-ink-500 hover:text-ink-100; }
+  .workspace-switcher { @apply flex min-w-0 items-center gap-0.5 whitespace-nowrap text-xs font-semibold; }
+  .workspace-switcher button { @apply inline-flex h-7 shrink-0 items-center gap-1 rounded-md px-2 text-ink-500 hover:text-ink-100; }
   .workspace-switcher button.is-active { @apply bg-ink-800 text-ink-100; }
-  .workspace-count { @apply ml-1 rounded-full bg-ink-700 px-1.5 py-0.5 text-[10px]; }
-  .workspace-change-total { @apply ml-1 font-mono text-[10px] font-semibold; }
+  .workspace-count { @apply rounded-full bg-ink-700 px-1.5 py-0.5 text-[10px] leading-none; }
+  .workspace-change-total { @apply font-mono text-[10px] font-semibold; }
   .workspace-change-total.is-added { @apply text-good-500; }
   .workspace-change-total.is-deleted { @apply text-red-300; }
   .workspace-loading, .workspace-empty, .workspace-error { @apply flex w-full items-center gap-2 rounded-lg px-3 py-3 text-left text-sm text-ink-500; }
@@ -360,23 +376,23 @@
   .workspace-change-section { @apply border-b border-ink-700/50 py-1; }
   .workspace-change-section-header { @apply flex items-center gap-2 px-2 py-1.5 text-[11px] font-bold uppercase tracking-wide text-ink-500; }
   .workspace-change-section-header span { @apply min-w-0 flex-1; }
-  .workspace-change-section-action { @apply rounded px-1.5 py-1 text-[10px] normal-case text-ink-500 hover:bg-ink-800 hover:text-ink-100; }
+  .workspace-change-section-action { @apply rounded px-2 py-1 text-[11px] normal-case text-ink-500 hover:bg-ink-800 hover:text-ink-100; }
   .workspace-change-revert-all { @apply flex justify-end px-2 py-1; }
-  .workspace-change-row-action { @apply rounded px-1.5 py-1 text-[10px] text-ink-500 hover:bg-ink-700 hover:text-ink-100; }
+  .workspace-change-row-action { @apply rounded px-2 py-1 text-[11px] text-ink-500 hover:bg-ink-700 hover:text-ink-100; }
   .workspace-editor-empty { @apply grid h-full place-content-center justify-items-center gap-3 p-8 text-center text-ink-500; }
   .workspace-editor-empty h1 { @apply text-base font-semibold text-ink-300; }
   .workspace-editor-empty p { @apply max-w-sm text-sm; }
   .workspace-statusbar { @apply flex h-7 items-center gap-4 border-t border-ink-700/70 px-3 font-mono text-[11px] text-ink-500; }
   .workspace-statusbar span:nth-child(2) { @apply min-w-0 flex-1 truncate; }
   .workspace-dirty-dot { @apply text-brand-400; }
-  .workspace-chat-header { @apply flex min-h-12 items-center justify-between gap-2 border-b border-ink-700/70 px-3; }
+  .workspace-chat-header { @apply flex h-10 shrink-0 items-center justify-between gap-2 border-b border-ink-700/70 px-3; }
   .workspace-chat-selector { @apply max-w-64 min-w-0 flex-1 bg-transparent; }
-  .workspace-chat-tools { @apply flex items-end gap-2 border-t border-ink-700/70 bg-ink-950/60 px-3 py-2; }
-  .workspace-chat-tools label { @apply grid min-w-0 gap-1 text-[9px] font-bold uppercase tracking-wider text-ink-500; }
+  .workspace-chat-tools { @apply flex shrink-0 items-end gap-2 border-t border-ink-700/70 bg-ink-950/60 px-3 py-2; }
+  .workspace-chat-tools label { @apply grid min-w-0 gap-1 text-[10px] font-bold uppercase tracking-wider text-ink-500; }
   .workspace-chat-tools label > span { @apply px-1; }
   .workspace-model-field { @apply flex-1; }
   .workspace-model-selector { @apply min-w-0 flex-1; }
-  .workspace-mode-selector { @apply w-24 shrink-0; }
+  .workspace-mode-selector { @apply w-28 shrink-0; }
   .workspace-model-unavailable { @apply text-[11px] text-amber-300; }
   .workspace-automation { @apply space-y-2 border-b border-ink-700/70 bg-ink-950/40 px-3 py-2 text-xs text-ink-300; }
   .workspace-automation label { @apply flex items-center gap-2; }
@@ -538,9 +554,13 @@
   .workspace-workflow-action.is-block { @apply flex-wrap; }
   .workspace-workflow-action.is-block > .workspace-package-output { @apply w-full; }
   .workspace-new-response { @apply mx-auto mb-2 rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white shadow-lg; }
-  .workspace-composer { @apply border-t border-ink-700/70 bg-ink-900 p-3; }
-  .workspace-composer textarea { @apply min-h-20 resize-y text-sm; }
-  .workspace-composer > div { @apply mt-2 flex items-center justify-between gap-2; }
+  /* One line until the person types; the textarea then grows to its content (see fitComposer). */
+  .workspace-composer { @apply grid shrink-0 items-end gap-x-2 gap-y-1 border-t border-ink-700/70 bg-ink-900 p-2.5; grid-template-columns: minmax(0, 1fr) auto; }
+  .workspace-composer textarea { @apply max-h-48 min-h-9 resize-none overflow-y-auto px-3 py-2 text-[13px] leading-5; grid-column: 1; grid-row: 1; }
+  .workspace-composer > .workspace-guide-toggle { grid-column: 1 / -1; grid-row: 2; }
+  .workspace-composer > div { display: contents; }
+  .workspace-composer > div > span { @apply truncate text-[11px] leading-4 text-ink-500; grid-column: 1 / -1; grid-row: 3; }
+  .workspace-composer .btn-primary { @apply !min-h-9 !px-3 text-xs; grid-column: 2; grid-row: 1; }
   .workspace-dialog { @apply m-auto max-h-[calc(100dvh-2rem)] w-[min(28rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-ink-700 bg-ink-900 p-0 text-ink-100 shadow-2xl backdrop:bg-black/60; }
   .workspace-dialog:not([open]) { @apply hidden; }
   .workspace-dialog form { @apply space-y-4 p-5; }
@@ -550,24 +570,37 @@
   .workspace-dialog .workspace-check { @apply flex items-center gap-2; }
   .workspace-dialog-error { @apply min-h-5 text-sm text-red-300; }
   .workspace-warning { @apply rounded-lg border border-amber-400/25 bg-amber-400/10 px-3 py-2 text-xs text-amber-200; }
-  .workspace-profile-dialog { @apply w-[min(54rem,calc(100vw-2rem))]; }
-  .workspace-profile-dialog form { @apply max-h-[85dvh] overflow-y-auto; }
-  .workspace-role-profiles { @apply grid gap-3; }
-  .workspace-role-profile { @apply rounded-lg border border-ink-700/70 bg-ink-950/40 p-3; }
-  .workspace-role-profile h3 { @apply mb-3 text-sm font-semibold text-brand-400; }
-  .workspace-role-grid { @apply mb-3 grid grid-cols-2 gap-2 md:grid-cols-4; }
   .workspace-dialog-actions { @apply flex justify-end gap-2 pt-2; }
   [data-editor-host] > .monaco-editor, [data-editor-host] > .monaco-diff-editor { @apply h-full w-full; }
-  .chat-collapsed { grid-template-columns: var(--explorer-width) 5px minmax(0, 1fr) 0 0; }
-  .chat-collapsed .workspace-chat, .chat-collapsed .workspace-resizer[data-resize="chat"] { @apply hidden; }
+  /* Side panels fold into a 2.5rem rail that holds the button to bring them back. */
+  .workspace-explorer { grid-column: 1; grid-row: 1; }
+  .workspace-resizer[data-resize="explorer"] { grid-column: 2; grid-row: 1; }
+  .workspace-editor { grid-column: 3; grid-row: 1; }
+  .workspace-resizer[data-resize="chat"] { grid-column: 4; grid-row: 1; }
+  .workspace-chat { grid-column: 5; grid-row: 1; }
+  .workspace-rail { @apply hidden flex-col items-center gap-3 py-1.5 text-ink-500; }
+  .workspace-rail > svg { @apply size-4; }
+  .explorer-collapsed { --explorer-col: 2.5rem; --explorer-gap: 0px; }
+  .chat-collapsed { --chat-col: 2.5rem; --chat-gap: 0px; }
+  .explorer-collapsed .workspace-resizer[data-resize="explorer"], .chat-collapsed .workspace-resizer[data-resize="chat"] { @apply hidden; }
+  .explorer-collapsed .workspace-explorer > :not(.workspace-rail), .chat-collapsed .workspace-chat > :not(.workspace-rail) { @apply hidden; }
+  .explorer-collapsed .workspace-explorer > .workspace-rail, .chat-collapsed .workspace-chat > .workspace-rail { @apply flex; }
+  /* A project page takes the place of explorer and editor, so the explorer rail is not needed. */
+  .is-embedded-view { --explorer-col: 0px; --explorer-gap: 0px; }
   @media (max-width: 900px) {
     .workspace-shell { grid-template-columns: minmax(0, 1fr); }
+    .workspace-editor, .workspace-embedded { grid-column: 1; }
     .workspace-resizer { @apply hidden; }
+    /* Panels are overlays; folded, they shrink to the corner button. */
     .workspace-explorer, .workspace-chat { @apply fixed bottom-0 top-[10.5rem] z-20 w-[min(88vw,24rem)] shadow-2xl; }
-    .workspace-explorer { @apply left-0 -translate-x-full; }
+    .workspace-explorer { @apply left-0; }
     .workspace-chat { @apply right-0; }
-    .chat-collapsed .workspace-chat { @apply hidden; }
-    .workspace-gitbar { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+    .explorer-collapsed .workspace-explorer, .chat-collapsed .workspace-chat { @apply bottom-auto size-10 border-0 bg-transparent shadow-none; }
+    .explorer-collapsed .workspace-rail, .chat-collapsed .workspace-rail { @apply h-10 justify-center py-0; }
+    .explorer-collapsed .workspace-rail > svg, .chat-collapsed .workspace-rail > svg { @apply hidden; }
+    .explorer-collapsed .workspace-tabs { @apply pl-10; }
+    .chat-collapsed .workspace-tabs { @apply pr-10; }
+    .workspace-gitbar { grid-template-columns: minmax(0, 3fr) minmax(0, 2fr); }
     .workspace-git-button span { @apply hidden; }
     .workspace-workflow-pin-heading strong { @apply max-w-32; }
   }

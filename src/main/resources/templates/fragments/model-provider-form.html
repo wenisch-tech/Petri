@@ -34,7 +34,11 @@
     <div>
       <label class="label" th:for="|${prefix}-model|">Default model</label>
       <input class="field" name="model" th:id="|${prefix}-model|" maxlength="200" required
-             th:value="${inst != null ? inst.model() : ''}" placeholder="model-name">
+             th:value="${inst != null ? inst.model() : ''}" placeholder="model-name"
+             th:attr="list=${inst != null and catalogs != null and catalogs[inst.id()] != null} ? |${prefix}-model-list| : null">
+      <datalist th:if="${inst != null and catalogs != null and catalogs[inst.id()] != null}" th:id="|${prefix}-model-list|">
+        <option th:each="entry : ${catalogs[inst.id()].models()}" th:value="${entry.modelId()}"></option>
+      </datalist>
       <span class="hint">Used when nothing else is chosen. More models are listed under <em>Models</em> once the provider is saved.</span>
     </div>
   </div>

@@ -87,8 +87,10 @@ function initializeEmbeddedViews(state) {
   const content = panel?.querySelector('[data-workspace-embedded-content]');
   if (!panel || !content) return;
   const base = `/projects/${state.projectId}`;
-  const urls = { automations: `${base}/automations`, runs: `${base}/runs`, settings: `${base}/settings` };
-  const titles = { automations: 'Automations', runs: 'Runs', settings: 'Settings' };
+  const urls = { automations: `${base}/automations`, runs: `${base}/runs`, settings: `${base}/settings`, roles: `${base}/settings/roles` };
+  const titles = { automations: 'Automations', runs: 'Runs', settings: 'Settings', roles: 'Model settings' };
+  // Pages that belong under a tab of the view bar.
+  const parentView = { roles: 'settings' };
   const runPath = /^\/runs\/([0-9a-fA-F-]{36})$/;
   const buttons = [...document.querySelectorAll('.workspace-view-tab[data-workspace-view]')];
   const gitBar = document.querySelector('[data-git-bar]');
@@ -107,6 +109,9 @@ function initializeEmbeddedViews(state) {
     else if (detail) {
       items.push({ label: titles[current], view: current });
       items.push({ label: `Run ${detail.slice(0, 8)}` });
+    } else if (parentView[current]) {
+      items.push({ label: titles[parentView[current]], view: parentView[current] });
+      items.push({ label: titles[current] });
     } else items.push({ label: titles[current] });
     trail.replaceChildren();
     items.forEach((item, index) => {
@@ -121,7 +126,7 @@ function initializeEmbeddedViews(state) {
   };
   const markActive = () => {
     buttons.forEach(button => {
-      const active = button.dataset.workspaceView === (current || 'workspace');
+      const active = button.dataset.workspaceView === (parentView[current] || current || 'workspace');
       button.classList.toggle('is-active', active);
       button.setAttribute('aria-selected', String(active));
     });
@@ -291,7 +296,7 @@ function initializeEmbeddedViews(state) {
 }
 
 function initializeLayout(state) {
-  document.querySelector('[data-toggle-chat]')?.addEventListener('click', () => state.root.classList.toggle('chat-collapsed'));
+  initializePanelToggles(state);
   initializeResizers(state);
   initializeTerminal(state);
 }
@@ -300,6 +305,30 @@ const resizeLimits = {
   explorer: () => [180, Math.min(600, innerWidth * 0.4)],
   chat: () => [320, Math.min(1000, innerWidth * 0.65)]
 };
+
+/** Folds the explorer and the chat into rails; the choice is remembered, narrow screens start folded. */
+function initializePanelToggles(state) {
+  const narrow = window.matchMedia('(max-width: 900px)').matches;
+  const key = panel => `petri:workspace:${panel}:collapsed`;
+  const set = (panel, collapsed, persist) => {
+    state.root.classList.toggle(`${panel}-collapsed`, collapsed);
+    state.root.querySelectorAll(`[data-toggle-panel="${panel}"]`)
+      .forEach(button => button.setAttribute('aria-expanded', String(!collapsed)));
+    if (!persist) return;
+    try { localStorage.setItem(key(panel), collapsed ? '1' : '0'); } catch {}
+  };
+  for (const panel of ['explorer', 'chat']) {
+    let stored = null;
+    try { stored = localStorage.getItem(key(panel)); } catch {}
+    set(panel, stored === null ? narrow : stored === '1', false);
+  }
+  state.root.addEventListener('click', event => {
+    const button = event.target.closest('[data-toggle-panel]');
+    if (!button) return;
+    const panel = button.dataset.togglePanel;
+    set(panel, !state.root.classList.contains(`${panel}-collapsed`), true);
+  });
+}
 
 function initializeResizers(state) {
   state.root.querySelectorAll('[data-resize]').forEach(handle => {
@@ -1498,8 +1527,8 @@ function applyGitStatus(state, status) {
   const deletions = lineChanges.reduce((total, value) => total + finiteCount(value.deletions), 0);
   const added = state.root.querySelector('[data-change-additions]');
   const deleted = state.root.querySelector('[data-change-deletions]');
-  if (added) { added.textContent = `+${additions}`; added.title = `${additions} added line${additions === 1 ? '' : 's'}`; }
-  if (deleted) { deleted.textContent = `−${deletions}`; deleted.title = `${deletions} removed line${deletions === 1 ? '' : 's'}`; }
+  if (added) { added.hidden = additions === 0; added.textContent = `+${additions}`; added.title = `${additions} added line${additions === 1 ? '' : 's'}`; }
+  if (deleted) { deleted.hidden = deletions === 0; deleted.textContent = `−${deletions}`; deleted.title = `${deletions} removed line${deletions === 1 ? '' : 's'}`; }
   renderGitIndicators(state, status);
   // A different set of changed paths means files appeared, disappeared or were renamed.
   state.changeSignature = [...state.changes.entries()].map(([path, value]) => `${value.status}:${path}`).sort().join('\n');
@@ -1575,6 +1604,7 @@ function initializeChat(state) {
   const scroller = chat.querySelector('[data-chat-scroll]');
   const form = chat.querySelector('[data-chat-form]');
   const input = chat.querySelector('[data-chat-input]');
+  fitComposer(input);
   const selector = chat.querySelector('[data-chat-selector]');
   const model = chat.querySelector('[data-model-selector]');
   const mode = chat.querySelector('[data-chat-mode]');
@@ -1682,8 +1712,6 @@ function initializeChat(state) {
       chat.querySelector('[data-chat-status]').textContent = 'Model saved for this project';
     } catch (error) { chat.querySelector('[data-chat-status]').textContent = error.message; }
   });
-  chat.querySelector('[data-orchestration-settings]').addEventListener('click', () => openOrchestrationProfiles(state));
-  wireOrchestrationDialog(state);
   initializeApprovalSettings(state, chat);
   for (const inputAuto of chat.querySelectorAll('[data-auto-changes],[data-auto-tests]')) inputAuto.addEventListener('change', async event => {
     if (!state.chatId || state.chatMode !== 'DIRECT') return;
@@ -1691,6 +1719,21 @@ function initializeChat(state) {
     await saveAutomation(state);
   });
   if (state.chatId) { snapshot(state, true); connectStream(state); }
+}
+
+/** Grows the composer with its content, also when the page clears or fills it programmatically. */
+function fitComposer(input) {
+  const fit = () => {
+    input.style.height = 'auto';
+    input.style.height = `${input.scrollHeight}px`;
+  };
+  const descriptor = Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value');
+  Object.defineProperty(input, 'value', {
+    get() { return descriptor.get.call(this); },
+    set(value) { descriptor.set.call(this, value); fit(); }
+  });
+  input.addEventListener('input', fit);
+  fit();
 }
 
 function activeGuidableWorkflow(state) {
@@ -1844,7 +1887,7 @@ function scheduleRunningPoll(state, data) {
   clearTimeout(state.runningPoll);
   if (items.some(running)) state.runningPoll = setTimeout(() => snapshot(state, true), 1500);
 }
-function renderRun(state, entry, timeline) { const run = entry.run; const user = el('article', 'workspace-message workspace-message-user'); user.append(el('p', '', run.prompt)); const meta = el('div', 'workspace-message-meta', `Turn ${run.chatMessageIndex + 1} · ${run.status}`); user.append(meta); timeline.append(user); for (const turn of run.turns || []) { if (turn.kind === 'USER_PROMPT') continue; if (turn.kind === 'MODEL_RESPONSE') { const assistant = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.raw = turn.content || ''; applyMarkdown(body, turn.content || ''); assistant.append(body); timeline.append(assistant); } else if (turn.kind === 'ERROR') timeline.append(el('article', 'workspace-message-error', turn.content || 'Agent error')); else { const details = el('details', 'workspace-tool-turn'); details.append(el('summary', '', turn.toolName || turn.kind), el('pre', '', turn.content || '')); timeline.append(details); } } if (run.partialOutput) { const partial = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.runOutput = run.id; body.dataset.raw = run.partialOutput; applyMarkdown(body, run.partialOutput); partial.append(el('small', 'workspace-writing', 'Petri · writing…'), body); timeline.append(partial); } for (const proposal of entry.proposals || []) timeline.append(proposalCard(state, proposal)); for (const test of entry.tests || []) timeline.append(testCard(state, test)); for (const install of entry.packageInstalls || []) timeline.append(packageCard(state, install)); for (const command of entry.terminalCommands || []) timeline.append(terminalCard(state, command)); }
+function renderRun(state, entry, timeline) { const run = entry.run; const user = el('article', 'workspace-message workspace-message-user'); user.append(el('p', '', run.prompt)); const meta = el('div', 'workspace-message-meta', `Turn ${run.chatMessageIndex + 1} · ${run.status}`); user.append(meta); timeline.append(user); for (const turn of run.turns || []) { if (turn.kind === 'USER_PROMPT') continue; if (turn.kind === 'MODEL_RESPONSE' && !(turn.content || '').trim()) continue; if (turn.kind === 'MODEL_RESPONSE') { const assistant = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.raw = turn.content || ''; applyMarkdown(body, turn.content || ''); assistant.append(body); timeline.append(assistant); } else if (turn.kind === 'ERROR') timeline.append(el('article', 'workspace-message-error', turn.content || 'Agent error')); else { const details = el('details', 'workspace-tool-turn'); details.append(el('summary', '', turn.toolName || turn.kind), el('pre', '', turn.content || '')); timeline.append(details); } } if (run.partialOutput) { const partial = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.runOutput = run.id; body.dataset.raw = run.partialOutput; applyMarkdown(body, run.partialOutput); partial.append(el('small', 'workspace-writing', 'Petri · writing…'), body); timeline.append(partial); } for (const proposal of entry.proposals || []) timeline.append(proposalCard(state, proposal)); for (const test of entry.tests || []) timeline.append(testCard(state, test)); for (const install of entry.packageInstalls || []) timeline.append(packageCard(state, install)); for (const command of entry.terminalCommands || []) timeline.append(terminalCard(state, command)); }
 
 const workflowStages = [
   ['ORCHESTRATOR_INTAKE', 'Intake'], ['PLANNING', 'Plan'],
@@ -2461,103 +2504,5 @@ function packageCard(state, install) {
 function testCard(state, test) { const card = el('article', 'workspace-review-card'); card.append(el('strong', '', test.command), el('span', 'workspace-review-state', test.status)); if (test.status === 'PROPOSED' || test.status === 'APPROVED') { const run = el('button', 'btn-primary !min-h-8 !px-2 text-xs', 'Run'); run.type = 'button'; run.addEventListener('click', () => reviewAction(state, run, async () => { await request(`/workspace/api/chats/${state.chatId}/tests/${test.id}/run`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); const reject = el('button', 'btn-secondary !min-h-8 !px-2 text-xs', 'Reject'); reject.type = 'button'; reject.addEventListener('click', () => reviewAction(state, reject, async () => { await request(`/workspace/api/chats/${state.chatId}/tests/${test.id}/reject`, { method: 'POST', headers: csrfHeaders() }); await snapshot(state, true); })); card.append(run, reject); } else if (test.output || test.status === 'RUNNING') { card.append(outputDetails(test.output, test.status === 'RUNNING' ? 'Running…' : (test.exitCode != null ? `Output (exit ${test.exitCode})` : 'Output'), test.status === 'RUNNING')); } return card; }
 async function reviewAction(state, button, operation) { button.disabled = true; try { await operation(); } catch (error) { state.chat.querySelector('[data-chat-status]').textContent = error.message; } finally { if (button.isConnected) button.disabled = false; } }
 function renderReviews(state) { const tray = state.chat.querySelector('[data-review-tray]'), items = tray.querySelector('[data-review-items]'); const pending = state.snapshot.runs.flatMap(value => [...value.proposals, ...value.tests, ...(value.packageInstalls || []), ...(value.terminalCommands || [])]).filter(value => value.status === 'PROPOSED' || value.status === 'APPROVED'); tray.hidden = pending.length === 0; tray.querySelector('[data-review-count]').textContent = `${pending.length} review${pending.length === 1 ? '' : 's'} waiting`; items.replaceChildren(); for (const proposal of pending.filter(value => value.filePath)) items.append(proposalCard(state, proposal)); for (const test of pending.filter(value => value.command && !value.source)) items.append(testCard(state, test)); for (const command of pending.filter(value => value.command && value.source)) items.append(terminalCard(state, command)); for (const install of pending.filter(value => value.packages)) items.append(packageCard(state, install)); }
-
-async function openOrchestrationProfiles(state) {
-  const dialog = state.root.querySelector('[data-orchestration-dialog]');
-  const host = dialog.querySelector('[data-role-profiles]');
-  const error = dialog.querySelector('[data-orchestration-error]');
-  error.textContent = '';
-  host.replaceChildren(el('div', 'workspace-skeleton', 'Loading role profiles…'));
-  dialog.showModal();
-  try {
-    const profiles = await request(`/workspace/api/projects/${state.projectId}/orchestration-profile`);
-    host.replaceChildren();
-    for (const profile of profiles) host.append(roleProfileRow(state, profile));
-    updateRoleWarning(dialog);
-  } catch (failure) { error.textContent = failure.message; host.replaceChildren(); }
-}
-
-function roleProfileRow(state, profile) {
-  const row = el('section', 'workspace-role-profile'); row.dataset.role = profile.role;
-  row.append(el('h3', '', profile.role.charAt(0) + profile.role.slice(1).toLowerCase()));
-  const grid = el('div', 'workspace-role-grid');
-  const modelOptions = [...state.chat.querySelector('[data-model-selector]').options];
-  // The picker lists one entry per instance and model; roles choose the instance and a model separately.
-  const providerOptions = modelOptions.filter((option, index) => modelOptions.findIndex(other => other.value === option.value) === index);
-  // Rows saved before provider instances only know the kind; map those to the first matching instance.
-  const selectedProvider = profile.providerInstanceId
-    || providerOptions.find(option => option.dataset.kind === profile.provider)?.value || '';
-  const provider = labeledSelect('Provider', 'provider', providerOptions.map(option => [option.value, option.dataset.name || option.textContent]), selectedProvider);
-  const model = labeledInput('Model', 'model', profile.model, 'text');
-  // Offer the provider's known models while still accepting any free-text model ID.
-  const modelList = document.createElement('datalist');
-  modelList.id = `role-models-${profile.role}`;
-  model.querySelector('input').setAttribute('list', modelList.id);
-  const fillModels = () => modelList.replaceChildren(...[...new Set(modelOptions
-    .filter(option => option.value === provider.querySelector('select').value).map(option => option.dataset.model))]
-    .map(value => new Option(value)));
-  provider.querySelector('select').addEventListener('change', fillModels);
-  fillModels();
-  model.append(modelList);
-  const attempts = labeledInput('Attempts', 'maxAttempts', profile.maxAttempts, 'number', 1, 10);
-  const turns = labeledInput('Turn budget', 'maxModelTurns', profile.maxModelTurns, 'number', 1, 100);
-  const output = labeledInput('Output tokens', 'maxOutputTokens', profile.maxOutputTokens, 'number', 16, 1000000);
-  const context = labeledInput('Context tokens', 'contextWindowTokens', profile.contextWindowTokens, 'number', 2048, 10000000);
-  const reasoning = labeledSelect('Reasoning', 'reasoningEffort', [['', 'Provider default'], ...['NONE','MINIMAL','LOW','MEDIUM','HIGH','XHIGH','MAX'].map(value => [value, value])], profile.reasoningEffort || '');
-  const verbosity = labeledSelect('Verbosity', 'textVerbosity', [['', 'Provider default'], ...['LOW','MEDIUM','HIGH'].map(value => [value, value])], profile.textVerbosity || '');
-  grid.append(provider, model, attempts, turns, output, context, reasoning, verbosity);
-  const addendum = document.createElement('label'); addendum.textContent = 'Project-specific role addendum';
-  const textarea = el('textarea', 'field'); textarea.dataset.field = 'promptAddendum'; textarea.rows = 3; textarea.maxLength = 20000; textarea.value = profile.promptAddendum || ''; addendum.append(textarea);
-  row.append(grid, addendum);
-  row.addEventListener('change', () => updateRoleWarning(row.closest('dialog')));
-  return row;
-}
-
-function labeledInput(labelText, field, value, type, min, max) {
-  const label = document.createElement('label'); label.textContent = labelText;
-  const input = el('input', 'field'); input.type = type; input.dataset.field = field; input.value = value ?? '';
-  if (min != null) input.min = min; if (max != null) input.max = max; input.required = true; label.append(input); return label;
-}
-
-function labeledSelect(labelText, field, options, selected) {
-  const label = document.createElement('label'); label.textContent = labelText;
-  const select = el('select', 'field'); select.dataset.field = field;
-  for (const [value, textValue] of options) select.append(new Option(textValue, value, false, value === selected));
-  label.append(select); return label;
-}
-
-function updateRoleWarning(dialog) {
-  const rows = [...dialog.querySelectorAll('[data-role]')];
-  const implementer = rows.find(row => row.dataset.role === 'IMPLEMENTER');
-  const reviewer = rows.find(row => row.dataset.role === 'REVIEWER');
-  const same = implementer && reviewer
-    && implementer.querySelector('[data-field="provider"]').value === reviewer.querySelector('[data-field="provider"]').value
-    && implementer.querySelector('[data-field="model"]').value === reviewer.querySelector('[data-field="model"]').value;
-  dialog.querySelector('[data-role-warning]').hidden = !same;
-}
-
-function wireOrchestrationDialog(state) {
-  const dialog = state.root.querySelector('[data-orchestration-dialog]');
-  dialog.querySelector('form').addEventListener('submit', async event => {
-    if (event.submitter?.value !== 'confirm') return;
-    event.preventDefault();
-    const error = dialog.querySelector('[data-orchestration-error]'); error.textContent = '';
-    const values = [...dialog.querySelectorAll('[data-role]')].map(row => {
-      const get = field => row.querySelector(`[data-field="${field}"]`).value;
-      const number = field => Number(get(field));
-      return { role: row.dataset.role, providerInstanceId: get('provider'), model: get('model'),
-        maxAttempts: number('maxAttempts'), maxModelTurns: number('maxModelTurns'),
-        maxOutputTokens: number('maxOutputTokens'), contextWindowTokens: number('contextWindowTokens'),
-        reasoningEffort: get('reasoningEffort') || null, textVerbosity: get('textVerbosity') || null,
-        promptAddendum: get('promptAddendum') || null };
-    });
-    event.submitter.disabled = true;
-    try {
-      await request(`/workspace/api/projects/${state.projectId}/orchestration-profile`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify(values) });
-      dialog.close(); state.chat.querySelector('[data-chat-status]').textContent = 'Workflow role profiles saved';
-    } catch (failure) { error.textContent = failure.message; }
-    finally { event.submitter.disabled = false; }
-  });
-}
 
 function connectStream(state) { state.stream?.close(); if (!state.chatId) return; const stream = new EventSource(`/chat/${state.chatId}/stream`); state.stream = stream; const refresh = () => { clearTimeout(state.streamRefresh); state.streamRefresh = setTimeout(() => snapshot(state, true), 150); }; ['snapshot','run-status','tool-lifecycle','summary-status','workflow-status','workflow-stage','workflow-artifact','workflow-question','workflow-transition'].forEach(name => stream.addEventListener(name, refresh)); stream.addEventListener('assistant-delta', event => { const follow = state.scroller.scrollHeight - state.scroller.scrollTop - state.scroller.clientHeight < 100; try { const value = JSON.parse(event.data); let output = state.scroller.querySelector(`[data-run-output="${value.runId}"]`); if (!output) { const card = el('article', 'workspace-message workspace-message-assistant'); card.append(el('small', 'workspace-writing', 'Petri · writing…')); output = el('p'); output.dataset.runOutput = value.runId; card.append(output); state.scroller.append(card); } const raw = (output.dataset.raw ?? output.textContent ?? '') + value.delta; clearTimeout(state.deltaSettle); state.deltaSettle = setTimeout(() => snapshot(state, true), 2500); scheduleMarkdown(output, raw); if (follow) state.scroller.scrollTop = state.scroller.scrollHeight; else state.chat.querySelector('[data-new-response]').hidden = false; } catch {} }); stream.onerror = () => { stream.close(); clearTimeout(state.poll); state.poll = setTimeout(() => { if (!document.hidden) snapshot(state, true); connectStream(state); }, 1800); }; }

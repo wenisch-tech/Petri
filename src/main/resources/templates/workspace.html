@@ -9,8 +9,8 @@
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
   <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
-  <link rel="stylesheet" href="/css/petri.css?v=26">
-  <script defer src="/js/petri.js?v=27"></script>
+  <link rel="stylesheet" href="/css/petri.css?v=34">
+  <script defer src="/js/petri.js?v=33"></script>
 </head>
 <body class="workspace-body">
   <header class="topbar workspace-topbar relative z-40">
@@ -26,7 +26,6 @@
       </nav>
       <div class="flex items-center gap-1.5">
         <a th:if="${isInstanceAdmin}" href="/admin" class="app-admin-link" title="Instance administration"><i data-lucide="ShieldCheck"></i><span class="hidden sm:inline">Admin</span></a>
-        <button class="icon-button" type="button" data-toggle-chat title="Toggle chat" aria-label="Toggle chat"><i data-lucide="PanelRight"></i></button>
         <button th:replace="~{fragments/layout :: themeToggle}"></button>
         <div th:replace="~{fragments/layout :: userMenu}"></div>
       </div>
@@ -101,12 +100,17 @@
       <div class="workspace-embedded-content" data-workspace-embedded-content></div>
     </section>
     <aside class="workspace-explorer" data-workspace-explorer>
+      <div class="workspace-rail">
+        <button class="icon-button" type="button" data-toggle-panel="explorer" title="Show files and changes" aria-label="Show files and changes" aria-expanded="false"><i data-lucide="PanelLeftOpen"></i></button>
+        <i data-lucide="Folder"></i>
+      </div>
       <div class="workspace-panel-header">
         <div class="workspace-switcher">
           <button type="button" data-explorer-mode="files" class="is-active">Files</button>
-          <button type="button" data-explorer-mode="changes">Changes <span class="workspace-count" data-change-count>0</span><span class="workspace-change-total is-added" data-change-additions>+0</span><span class="workspace-change-total is-deleted" data-change-deletions>−0</span></button>
+          <button type="button" data-explorer-mode="changes">Changes <span class="workspace-count" data-change-count>0</span><span class="workspace-change-total is-added" data-change-additions hidden>+0</span><span class="workspace-change-total is-deleted" data-change-deletions hidden>−0</span></button>
         </div>
-        <div class="flex gap-1">
+        <div class="flex shrink-0 gap-0.5">
+          <button class="icon-button" type="button" data-toggle-panel="explorer" title="Hide files and changes" aria-label="Hide files and changes" aria-expanded="true"><i data-lucide="PanelLeftClose"></i></button>
           <button class="icon-button" type="button" data-refresh-explorer title="Refresh files" aria-label="Refresh files"><i data-lucide="RefreshCw"></i></button>
           <button class="icon-button" type="button" data-create-entry="FILE" title="New file" aria-label="New file"><i data-lucide="FilePlus2"></i></button>
           <button class="icon-button" type="button" data-create-entry="DIRECTORY" title="New folder" aria-label="New folder"><i data-lucide="FolderPlus"></i></button>
@@ -128,7 +132,7 @@
     <div class="workspace-resizer" data-resize="explorer" role="separator" aria-orientation="vertical" tabindex="0"></div>
 
     <section class="workspace-editor" data-workspace-editor>
-      <div class="workspace-tabs" data-editor-tabs><span class="px-4 text-xs text-ink-500">No file open</span></div>
+      <div class="workspace-tabs" data-editor-tabs><span class="self-center px-4 text-xs text-ink-500">No file open</span></div>
       <div class="min-h-0 flex-1" data-editor-host><div class="workspace-editor-empty" data-editor-empty><i data-lucide="FileCode2" data-icon-size="28"></i><h1>Select a file</h1><p>Open a file from the explorer, or inspect a change from the Changes view.</p></div></div>
       <div class="workspace-terminal-resizer" data-terminal-resizer role="separator" aria-orientation="horizontal" tabindex="0" hidden></div>
       <section class="workspace-terminal" data-terminal aria-label="Terminal" hidden>
@@ -150,9 +154,16 @@
     <div class="workspace-resizer" data-resize="chat" role="separator" aria-orientation="vertical" tabindex="0"></div>
 
     <aside class="workspace-chat" data-workspace-chat>
+      <div class="workspace-rail">
+        <button class="icon-button" type="button" data-toggle-panel="chat" title="Show chat" aria-label="Show chat" aria-expanded="false"><i data-lucide="PanelRightOpen"></i></button>
+        <i data-lucide="MessageSquare"></i>
+      </div>
       <div class="workspace-chat-header">
         <div class="flex min-w-0 items-center gap-2"><i data-lucide="MessageSquare"></i><select class="workspace-chat-selector" data-chat-selector><option value="" data-mode="ORCHESTRATED">New chat</option><option th:each="item : ${chats}" th:value="${item.id}" th:selected="${selectedChat != null && item.id == selectedChat.id}" th:text="${item.title}" th:attr="data-mode=${item.executionMode}">Chat</option></select></div>
-        <button class="icon-button" type="button" data-new-chat title="New chat" aria-label="New chat"><i data-lucide="Plus"></i></button>
+        <span class="flex shrink-0 items-center gap-0.5">
+          <button class="icon-button" type="button" data-new-chat title="New chat" aria-label="New chat"><i data-lucide="Plus"></i></button>
+          <button class="icon-button" type="button" data-toggle-panel="chat" title="Hide chat" aria-label="Hide chat" aria-expanded="true"><i data-lucide="PanelRightClose"></i></button>
+        </span>
       </div>
       <div class="workspace-review-tray" data-review-tray hidden><div><i data-lucide="CircleAlert"></i><span data-review-count>0 reviews waiting</span></div><div data-review-items></div></div>
       <div class="workspace-chat-timeline" data-chat-scroll>
@@ -160,7 +171,7 @@
         <th:block th:each="chatRun : ${chatRuns}">
           <article class="workspace-message workspace-message-user"><p th:text="${chatRun.prompt}">Prompt</p><div class="workspace-message-meta" th:text="|Turn ${chatRun.chatMessageIndex + 1} · ${chatRun.status}|">Turn</div></article>
           <th:block th:each="turn : ${chatRun.turns}">
-            <article th:if="${turn.kind.name() == 'MODEL_RESPONSE'}" class="workspace-message workspace-message-assistant"><p data-markdown th:text="${turn.content}">Response</p></article>
+            <article th:if="${turn.kind.name() == 'MODEL_RESPONSE' and !#strings.isEmpty(#strings.trim(turn.content))}" class="workspace-message workspace-message-assistant"><p data-markdown th:text="${turn.content}">Response</p></article>
             <article th:if="${turn.kind.name() == 'ERROR'}" class="workspace-message-error" th:text="${turn.content}">Error</article>
           </th:block>
           <article th:if="${chatRun.partialOutput != null}" class="workspace-message workspace-message-assistant"><small class="workspace-writing">Petri · writing…</small><p data-markdown th:attr="data-run-output=${chatRun.id}" th:text="${chatRun.partialOutput}">Partial response</p></article>
@@ -180,7 +191,7 @@
         <small data-approval-hint>Workflow chats: approving the plan already covers file changes and tests. Package installs and terminal commands always ask unless enabled above.</small>
       </div>
       <div th:unless="${modelConfigured}" class="workspace-warning mx-3 mb-2">No model is ready for you yet. <a class="underline" href="/model-providers">Add your API key</a><span th:if="${isInstanceAdmin}"> or <a class="underline" href="/model-settings">configure a provider</a></span>.</div>
-      <form class="workspace-composer" data-chat-form><textarea class="field" data-chat-input required maxlength="200000" placeholder="Ask Petri to work in this project…" th:disabled="${!modelConfigured}"></textarea><label class="workspace-guide-toggle" data-guide-toggle hidden><input type="checkbox" data-guide-active checked><span>Guide active task</span></label><div><span class="text-xs text-ink-500" data-chat-status>Ready</span><button class="btn-primary !min-h-9 !px-3" type="button" data-chat-send th:disabled="${!modelConfigured}" aria-label="Send message"><i data-lucide="Send"></i><span>Send</span></button></div></form>
+      <form class="workspace-composer" data-chat-form><textarea class="field" data-chat-input rows="1" required maxlength="200000" placeholder="Ask Petri to work in this project…" th:disabled="${!modelConfigured}"></textarea><label class="workspace-guide-toggle" data-guide-toggle hidden><input type="checkbox" data-guide-active checked><span>Guide active task</span></label><div><span class="text-xs text-ink-500" data-chat-status>Ready</span><button class="btn-primary" type="button" data-chat-send th:disabled="${!modelConfigured}" aria-label="Send message"><i data-lucide="Send"></i><span>Send</span></button></div></form>
       <div class="workspace-chat-tools" aria-label="Chat configuration">
         <label><span>Mode</span><select class="workspace-mode-selector" data-chat-mode aria-label="Agent mode" title="Agent mode">
           <option value="ORCHESTRATED">Workflow</option><option value="DIRECT">Direct</option>
@@ -192,7 +203,6 @@
                   th:text="|${option.credential.displayName} · ${option.model}|">Model</option>
         </select></label>
         <span class="workspace-model-unavailable" data-model-unavailable th:hidden="${!savedModelUnavailable}">Saved model unavailable</span>
-        <button class="icon-button" type="button" data-orchestration-settings title="Configure workflow roles" aria-label="Configure workflow roles"><i data-lucide="Workflow"></i></button>
         <button class="icon-button" type="button" data-automation-menu title="Approval settings" aria-label="Approval settings"><i data-lucide="ShieldCheck"></i></button>
       </div>
     </aside>
@@ -234,7 +244,6 @@
     </form></dialog>
     <dialog class="workspace-dialog" data-git-confirm-dialog><form method="dialog"><h2 data-git-confirm-title>Confirm Git action</h2><p data-git-confirm-description></p><label data-git-target-label hidden>Remote branch<select class="field" data-git-confirm-target><option th:each="branch : ${branches}" th:if="${branch.kind.name() == 'REMOTE'}" th:value="${branch.name}" th:text="|origin/${branch.name}|">origin/main</option></select></label><label data-git-confirm-label>Type the branch name to confirm<input class="field" data-git-confirm-input autocomplete="off"></label><label class="workspace-check" data-git-force-label hidden><input type="checkbox" data-git-force> Force-delete an unmerged local branch</label><div class="workspace-dialog-error" data-git-dialog-error></div><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm" data-git-confirm-button>Continue</button></div></form></dialog>
     <dialog class="workspace-dialog" data-workflow-branch-dialog><form method="dialog"><h2>Start gated workflow</h2><p>This is the default branch. Choose where Petri may perform the approved work.</p><label class="workspace-check"><input type="radio" name="workflow-branch-mode" value="NEW" checked> Create a dedicated feature branch</label><label data-workflow-new-branch>Branch name<input class="field" data-workflow-branch-name autocomplete="off" placeholder="petri/task-name"></label><label class="workspace-check"><input type="radio" name="workflow-branch-mode" value="CURRENT"> Work on the default branch</label><p class="workspace-warning">Working on the default branch reserves this worktree until the workflow ends.</p><div class="workspace-dialog-error" data-workflow-dialog-error></div><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm">Start workflow</button></div></form></dialog>
-    <dialog class="workspace-dialog workspace-profile-dialog" data-orchestration-dialog><form method="dialog"><h2>Workflow role models</h2><p>Each role gets an isolated model session and immutable settings when a task starts.</p><div class="workspace-role-profiles" data-role-profiles></div><p class="workspace-warning" data-role-warning hidden>Reviewer and Implementer use the same model. This reduces review independence.</p><div class="workspace-dialog-error" data-orchestration-error></div><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-primary" value="confirm">Save profiles</button></div></form></dialog>
   </main>
 </body>
 </html>
