@@ -127,6 +127,14 @@
   .page-actions { @apply flex flex-wrap items-center gap-2; }
   .role-field { @apply !py-2 text-sm; }
   .role-field + .hint { @apply hidden; }
+  .role-note { @apply flex items-start gap-2 rounded-lg border border-warn-400/30 bg-warn-400/10 px-3 py-2 text-xs leading-5 text-warn-400; }
+  .role-note[hidden] { @apply hidden; }
+  .role-note svg { @apply mt-0.5 size-4 shrink-0; }
+  .role-limits > summary { @apply flex cursor-pointer flex-wrap items-baseline gap-x-3 gap-y-0.5 text-sm; }
+  .role-limits > summary { @apply list-none; }
+  .role-limits > summary::-webkit-details-marker { display: none; }
+  .role-chevron { @apply size-4 shrink-0 self-center text-ink-500 transition-transform; }
+  .role-limits[open] .role-chevron { @apply rotate-90; }
   .subnav { @apply mb-6 flex gap-1 overflow-x-auto border-b border-ink-700/70; }
   .subnav a { @apply -mb-px inline-flex shrink-0 items-center gap-2 border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-ink-500 transition hover:text-ink-100; }
   .subnav a svg { @apply size-4; }
@@ -406,9 +414,29 @@
   .workspace-message-error { @apply mb-3 rounded-lg border border-red-400/30 bg-red-400/10 px-3 py-2 text-xs text-red-300; }
   .workspace-message-meta { @apply mt-2 text-[10px] font-medium text-white/65; }
   .workspace-writing { @apply mb-1 block text-[10px] font-bold uppercase tracking-wider text-brand-400; }
-  .workspace-tool-turn { @apply mb-3 rounded-lg border border-ink-700/70 px-3 py-2 text-xs text-ink-500; }
-  .workspace-tool-turn summary { @apply cursor-pointer; }
-  .workspace-tool-turn pre { @apply mt-2 max-h-48 overflow-auto whitespace-pre-wrap; }
+  /* One compact row per tool call: icon, what happened, the subject, state; raw data on demand. */
+  .workspace-tool-row { @apply mb-2 rounded-lg border border-ink-700/70 bg-ink-900/60 text-xs; }
+  .workspace-tool-row > summary { @apply flex cursor-pointer list-none items-center gap-2 px-2 py-1.5; }
+  .workspace-tool-row > summary::-webkit-details-marker { display: none; }
+  .workspace-tool-row > summary:hover { @apply bg-ink-800/50; }
+  .workspace-tool-icon { @apply grid size-6 shrink-0 place-items-center rounded-md bg-ink-800 text-ink-300; }
+  .workspace-tool-icon svg { @apply size-3.5; }
+  .workspace-tool-title { @apply min-w-0 font-medium leading-4 text-ink-300; }
+  .workspace-tool-detail { @apply min-w-0 flex-1 truncate font-mono text-[11px] text-ink-500; }
+  .workspace-tool-state { @apply ml-auto grid size-4 shrink-0 place-items-center text-good-500; }
+  .workspace-tool-state svg { @apply size-3.5; }
+  .workspace-tool-row.is-running .workspace-tool-state { @apply text-brand-400; }
+  .workspace-tool-row.is-running .workspace-tool-state svg { @apply animate-spin; }
+  .workspace-tool-row.is-failed .workspace-tool-state, .workspace-tool-row.is-failed .workspace-tool-icon { @apply text-red-300; }
+  .workspace-tool-row.is-failed .workspace-tool-icon { @apply bg-red-400/10; }
+  .workspace-tool-row.is-warning .workspace-tool-state, .workspace-tool-row.is-interrupted .workspace-tool-state, .workspace-tool-row.is-warning .workspace-tool-icon { @apply text-amber-300; }
+  .workspace-tool-row.is-warning .workspace-tool-icon { @apply bg-amber-400/10; }
+  .workspace-tool-body { @apply space-y-1 border-t border-ink-700/60 px-3 py-2; }
+  .workspace-tool-body small { @apply block text-[10px] font-bold uppercase tracking-wide text-ink-500; }
+  .workspace-tool-body pre { @apply max-h-48 overflow-auto whitespace-pre-wrap break-words font-mono text-[11px] leading-4 text-ink-300; }
+  .workspace-sync { @apply inline-flex items-center gap-2; }
+  .workspace-sync > span { @apply inline-flex items-center gap-0.5; }
+  .workspace-sync svg { @apply size-3; }
   .workspace-review-card { @apply mb-2 flex flex-wrap items-center gap-2 rounded-lg border border-ink-700/70 bg-ink-900 px-2.5 py-2 text-xs text-ink-300; }
   .workspace-review-card strong { @apply min-w-0 flex-1 truncate; }
   .workspace-review-card > svg { @apply size-4 shrink-0 text-brand-400; }
@@ -553,7 +581,7 @@
   .workspace-package-output.is-live pre { @apply max-h-[55vh]; }
   .workspace-workflow-action.is-block { @apply flex-wrap; }
   .workspace-workflow-action.is-block > .workspace-package-output { @apply w-full; }
-  .workspace-new-response { @apply mx-auto mb-2 rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white shadow-lg; }
+  .workspace-new-response { @apply mx-auto mb-2 inline-flex items-center gap-1 rounded-full bg-brand-600 px-3 py-1 text-xs font-semibold text-white shadow-lg; }
   /* One line until the person types; the textarea then grows to its content (see fitComposer). */
   .workspace-composer { @apply grid shrink-0 items-end gap-x-2 gap-y-1 border-t border-ink-700/70 bg-ink-900 p-2.5; grid-template-columns: minmax(0, 1fr) auto; }
   .workspace-composer textarea { @apply max-h-48 min-h-9 resize-none overflow-y-auto px-3 py-2 text-[13px] leading-5; grid-column: 1; grid-row: 1; }

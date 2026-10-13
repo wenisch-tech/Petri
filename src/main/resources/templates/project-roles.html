@@ -34,11 +34,6 @@
       copied into the workflow when a task starts, so changes never affect work in progress.
     </p>
 
-    <div th:if="${sameModel}" class="alert alert-warning">
-      <i data-lucide="TriangleAlert"></i>
-      <span>Implementer and Reviewer use the same provider and model. That reduces review independence.</span>
-    </div>
-
     <datalist th:each="provider : ${providers}" th:id="|role-models-${provider.id}|">
       <option th:each="name : ${modelIds[provider.id]}" th:value="${name}"></option>
     </datalist>
@@ -48,14 +43,14 @@
         <div class="flex items-start gap-3 border-b border-ink-700/70 px-5 py-4">
           <span class="list-icon"><i th:attr="data-lucide=${row.icon}"></i></span>
           <div class="min-w-0 flex-1">
-            <h2 class="text-sm font-semibold text-ink-100" th:text="${row.label}">Planner</h2>
+            <h2 class="text-base font-semibold text-ink-100" th:text="${row.label}">Planner</h2>
             <p class="mt-0.5 text-xs leading-5 text-ink-500" th:text="${row.description}">Description</p>
           </div>
           <span class="badge" th:classappend="${row.profile.persisted} ? '' : 'badge-neutral'"
                 th:text="${row.profile.persisted} ? 'Customised' : 'Workspace default'">Customised</span>
         </div>
 
-        <div class="space-y-4 px-5 py-4">
+        <div class="space-y-4 px-5 py-4" th:attr="data-role-card=${row.key}">
           <div class="grid gap-4 sm:grid-cols-2">
             <div>
               <label class="label" th:for="|${row.key}-provider|">Provider</label>
@@ -76,7 +71,12 @@
             </div>
           </div>
 
-          <div class="grid grid-cols-2 gap-4 sm:grid-cols-3 xl:grid-cols-6">
+          <p th:if="${row.key == 'REVIEWER'}" class="role-note" data-same-model th:hidden="${!sameModel}">
+            <i data-lucide="TriangleAlert"></i>
+            <span>Same provider and model as the Implementer. A reviewer that shares the implementer's model is less independent.</span>
+          </p>
+
+          <div class="grid gap-4 sm:grid-cols-2">
             <div>
               <label class="label" th:for="|${row.key}-reasoning|">Reasoning</label>
               <select class="field role-field" th:id="|${row.key}-reasoning|" th:name="|${row.key}.reasoningEffort|">
@@ -95,6 +95,15 @@
                         th:text="${#strings.capitalize(#strings.toLowerCase(verbosity.name()))}">Medium</option>
               </select>
             </div>
+          </div>
+
+          <details class="role-limits">
+            <summary>
+              <i data-lucide="ChevronRight" class="role-chevron"></i>
+              <span class="font-medium text-ink-300">Limits</span>
+              <span class="text-ink-500" th:text="|${row.profile.maxAttempts} attempts · ${row.profile.maxModelTurns} turns · ${row.profile.maxOutputTokens} output · ${row.profile.contextWindowTokens} context|">3 attempts</span>
+            </summary>
+            <div class="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
               <label class="label" th:for="|${row.key}-attempts|">Attempts</label>
               <input class="field role-field" type="number" min="1" max="10" th:id="|${row.key}-attempts|" th:name="|${row.key}.maxAttempts|" th:value="${row.profile.maxAttempts}" required>
@@ -111,11 +120,12 @@
               <label class="label" th:for="|${row.key}-context|">Context tokens</label>
               <input class="field role-field" type="number" min="2048" max="10000000" th:id="|${row.key}-context|" th:name="|${row.key}.contextWindowTokens|" th:value="${row.profile.contextWindowTokens}" required>
             </div>
-          </div>
+            </div>
+          </details>
 
           <details th:open="${row.profile.promptAddendum != null}">
             <summary class="cursor-pointer text-sm font-medium text-ink-300">Project-specific instructions</summary>
-            <textarea class="field mt-3 text-sm leading-6" rows="4" maxlength="20000"
+            <textarea class="field mt-3 text-sm leading-6" th:attr="aria-label=|${row.label} instructions|" rows="4" maxlength="20000"
                       th:name="|${row.key}.promptAddendum|" th:text="${row.profile.promptAddendum}"
                       placeholder="Added to this role's prompt for this project only."></textarea>
           </details>

@@ -1,4 +1,5 @@
 import {
+  ArrowUp, ArrowDown, Repeat2, FlaskConical, FilePen, ClipboardCheck,
   ArrowLeft, BookOpen, Bot, Boxes, Check, ChevronDown, ChevronRight, CircleAlert, CircleCheck, Eye, File,
   CloudDownload, CloudUpload,
   Database, FileArchive, FileBraces, FileCode2, FileCog, FileDiff, FileImage, FileJson,
@@ -11,6 +12,7 @@ import {
 } from 'lucide';
 
 const registry = {
+  ArrowUp, ArrowDown, Repeat2, FlaskConical, FilePen, ClipboardCheck,
   ArrowLeft, BookOpen, Bot, Boxes, Check, ChevronDown, ChevronRight, CircleAlert, CircleCheck, Database, Eye, File,
   CloudDownload, CloudUpload,
   FileArchive, FileBraces, FileCode2, FileCog, FileDiff, FileImage, FileJson, FilePlus2,

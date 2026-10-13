@@ -11,8 +11,8 @@
   <div class="dialog-panel">
     <div class="dialog-header">
       <div>
-        <h2 th:text="|Models of ${inst.displayName}|">Models</h2>
-        <p>Listed by the endpoint, plus model IDs you add by hand. Only these can be picked in the workspace.</p>
+        <h2 th:text="|${inst.displayName} models|">Models</h2>
+        <p>Reported by the endpoint, plus model IDs added by hand. Only these can be picked in the workspace.</p>
       </div>
       <form method="dialog"><button class="icon-button" aria-label="Close"><i data-lucide="X"></i></button></form>
     </div>
@@ -30,9 +30,8 @@
 
       <ul class="list">
         <li th:each="entry : ${catalog.models}" class="list-row !py-2.5">
-          <div class="list-main"><code class="text-sm" th:text="${entry.modelId}">model</code></div>
+          <div class="list-main"><code class="break-all text-sm" th:text="${entry.modelId}">model</code></div>
           <span class="badge badge-brand" th:if="${entry.modelId == inst.model}">Default</span>
-          <span class="badge badge-neutral" th:if="${entry.id != null && !entry.custom}">Discovered</span>
           <span class="badge badge-neutral" th:if="${entry.custom && !entry.personal}">Shared</span>
           <span class="badge badge-neutral" th:if="${entry.personal}">Only you</span>
           <form th:if="${entry.removable}" method="post" th:action="@{|${base}/models/${entry.id}/delete|}">

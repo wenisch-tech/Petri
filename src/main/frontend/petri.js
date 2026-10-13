@@ -201,3 +201,15 @@ document.addEventListener('change', event => {
   input.hidden = select.value !== '';
   if (input.hidden === false) { if (picker) input.value = ''; input.focus(); }
 });
+
+// Keep the reviewer-independence note in step with the Implementer and Reviewer choices.
+document.addEventListener('change', event => {
+  if (!event.target.closest?.('[data-role-card]')) return;
+  const note = document.querySelector('[data-same-model]');
+  if (!note) return;
+  const read = key => {
+    const card = document.querySelector(`[data-role-card="${key}"]`);
+    return card ? `${card.querySelector('[data-role-provider]')?.value}|${card.querySelector('[data-role-model]')?.value}` : null;
+  };
+  note.hidden = read('IMPLEMENTER') !== read('REVIEWER');
+});

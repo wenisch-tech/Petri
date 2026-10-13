@@ -559,10 +559,21 @@ async function refreshGitStatus(state) {
   catch (error) { showGitError(state, error); }
 }
 
+function setSyncCounts(node, ahead, behind) {
+  node.replaceChildren();
+  node.classList.add('workspace-sync');
+  for (const [icon, count, label] of [['ArrowUp', ahead, 'ahead'], ['ArrowDown', behind, 'behind']]) {
+    const part = el('span', '');
+    part.title = `${count} commit${count === 1 ? '' : 's'} ${label}`;
+    part.append(renderIcon(icon), String(count));
+    node.append(part);
+  }
+}
+
 function renderGitIndicators(state, status) {
   const bar = state.gitBar;
   if (!bar || !status) return;
-  bar.querySelector('[data-git-sync]').textContent = `↑${status.ahead} ↓${status.behind}`;
+  setSyncCounts(bar.querySelector('[data-git-sync]'), status.ahead, status.behind);
   // Also next to the branch name in the branch selector, where it is easy to see.
   const selected = state.root.querySelector('[data-branch-selector]')?.selectedOptions?.[0];
   if (selected && selected.value) {
@@ -1110,7 +1121,7 @@ function renderTabs(state) {
     const path = state.drafts[tab]?.path || tab.replace(/^diff:/, '');
     button.append(tab.startsWith('diff:') ? renderIcon('GitCompareArrows') : fileIcon(path), document.createTextNode(path.split('/').at(-1)));
     if (state.drafts[tab]?.dirty) button.append(el('span', 'workspace-dirty-dot', '•'));
-    const close = el('span', 'workspace-tab-close', '×');
+    const close = el('span', 'workspace-tab-close'); close.append(renderIcon('X'));
     close.addEventListener('click', event => { event.stopPropagation(); closeTab(state, tab); });
     button.append(close);
     button.addEventListener('click', () => activateTab(state, tab));
@@ -1887,7 +1898,7 @@ function scheduleRunningPoll(state, data) {
   clearTimeout(state.runningPoll);
   if (items.some(running)) state.runningPoll = setTimeout(() => snapshot(state, true), 1500);
 }
-function renderRun(state, entry, timeline) { const run = entry.run; const user = el('article', 'workspace-message workspace-message-user'); user.append(el('p', '', run.prompt)); const meta = el('div', 'workspace-message-meta', `Turn ${run.chatMessageIndex + 1} · ${run.status}`); user.append(meta); timeline.append(user); for (const turn of run.turns || []) { if (turn.kind === 'USER_PROMPT') continue; if (turn.kind === 'MODEL_RESPONSE' && !(turn.content || '').trim()) continue; if (turn.kind === 'MODEL_RESPONSE') { const assistant = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.raw = turn.content || ''; applyMarkdown(body, turn.content || ''); assistant.append(body); timeline.append(assistant); } else if (turn.kind === 'ERROR') timeline.append(el('article', 'workspace-message-error', turn.content || 'Agent error')); else { const details = el('details', 'workspace-tool-turn'); details.append(el('summary', '', turn.toolName || turn.kind), el('pre', '', turn.content || '')); timeline.append(details); } } if (run.partialOutput) { const partial = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.runOutput = run.id; body.dataset.raw = run.partialOutput; applyMarkdown(body, run.partialOutput); partial.append(el('small', 'workspace-writing', 'Petri · writing…'), body); timeline.append(partial); } for (const proposal of entry.proposals || []) timeline.append(proposalCard(state, proposal)); for (const test of entry.tests || []) timeline.append(testCard(state, test)); for (const install of entry.packageInstalls || []) timeline.append(packageCard(state, install)); for (const command of entry.terminalCommands || []) timeline.append(terminalCard(state, command)); }
+function renderRun(state, entry, timeline) { const run = entry.run; const user = el('article', 'workspace-message workspace-message-user'); user.append(el('p', '', run.prompt)); const meta = el('div', 'workspace-message-meta', `Turn ${run.chatMessageIndex + 1} · ${run.status}`); user.append(meta); timeline.append(user); for (const turn of run.turns || []) { if (turn.kind === 'USER_PROMPT') continue; if (turn.kind === 'MODEL_RESPONSE' && !(turn.content || '').trim()) continue; if (turn.kind === 'MODEL_RESPONSE') { const assistant = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.raw = turn.content || ''; applyMarkdown(body, turn.content || ''); assistant.append(body); timeline.append(assistant); } else if (turn.kind === 'ERROR') timeline.append(el('article', 'workspace-message-error', turn.content || 'Agent error')); else { const row = renderToolTurn(run, turn); if (row) timeline.append(row); } } if (run.partialOutput) { const partial = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.runOutput = run.id; body.dataset.raw = run.partialOutput; applyMarkdown(body, run.partialOutput); partial.append(el('small', 'workspace-writing', 'Petri · writing…'), body); timeline.append(partial); } for (const proposal of entry.proposals || []) timeline.append(proposalCard(state, proposal)); for (const test of entry.tests || []) timeline.append(testCard(state, test)); for (const install of entry.packageInstalls || []) timeline.append(packageCard(state, install)); for (const command of entry.terminalCommands || []) timeline.append(terminalCard(state, command)); }
 
 const workflowStages = [
   ['ORCHESTRATOR_INTAKE', 'Intake'], ['PLANNING', 'Plan'],
@@ -2115,18 +2126,20 @@ function renderActiveWorkflowPanel(state, workflow, timeline) {
   panel.append(empty);
 }
 
+// Icon, label while the call is running and label once it has finished.
 const workflowToolPresentation = {
-  list_files: ['Folder', 'Listing files'],
-  read_file: ['Eye', 'Reading file'],
-  search_files: ['Search', 'Searching files'],
-  show_diff: ['FileDiff', 'Inspecting proposal diff'],
-  create_patch: ['FileDiff', 'Preparing file change'],
-  create_file: ['FilePlus2', 'Preparing new file'],
-  run_tests: ['Play', 'Preparing test run'],
-  install_packages: ['Package', 'Requesting package install'],
-  run_command: ['SquareTerminal', 'Requesting terminal command'],
-  list_skills: ['List', 'Listing skills'],
-  load_skill: ['BookOpen', 'Loading skill']
+  list_files: ['Folder', 'Listing files', 'Listed files'],
+  read_file: ['FileText', 'Reading file', 'Read file'],
+  search_files: ['Search', 'Searching files', 'Searched files'],
+  show_diff: ['FileDiff', 'Inspecting diff', 'Inspected diff'],
+  create_patch: ['FilePen', 'Preparing file change', 'Proposed a file change'],
+  create_file: ['FilePlus2', 'Preparing new file', 'Proposed a new file'],
+  run_tests: ['FlaskConical', 'Preparing test run', 'Proposed a test run'],
+  install_packages: ['Package', 'Requesting package install', 'Requested a package install'],
+  run_command: ['SquareTerminal', 'Requesting terminal command', 'Requested a terminal command'],
+  list_skills: ['List', 'Listing skills', 'Listed skills'],
+  load_skill: ['BookOpen', 'Loading skill', 'Loaded skill'],
+  submit_review: ['ClipboardCheck', 'Submitting review', 'Submitted review']
 };
 
 function workflowFeed(workflow) {
@@ -2151,8 +2164,8 @@ function workflowFeed(workflow) {
       if (turn.kind !== 'LOOP_GUARD') continue;
       const info = parsedObject(turn.content);
       const withdrawn = info.action === 'TOOLS_WITHDRAWN';
-      events.push({ kind: 'tool', icon: 'TriangleAlert', text: withdrawn ? 'Loop guard intervention: tools withdrawn' : 'Loop guard intervention: repeat blocked',
-        detail: roleLabel(run.workflowRole), state: 'interrupted', time: turn.createdAt, order: turn.index });
+      events.push({ kind: 'tool', icon: 'Repeat2', text: loopGuardText(run, info),
+        detail: info.strikes ? `Strike ${info.strikes}` : '', state: withdrawn ? 'failed' : 'interrupted', time: turn.createdAt, order: turn.index });
     }
   }
   for (const action of workflowToolActivities(workflow.stageRuns || [])) {
@@ -2218,7 +2231,7 @@ function workflowToolActivities(runs) {
       const result = results.get(turn.toolCallId);
       let state = result ? 'completed' : ['FAILED', 'CANCELLED', 'BUDGET_EXHAUSTED'].includes(run.status) ? 'interrupted' : 'running';
       if (result && parsedObject(result.content).error) state = 'failed';
-      const [icon, label] = workflowToolPresentation[turn.toolName] || ['Wrench', humanizeToolName(turn.toolName)];
+      const [icon, label] = toolLabel(turn.toolName, state);
       activities.push({ icon, label, detail: workflowToolDetail(turn), state, role: roleLabel(run.workflowRole), createdAt: turn.createdAt, index: turn.index });
     }
   }
@@ -2235,6 +2248,72 @@ function workflowToolDetail(turn) {
   if (turn.toolName === 'load_skill') return truncate(stringValue(input.name));
   if (turn.toolName === 'show_diff') return truncate(stringValue(input.proposalId));
   return truncate(path && path !== '.' ? path : '');
+}
+
+/** Label for a tool in the given state: running tools use the present tense. */
+function toolLabel(toolName, state) {
+  const entry = workflowToolPresentation[toolName];
+  if (!entry) return ['Wrench', humanizeToolName(toolName)];
+  if (state === 'running') return [entry[0], entry[1]];
+  return [entry[0], state === 'failed' ? `${entry[2]} failed` : entry[2]];
+}
+
+function loopGuardText(run, info) {
+  const who = run.workflowRole ? roleLabel(run.workflowRole) : 'The agent';
+  return info.action === 'TOOLS_WITHDRAWN'
+    ? `${who} kept repeating itself; tools were withdrawn and it was asked to answer`
+    : `${who} started repeating itself and was nudged to move on`;
+}
+
+function prettyJson(value) {
+  if (!value) return '';
+  try { return JSON.stringify(JSON.parse(value), null, 2); } catch { return value; }
+}
+
+/** One compact row per tool call (call and result merged) or loop guard intervention. */
+function renderToolTurn(run, turn) {
+  const turns = run.turns || [];
+  let icon; let title; let detail = ''; let state = 'completed'; let input = ''; let output = '';
+  if (turn.kind === 'LOOP_GUARD') {
+    const info = parsedObject(turn.content);
+    icon = 'Repeat2';
+    title = loopGuardText(run, info);
+    detail = info.strikes ? `Strike ${info.strikes}` : '';
+    state = info.action === 'TOOLS_WITHDRAWN' ? 'failed' : 'warning';
+    output = info.message || '';
+  } else if (turn.kind === 'TOOL_CALL' || turn.kind === 'TOOL_RESULT') {
+    const call = turn.kind === 'TOOL_CALL' ? turn : turns.find(value => value.kind === 'TOOL_CALL' && value.toolCallId === turn.toolCallId);
+    if (turn.kind === 'TOOL_RESULT' && call) return null; // shown with its call
+    const result = turn.kind === 'TOOL_RESULT' ? turn : turns.find(value => value.kind === 'TOOL_RESULT' && value.toolCallId === turn.toolCallId);
+    const name = turn.toolName || call?.toolName;
+    if (!result) state = ['FAILED', 'CANCELLED', 'BUDGET_EXHAUSTED'].includes(run.status) ? 'interrupted' : 'running';
+    else if (parsedObject(result.content).error) state = 'failed';
+    [icon, title] = toolLabel(name, state);
+    detail = call ? workflowToolDetail(call) : '';
+    if (name === 'submit_review') detail = truncate(stringValue(parsedObject(call?.content).verdict) || detail);
+    input = call ? prettyJson(call.content) : '';
+    output = result ? prettyJson(result.content) : '';
+  } else {
+    icon = 'Wrench';
+    title = humanizeToolName(turn.toolName || turn.kind);
+    output = prettyJson(turn.content);
+  }
+  const row = el('details', `workspace-tool-row is-${state}`);
+  const summary = el('summary');
+  const iconBox = el('span', 'workspace-tool-icon'); iconBox.append(renderIcon(icon));
+  const stateIcon = el('span', 'workspace-tool-state');
+  stateIcon.append(renderIcon(state === 'running' ? 'LoaderCircle' : state === 'failed' ? 'CircleX' : state === 'completed' ? 'Check' : 'CircleAlert'));
+  summary.append(iconBox, el('span', 'workspace-tool-title', title));
+  if (detail) summary.append(el('span', 'workspace-tool-detail', detail));
+  summary.append(stateIcon);
+  row.append(summary);
+  if (input || output) {
+    const body = el('div', 'workspace-tool-body');
+    if (input) body.append(el('small', '', 'Input'), el('pre', '', input));
+    if (output) body.append(el('small', '', turn.kind === 'LOOP_GUARD' ? 'What happened' : 'Result'), el('pre', '', output));
+    row.append(body);
+  }
+  return row;
 }
 
 function parsedObject(value) { try { const parsed = JSON.parse(value || '{}'); return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {}; } catch { return {}; } }

@@ -9,8 +9,8 @@
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
   <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
-  <link rel="stylesheet" href="/css/petri.css?v=34">
-  <script defer src="/js/petri.js?v=33"></script>
+  <link rel="stylesheet" href="/css/petri.css?v=37">
+  <script defer src="/js/petri.js?v=35"></script>
 </head>
 <body class="workspace-body">
   <header class="topbar workspace-topbar relative z-40">
@@ -61,7 +61,7 @@
         <i data-lucide="GitBranchPlus"></i><span>New branch</span>
       </button>
       <div class="workspace-git-indicators" data-git-indicators>
-        <span data-git-sync th:text="${gitStatus == null ? 'No worktree' : '↑' + gitStatus.ahead + ' ↓' + gitStatus.behind}">↑0 ↓0</span>
+        <span data-git-sync class="workspace-sync"><th:block th:if="${gitStatus == null}">No worktree</th:block><th:block th:unless="${gitStatus == null}"><span th:title="|${gitStatus.ahead} ahead|"><i data-lucide="ArrowUp"></i><th:block th:text="${gitStatus.ahead}">0</th:block></span><span th:title="|${gitStatus.behind} behind|"><i data-lucide="ArrowDown"></i><th:block th:text="${gitStatus.behind}">0</th:block></span></th:block></span>
         <span data-git-dirty th:classappend="${gitStatus != null && !gitStatus.clean} ? ' is-dirty'"
               th:text="${gitStatus == null ? '' : (gitStatus.clean ? 'Clean' : 'Changes')}">Clean</span>
         <span class="workspace-rebase-badge" data-git-rebase
@@ -177,7 +177,7 @@
           <article th:if="${chatRun.partialOutput != null}" class="workspace-message workspace-message-assistant"><small class="workspace-writing">Petri · writing…</small><p data-markdown th:attr="data-run-output=${chatRun.id}" th:text="${chatRun.partialOutput}">Partial response</p></article>
         </th:block>
       </div>
-      <button class="workspace-new-response" data-new-response hidden>New response ↓</button>
+      <button class="workspace-new-response" data-new-response hidden><i data-lucide="ArrowDown"></i> New response</button>
       <div class="workspace-automation" data-automation-panel hidden>
         <h4><i data-lucide="ShieldCheck"></i> Approvals</h4>
         <p>Auto-approve in this project:</p>
@@ -223,7 +223,7 @@
     <dialog class="workspace-dialog workspace-pr-dialog" data-pr-preflight-dialog><form method="dialog"><h2>Before opening a pull request</h2><p data-pr-preflight-text>The pull request is created from what is on the remote.</p><ul class="workspace-pr-checks" data-pr-preflight-list></ul><div data-pr-preflight-commit hidden><div class="workspace-commit-message-head"><label for="pr-preflight-message">Commit message</label><button class="btn-secondary !min-h-7 !px-2 text-xs" type="button" data-pr-preflight-generate><i data-lucide="Sparkles"></i><span>Generate</span></button></div><textarea id="pr-preflight-message" class="field" data-pr-preflight-message maxlength="10000" rows="3"></textarea><p class="hint">Stages all changes, commits them with this message and pushes the branch.</p></div><div class="workspace-dialog-error" data-pr-preflight-error></div><div class="workspace-dialog-actions"><button class="btn-secondary" value="cancel">Cancel</button><button class="btn-secondary" type="button" data-pr-preflight-continue hidden>Continue without these changes</button><button class="btn-primary" type="button" data-pr-preflight-push hidden>Push</button><button class="btn-primary" type="button" data-pr-preflight-commit-push hidden>Commit &amp; push</button></div></form></dialog>
     <dialog class="workspace-dialog workspace-pr-dialog" data-pr-dialog><form method="dialog"><h2>Open pull request</h2><p data-pr-subtitle>Review the details before opening it.</p>
       <div data-pr-body>
-        <div class="workspace-pr-branches"><span data-pr-source class="workspace-pr-branch">branch</span><span aria-hidden="true">→</span><label class="sr-only" for="pr-target">Target branch</label><select id="pr-target" class="workspace-select" data-pr-target></select></div>
+        <div class="workspace-pr-branches"><span data-pr-source class="workspace-pr-branch">branch</span><i data-lucide="ArrowRight" aria-hidden="true"></i><label class="sr-only" for="pr-target">Target branch</label><select id="pr-target" class="workspace-select" data-pr-target></select></div>
         <div class="workspace-commit-message-head"><label for="pr-title">Title</label><button class="btn-secondary !min-h-7 !px-2 text-xs" type="button" data-pr-generate title="Suggest a title and description from the commits"><i data-lucide="Sparkles"></i><span>Generate</span></button></div>
         <input id="pr-title" class="field" data-pr-title maxlength="250" required autocomplete="off">
         <label class="workspace-pr-label" for="pr-description">Description</label>
