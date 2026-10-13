@@ -87,10 +87,10 @@ function initializeEmbeddedViews(state) {
   const content = panel?.querySelector('[data-workspace-embedded-content]');
   if (!panel || !content) return;
   const base = `/projects/${state.projectId}`;
-  const urls = { automations: `${base}/automations`, runs: `${base}/runs`, settings: `${base}/settings`, roles: `${base}/settings/roles` };
-  const titles = { automations: 'Automations', runs: 'Runs', settings: 'Settings', roles: 'Model settings' };
+  const urls = { automations: `${base}/automations`, runs: `${base}/runs`, settings: `${base}/settings`, roles: `${base}/settings/roles`, environment: `${base}/settings/environment` };
+  const titles = { automations: 'Automations', runs: 'Runs', settings: 'Settings', roles: 'Model settings', environment: 'Environment' };
   // Pages that belong under a tab of the view bar.
-  const parentView = { roles: 'settings' };
+  const parentView = { roles: 'settings', environment: 'settings' };
   const runPath = /^\/runs\/([0-9a-fA-F-]{36})$/;
   const buttons = [...document.querySelectorAll('.workspace-view-tab[data-workspace-view]')];
   const gitBar = document.querySelector('[data-git-bar]');

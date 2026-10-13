@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(|${project.name} environment|)}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('projects')}"></header>
+
+<th:block th:remove="all"><th:block th:fragment="content">
+<main class="page-narrow">
+  <a class="back-link" href="/projects"><i data-lucide="ArrowLeft"></i> Projects</a>
+  <div class="page-header">
+    <div>
+      <h1 class="page-title" th:text="${project.name}">Project</h1>
+      <p class="page-description">Variables this project adds to terminal commands, approved tests and package installs.</p>
+    </div>
+  </div>
+
+  <nav th:replace="~{fragments/layout :: projectSettingsTabs(${project.id}, 'environment')}"></nav>
+
+  <div th:replace="~{fragments/layout :: alert('success', ${environmentSaved} ? 'Environment saved. It applies to commands started from now on.' : null)}"></div>
+  <div th:replace="~{fragments/layout :: alert('error', ${environmentError})}"></div>
+
+  <form method="post" th:action="@{/projects/{id}/settings/environment(id=${project.id})}" autocomplete="off">
+    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+    <section class="card">
+      <div class="card-body space-y-4">
+        <div>
+          <label class="label" for="environment">Environment variables</label>
+          <textarea id="environment" name="environment" rows="8" class="field font-mono text-sm" spellcheck="false" autocomplete="off"
+                    placeholder="SPRING_PROFILES_ACTIVE=test&#10;NPM_TOKEN=..." th:text="${environmentText}"></textarea>
+          <span class="hint">One <code>NAME=value</code> per line. Values are encrypted and never shown again: a saved variable appears as <code>NAME=********</code>; leave that as it is to keep the value, or type a new one to replace it. Remove the line to delete it.</span>
+        </div>
+        <div class="rounded-lg border border-ink-700/70 bg-raised px-4 py-3 text-xs leading-5 text-ink-300">
+          <p class="font-medium text-ink-100">How these combine</p>
+          <p class="mt-1">Commands start from a clean environment. The sandbox profile's variables are applied first, then these, so a name set here wins. Names such as <code>PATH</code> and <code>HOME</code> are reserved.</p>
+          <p class="mt-2" th:if="${!#lists.isEmpty(inherited)}">
+            Inherited from the sandbox profile:
+            <code class="mx-0.5" th:each="name : ${inherited}" th:text="${name}">HTTPS_PROXY</code>
+          </p>
+        </div>
+      </div>
+      <div class="card-footer">
+        <button class="btn-primary" type="submit"><i data-lucide="Save"></i> Save environment</button>
+      </div>
+    </section>
+  </form>
+</main>
+</th:block></th:block>
+</body>
+</html>

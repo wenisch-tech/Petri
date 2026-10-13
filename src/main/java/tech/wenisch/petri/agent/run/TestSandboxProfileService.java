@@ -47,7 +47,7 @@ public class TestSandboxProfileService {
     }
     boolean network = setting != null && setting.networkEnabled() != null
         ? setting.networkEnabled() : profile.isNetworkEnabled();
-    return view(profile, network, environment(profile));
+    return view(profile, network, mergedEnvironment(profile, setting));
   }
 
   /**
@@ -60,7 +60,63 @@ public class TestSandboxProfileService {
     TestSandboxProfile profile = setting == null
         ? profiles.findFirstByDefaultProfileTrueAndEnabledTrue().orElse(null)
         : profiles.findById(setting.profileId()).filter(TestSandboxProfile::isEnabled).orElse(null);
-    return profile == null ? Map.of() : environment(profile);
+    return profile == null ? Map.of() : mergedEnvironment(profile, setting);
+  }
+
+  /** The profile's variables with the project's own on top: the project wins on a clash. */
+  private Map<String, String> mergedEnvironment(TestSandboxProfile profile, ProjectSandboxSetting setting) {
+    Map<String, String> merged = new java.util.LinkedHashMap<>(environment(profile));
+    merged.putAll(projectVariables(setting));
+    return merged;
+  }
+
+  private Map<String, String> projectVariables(ProjectSandboxSetting setting) {
+    String stored = setting == null ? null : setting.environmentCiphertext();
+    if (stored == null || stored.isBlank()) return Map.of();
+    return CommandEnvironment.parse(cipher.decrypt(stored));
+  }
+
+  /** The project's own variables as editable text; values are masked so they never reach the page. */
+  @Transactional(readOnly = true)
+  public String maskedProjectEnvironment(UUID projectId) {
+    StringBuilder text = new StringBuilder();
+    projectVariables(settings.findById(projectId).orElse(null))
+        .keySet().forEach(name -> text.append(name).append('=').append(MASK).append('\n'));
+    return text.toString();
+  }
+
+  /** Names (never values) the project inherits from its sandbox profile. */
+  @Transactional(readOnly = true)
+  public List<String> inheritedVariableNames(UUID projectId) {
+    ProjectSandboxSetting setting = settings.findById(projectId).orElse(null);
+    TestSandboxProfile profile = setting == null
+        ? profiles.findFirstByDefaultProfileTrueAndEnabledTrue().orElse(null)
+        : profiles.findById(setting.profileId()).orElse(null);
+    return profile == null ? List.of() : environment(profile).keySet().stream().sorted().toList();
+  }
+
+  /** Replaces the project's variables. An unchanged masked value keeps the stored one. */
+  @Transactional
+  public void saveProjectEnvironment(UUID projectId, String text, String actorEmail) {
+    Map<String, String> variables = CommandEnvironment.parse(text);
+    ProjectSandboxSetting setting = settings.findById(projectId).orElseGet(() -> {
+      UUID profileId = profiles.findFirstByDefaultProfileTrueAndEnabledTrue()
+          .orElseThrow(() -> new IllegalStateException("No default test sandbox profile is available"))
+          .getId();
+      return new ProjectSandboxSetting(projectId, profileId, null);
+    });
+    Map<String, String> current = projectVariables(setting);
+    variables.replaceAll((name, value) ->
+        MASK.equals(value) && current.containsKey(name) ? current.get(name) : value);
+    if (variables.containsValue(MASK)) {
+      throw new IllegalArgumentException("Enter a value for each new environment variable");
+    }
+    setting.environmentCiphertext(variables.isEmpty() ? null
+        : cipher.encrypt(CommandEnvironment.format(variables)));
+    settings.save(setting);
+    // Only names are audited; values may be credentials.
+    audit.record(actorEmail, "PROJECT_ENVIRONMENT_SAVED", "PROJECT", projectId,
+        "Saved project environment variables " + variables.keySet());
   }
 
   /** The profile's variables as editable text; values are masked so they never reach the page. */

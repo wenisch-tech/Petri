@@ -81,10 +81,11 @@
   </div>
 </div>
 
-<!-- Sub-navigation of a project's settings. `active` is one of: general, roles. -->
+<!-- Sub-navigation of a project's settings. `active` is one of: general, roles, environment. -->
 <nav th:fragment="projectSettingsTabs(projectId, active)" class="subnav" aria-label="Project settings">
   <a th:href="@{/projects/{id}/settings(id=${projectId})}" th:classappend="${active == 'general'} ? 'is-active'" th:attr="aria-current=${active == 'general'} ? 'page'"><i data-lucide="Settings"></i> General</a>
   <a th:href="@{/projects/{id}/settings/roles(id=${projectId})}" th:classappend="${active == 'roles'} ? 'is-active'" th:attr="aria-current=${active == 'roles'} ? 'page'"><i data-lucide="Cpu"></i> Model settings</a>
+  <a th:href="@{/projects/{id}/settings/environment(id=${projectId})}" th:classappend="${active == 'environment'} ? 'is-active'" th:attr="aria-current=${active == 'environment'} ? 'page'"><i data-lucide="SquareTerminal"></i> Environment</a>
 </nav>
 
 <!-- Personal settings navigation. -->
