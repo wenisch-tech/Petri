@@ -1,5 +1,28 @@
 # Changelog
 
+## v0.11.0 - 2026-10-13
+
+## [0.11.0](https://github.com/wenisch-tech/Petri/compare/v0.10.0...v0.11.0) (2026-10-13)
+
+
+### Features
+
+* added automatic fetching from models ([5b13ecf](https://github.com/wenisch-tech/Petri/commit/5b13ecfa949dbcd0c36bee88a2a6b5e13c1298b7))
+* improved dashboard and introduced automations overview ([282a483](https://github.com/wenisch-tech/Petri/commit/282a48343f5671cb37bb3536ccc88c18f016c36d))
+* improved projects vizsualization ([35066e5](https://github.com/wenisch-tech/Petri/commit/35066e5a53f47f276bdba3ba2e10bdd2c9269db1))
+
+
+### Bug Fixes
+
+* further minor improvement to the UI ([fe3f708](https://github.com/wenisch-tech/Petri/commit/fe3f7089f9ff25de6f39c3dc486aaf4ec1ec4626))
+* minor changes to iconset ([7f3da82](https://github.com/wenisch-tech/Petri/commit/7f3da8283271778fa9f303f71911614dfddf1dd1))
+* minor improvements to Workspace settings UI ([328fbab](https://github.com/wenisch-tech/Petri/commit/328fbab7cd19964c22999315fd7a47a9ec3794b4))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.11.0
+
+
 ## v0.10.0 - 2026-10-12
 
 ## [0.10.0](https://github.com/wenisch-tech/Petri/compare/v0.9.0...v0.10.0) (2026-10-12)
