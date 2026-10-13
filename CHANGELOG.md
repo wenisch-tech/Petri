@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.12.0 - 2026-10-13
+
+## [0.12.0](https://github.com/wenisch-tech/Petri/compare/v0.11.0...v0.12.0) (2026-10-13)
+
+
+### Features
+
+* added gui for local user management ([812bcd2](https://github.com/wenisch-tech/Petri/commit/812bcd2a981a6c30475fbb2d0802487a650d9c21))
+* allow project specifc project environment ([bd919c1](https://github.com/wenisch-tech/Petri/commit/bd919c1f43e66a0d1918ef2a2a5f26fb783940cc))
+
+
+### Bug Fixes
+
+* updated version info ([6221db3](https://github.com/wenisch-tech/Petri/commit/6221db326aef574e463db4e6f160bbd2fbeed3e3))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.12.0
+
+
 ## v0.11.0 - 2026-10-13
 
 ## [0.11.0](https://github.com/wenisch-tech/Petri/compare/v0.10.0...v0.11.0) (2026-10-13)
