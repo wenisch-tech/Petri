@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.13.0 - 2026-10-13
+
+## [0.13.0](https://github.com/wenisch-tech/Petri/compare/v0.12.0...v0.13.0) (2026-10-13)
+
+
+### Features
+
+* initial introduction mcp client connections ([27e3030](https://github.com/wenisch-tech/Petri/commit/27e3030d6063b67a58f097d12227ed1a2732b44b))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.13.0
+
+
 ## v0.12.0 - 2026-10-13
 
 ## [0.12.0](https://github.com/wenisch-tech/Petri/compare/v0.11.0...v0.12.0) (2026-10-13)
