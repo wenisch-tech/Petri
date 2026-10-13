@@ -41,7 +41,7 @@
     <div class="space-y-4">
       <section th:each="row : ${rows}" class="card">
         <div class="flex items-start gap-3 border-b border-ink-700/70 px-5 py-4">
-          <span class="list-icon"><i th:attr="data-lucide=${row.icon}"></i></span>
+          <span class="list-icon" th:classappend="|role-tint-${#strings.toLowerCase(row.key)}|"><i th:attr="data-lucide=${row.icon}"></i></span>
           <div class="min-w-0 flex-1">
             <h2 class="text-base font-semibold text-ink-100" th:text="${row.label}">Planner</h2>
             <p class="mt-0.5 text-xs leading-5 text-ink-500" th:text="${row.description}">Description</p>
@@ -133,7 +133,7 @@
       </section>
     </div>
 
-    <div class="sticky bottom-0 -mx-1 mt-5 flex items-center justify-between gap-3 border-t border-ink-700/70 bg-ink-950/90 px-1 py-3 backdrop-blur">
+    <div class="sticky bottom-0 -mx-1 mt-5 flex items-center justify-between gap-3 border-t border-ink-700/70 bg-chrome px-1 py-3">
       <span class="text-xs text-ink-500">Applies to workflows started after saving.</span>
       <button class="btn-primary" type="submit"><i data-lucide="Save"></i> Save model settings</button>
     </div>

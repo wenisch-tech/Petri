@@ -77,7 +77,7 @@ public class SecurityConfiguration {
     return http
         .csrf(csrf -> csrf.ignoringRequestMatchers(apiRequests))
         .authorizeHttpRequests(authorize -> authorize
-            .requestMatchers("/css/**", "/js/**", "/img/**", "/favicon.ico", "/actuator/health",
+            .requestMatchers("/css/**", "/js/**", "/img/**", "/fonts/**", "/favicon.ico", "/actuator/health",
                 "/actuator/health/**")
             .permitAll()
             .requestMatchers(apiRequests).hasRole("API_CLIENT")

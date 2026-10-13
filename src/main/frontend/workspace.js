@@ -55,7 +55,7 @@ export function initializeWorkspace() {
   const state = {
     root, projectId: root.dataset.projectId, worktreeId, api: worktreeId ? `/workspace/api/worktrees/${worktreeId}` : null,
     branch: root.dataset.branch || null, detached: root.dataset.detached === 'true', gitStatus: null,
-    changes: new Map(), mode: 'files', tabs: [], active: null, drafts: {}, chatId: root.dataset.chatId || null,
+    changes: new Map(), mode: 'files', tabs: [], active: null, agent: { path: null, proposalId: null, status: null, live: false, unseen: false }, drafts: {}, chatId: root.dataset.chatId || null,
     snapshot: null, monaco: null, monacoPromise: null, models: new Map(), diffModels: new Map(),
     editor: null, diffEditor: null, editorToken: 0, resizeObserver: null
   };
@@ -77,7 +77,7 @@ export function initializeWorkspace() {
   start('explorer', () => initializeExplorer(state), '[data-file-tree]');
   start('changes', () => initializeChanges(state), '[data-change-count]');
   start('chat', () => initializeChat(state), '[data-chat-status]');
-  localRead(key).then(value => { state.local = value; state.tabs = (value.tabs || []).slice(0, 12); state.drafts = value.drafts || {}; if (root.dataset.selectedFile) openFile(state, root.dataset.selectedFile); else if (state.tabs[0]) openFile(state, state.tabs[0]); });
+  localRead(key).then(value => { state.local = value; state.tabs = (value.tabs || []).slice(0, 12); state.drafts = value.drafts || {}; if (root.dataset.selectedFile) openFile(state, root.dataset.selectedFile); else if (state.tabs[0]) openFile(state, state.tabs[0]); else activateTab(state, AGENT_TAB); });
 }
 
 // Project pages (automations, settings) open in place of the explorer and editor. The standalone
@@ -1107,14 +1107,11 @@ function initializeEditor(state, storageKey) {
     if (state.monaco) state.monaco.editor.setTheme(event.detail?.theme === 'light' ? 'petri-light' : 'petri-dark');
   });
   window.addEventListener('beforeunload', () => disposeEditor(state), { once: true });
+  renderTabs(state);
 }
 
 function renderTabs(state) {
-  state.tabsEl.replaceChildren();
-  if (!state.tabs.length) {
-    state.tabsEl.append(el('span', 'px-4 text-xs text-ink-500', 'No file open'));
-    return;
-  }
+  state.tabsEl.replaceChildren(agentTabButton(state));
   for (const tab of state.tabs) {
     const button = el('button', `workspace-tab${tab === state.active ? ' is-active' : ''}`);
     button.type = 'button';
@@ -1129,11 +1126,11 @@ function renderTabs(state) {
   }
 }
 
-function editorEmpty(state, message = 'Select a file from the explorer, or inspect a change from the Changes view.') {
+function editorEmpty(state, message = 'Select a file from the explorer, or inspect a change from the Changes view.', title = 'Select a file', icon = 'FileCode2') {
   disposeVisibleEditor(state);
   state.host.replaceChildren();
   const box = el('div', 'workspace-editor-empty');
-  box.append(renderIcon('FileCode2', { width: 28, height: 28 }), el('h1', '', 'Select a file'), el('p', '', message));
+  box.append(renderIcon(icon, { width: 28, height: 28 }), el('h1', '', title), el('p', '', message));
   state.host.append(box);
   state.pathStatus.textContent = '—';
   state.cursor.textContent = 'Ln 1, Col 1';
@@ -1157,12 +1154,12 @@ async function ensureMonaco(state) {
       const monaco = module.monaco;
       monaco.editor.defineTheme('petri-dark', {
         base: 'vs-dark', inherit: true,
-        colors: { 'editor.background': '#070b12', 'editorGutter.background': '#0d1420', 'editor.lineHighlightBackground': '#172235', 'editorCursor.foreground': '#818cf8' },
+        colors: { 'editor.background': '#0a0c16', 'editorGutter.background': '#0a0c16', 'editor.lineHighlightBackground': '#151827', 'editorCursor.foreground': '#818cf8' },
         rules: []
       });
       monaco.editor.defineTheme('petri-light', {
         base: 'vs', inherit: true,
-        colors: { 'editor.background': '#f6f8fc', 'editorGutter.background': '#ffffff', 'editor.lineHighlightBackground': '#edf1f7', 'editorCursor.foreground': '#4f46e5' },
+        colors: { 'editor.background': '#ffffff', 'editorGutter.background': '#ffffff', 'editor.lineHighlightBackground': '#f2f3f8', 'editorCursor.foreground': '#4f46e5' },
         rules: []
       });
       monaco.editor.setTheme(document.documentElement.dataset.theme === 'light' ? 'petri-light' : 'petri-dark');
@@ -1212,7 +1209,11 @@ function activateTab(state, tab) {
   state.editorToken += 1;
   renderTabs(state);
   const draft = state.drafts[tab];
-  if (tab.startsWith('diff:')) mountDiff(state, draft?.path || tab.slice(5), draft, state.editorToken, tab);
+  if (tab === AGENT_TAB) {
+    state.agent.unseen = false;
+    renderTabs(state);
+    mountAgent(state, state.editorToken);
+  } else if (tab.startsWith('diff:')) mountDiff(state, draft?.path || tab.slice(5), draft, state.editorToken, tab);
   else mountEditor(state, tab, draft, state.editorToken);
   state.persist();
 }
@@ -1294,7 +1295,7 @@ async function mountDiff(state, path, diff, token, tab) {
     });
     state.visibleTab = tab;
     state.diffEditor.setModel(pair);
-    state.pathStatus.textContent = `${path} · Git diff`;
+    state.pathStatus.textContent = diff.label || `${path} · Git diff`;
     state.status.textContent = `${diff.status || 'Changed'} · read only`;
     state.cursor.textContent = 'Read only';
     layoutEditor(state);
@@ -1303,6 +1304,105 @@ async function mountDiff(state, path, diff, token, tab) {
     editorEmpty(state, `Monaco diff could not load: ${error.message}`);
     state.status.textContent = 'Diff unavailable';
     console.error('Petri Monaco diff failed to load', error);
+  }
+}
+
+// ---- Agent tab: a pinned, read-only live view of the file the agent is editing -----------------
+
+const AGENT_TAB = 'agent:live';
+const AGENT_EDIT_TOOLS = ['create_patch', 'create_file'];
+
+/** The file the agent touched last: a proposal, or an edit call that has no proposal yet. */
+function agentTarget(data) {
+  if (!data) return { target: null, live: false };
+  const sources = [
+    ...(data.runs || []).map(entry => ({ proposals: entry.proposals || [], turns: entry.run?.turns || [] })),
+    ...(data.workflows || []).flatMap(workflow => [
+      { proposals: workflow.proposals || [], turns: [] },
+      ...(workflow.stageRuns || []).map(run => ({ proposals: [], turns: run.turns || [] }))
+    ])
+  ];
+  const items = [];
+  let live = false;
+  for (const source of sources) {
+    for (const proposal of source.proposals) {
+      items.push({ time: proposal.appliedAt || proposal.approvedAt || proposal.createdAt || '', path: proposal.filePath, proposalId: proposal.id, status: proposal.status });
+    }
+    const answered = new Set(source.turns.filter(turn => turn.kind === 'TOOL_RESULT').map(turn => turn.toolCallId));
+    for (const turn of source.turns) {
+      if (turn.kind !== 'TOOL_CALL' || !AGENT_EDIT_TOOLS.includes(turn.toolName)) continue;
+      const path = stringValue(parsedObject(turn.content).path);
+      if (!path) continue;
+      const running = !answered.has(turn.toolCallId);
+      live = live || running;
+      if (running) items.push({ time: turn.createdAt || '', path, proposalId: null, status: 'WRITING' });
+    }
+  }
+  items.sort((left, right) => String(left.time).localeCompare(String(right.time)));
+  const last = items.at(-1) || null;
+  if (last && !last.proposalId) {
+    // The call is still running: keep showing the file's previous proposal, if there was one.
+    const earlier = [...items].reverse().find(item => item.proposalId && item.path === last.path);
+    if (earlier) return { target: { ...earlier, status: 'WRITING' }, live };
+  }
+  return { target: last, live };
+}
+
+function agentTabButton(state) {
+  const agent = state.agent;
+  const button = el('button', `workspace-tab workspace-tab-agent${state.active === AGENT_TAB ? ' is-active' : ''}`);
+  button.type = 'button';
+  button.title = agent.path ? `Agent is editing ${agent.path}` : 'Agent view: shows the file the agent is editing';
+  button.append(renderIcon('Bot'), el('span', 'font-semibold text-ink-100', 'Agent'));
+  if (agent.path) button.append(el('span', 'min-w-0 truncate text-ink-500', agent.path.split('/').at(-1)));
+  if (agent.live) button.append(el('span', 'workspace-agent-pulse'));
+  else if (agent.unseen) button.append(el('span', 'workspace-dirty-dot', '•'));
+  if (agent.fresh) { button.classList.add('is-fresh'); agent.fresh = false; }
+  button.addEventListener('click', () => activateTab(state, AGENT_TAB));
+  return button;
+}
+
+/** Called with every chat snapshot: follows the agent without ever taking focus from the user. */
+function updateAgentTab(state) {
+  const { target, live } = agentTarget(state.snapshot);
+  const agent = state.agent;
+  const path = target?.path || null;
+  const proposalId = target?.proposalId || null;
+  const moved = path !== agent.path || proposalId !== agent.proposalId;
+  const statusChanged = (target?.status || null) !== agent.status;
+  if (!moved && !statusChanged && live === agent.live) return;
+  Object.assign(agent, { path, proposalId, status: target?.status || null, live });
+  if (state.active === AGENT_TAB) {
+    if (moved) { state.editorToken += 1; mountAgent(state, state.editorToken); }
+    else if (state.status) state.status.textContent = agent.live ? 'Agent is writing · read only' : `${agent.status || 'Agent'} · read only`;
+  } else if (moved && path) agent.unseen = true;
+  if (moved && path) agent.fresh = true;
+  renderTabs(state);
+}
+
+async function mountAgent(state, token) {
+  disposeVisibleEditor(state);
+  state.host.replaceChildren();
+  const agent = state.agent;
+  state.pathStatus.textContent = agent.path ? `Agent · ${agent.path}` : 'Agent';
+  state.cursor.textContent = 'Read only';
+  if (!agent.path) {
+    state.status.textContent = 'Agent idle';
+    return editorEmpty(state, 'Files the agent proposes or edits appear here live. Open a file yourself at any time; this tab stays.', 'Waiting for the agent', 'Bot');
+  }
+  if (!agent.proposalId) {
+    state.status.textContent = 'Agent is writing · read only';
+    return editorEmpty(state, `The agent is preparing a change to ${agent.path}. The diff appears here as soon as it is proposed.`, 'Agent is writing', 'LoaderCircle');
+  }
+  try {
+    state.status.textContent = 'Loading change…';
+    const diff = await request(`${state.api}/proposals/${agent.proposalId}/diff`);
+    if (token !== state.editorToken || state.active !== AGENT_TAB) return;
+    await mountDiff(state, agent.path, { ...diff, label: `Agent · ${agent.path} · diff` }, token, AGENT_TAB);
+  } catch (error) {
+    if (token !== state.editorToken) return;
+    state.status.textContent = error.message;
+    editorEmpty(state, error.message, 'Change unavailable', 'CircleAlert');
   }
 }
 
@@ -1340,9 +1440,9 @@ function closeTab(state, tab) {
   state.diffModels.delete(tab);
   state.tabs = state.tabs.filter(value => value !== tab);
   delete state.drafts[tab];
-  state.active = state.tabs.at(-1) || null;
+  state.active = state.tabs.at(-1) || AGENT_TAB;
   renderTabs(state);
-  if (state.active) activateTab(state, state.active); else editorEmpty(state);
+  activateTab(state, state.active);
   state.persist();
 }
 
@@ -1847,6 +1947,7 @@ function renderSnapshot(state, data, preservePosition = false) {
   const wasBottom = timeline.scrollHeight - previousTop - timeline.clientHeight < 100;
   const empty = chat.querySelector('[data-chat-empty]');
   state.snapshot = data;
+  updateAgentTab(state);
   timeline.replaceChildren();
   if (!data) {
     if (empty) { timeline.append(empty); empty.hidden = false; }
@@ -2258,6 +2359,13 @@ function toolLabel(toolName, state) {
   return [entry[0], state === 'failed' ? `${entry[2]} failed` : entry[2]];
 }
 
+const TOOL_CATEGORIES = {
+  create_patch: 'write', create_file: 'write',
+  run_tests: 'exec', run_command: 'exec', install_packages: 'exec',
+  submit_review: 'review'
+};
+function toolCategory(toolName) { return TOOL_CATEGORIES[toolName] || 'read'; }
+
 function loopGuardText(run, info) {
   const who = run.workflowRole ? roleLabel(run.workflowRole) : 'The agent';
   return info.action === 'TOOLS_WITHDRAWN'
@@ -2298,7 +2406,7 @@ function renderToolTurn(run, turn) {
     title = humanizeToolName(turn.toolName || turn.kind);
     output = prettyJson(turn.content);
   }
-  const row = el('details', `workspace-tool-row is-${state}`);
+  const row = el('details', `workspace-tool-row is-${state} cat-${toolCategory(turn.toolName)}`);
   const summary = el('summary');
   const iconBox = el('span', 'workspace-tool-icon'); iconBox.append(renderIcon(icon));
   const stateIcon = el('span', 'workspace-tool-state');
