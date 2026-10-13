@@ -224,6 +224,23 @@
   .list-icon.role-tint-implementer { @apply bg-good-500/15 text-good-500; }
   .list-icon.role-tint-reviewer { @apply bg-warn-400/15 text-warn-400; }
   /* Dashboard: live project cards. State colour carries meaning; the orb pulses only while working. */
+  /* Projects page: a quiet stat line under each project. */
+  .proj-stats { @apply mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-ink-500; }
+  .proj-stats > span { @apply inline-flex items-center gap-1; }
+  .proj-stats svg { @apply size-3.5 text-ink-500; }
+  .proj-stats b { @apply font-semibold tabular-nums text-ink-300; }
+  .proj-stats .is-review b, .proj-stats .is-review svg { @apply text-warn-400; }
+  .proj-state { @apply rounded-full bg-ink-800 px-2 py-0.5 text-[11px] font-medium text-ink-300; }
+  .proj-state.is-working { @apply bg-brand-500/15 text-brand-400; }
+  .proj-state.is-waiting { @apply bg-warn-400/15 text-warn-400; }
+  .proj-state.is-attention { @apply bg-danger-500/15 text-danger-400; }
+  .proj-state.is-idle { @apply bg-transparent px-0 font-normal text-ink-500; }
+  .proj-stats > span { @apply whitespace-nowrap; }
+  .list-row.is-project { @apply relative; }
+  .list-row.is-project .list-title::after { content: ''; @apply absolute inset-0; }
+  .list-row.is-project .list-actions, .list-row.is-project .proj-stats a { @apply relative z-10; }
+  .list-row.is-project:has(.proj-state.is-waiting) { box-shadow: inset 3px 0 0 var(--color-warn-400); }
+  .list-row.is-project:has(.proj-state.is-attention) { box-shadow: inset 3px 0 0 var(--color-danger-500); }
   .search-field { @apply relative; }
   .search-field > svg { @apply pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-500; }
   .search-field > input { @apply pl-9; }

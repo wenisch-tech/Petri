@@ -27,6 +27,7 @@ import tech.wenisch.petri.git.provider.ProjectProviderSourceRepository;
 
 @Controller
 public class ProjectController {
+  private final tech.wenisch.petri.dashboard.DashboardService dashboard;
   private final ProjectRepository projects;
   private final ProjectService projectService;
   private final ProjectAccessService access;
@@ -42,7 +43,9 @@ public class ProjectController {
       GitAccountConnectionService connections,
       ProjectProviderSourceRepository sources,
       ProjectInitializationJobRepository jobs,
-      ProjectInitializationLauncher initialization) {
+      ProjectInitializationLauncher initialization,
+      tech.wenisch.petri.dashboard.DashboardService dashboard) {
+    this.dashboard = dashboard;
     this.projects = projects;
     this.projectService = projectService;
     this.access = access;
@@ -54,7 +57,14 @@ public class ProjectController {
 
   @GetMapping("/projects")
   String projects(Model model, Authentication authentication, Principal principal) {
-    var ownedProjects = access.projects(principal.getName());
+    var overview = dashboard.overview(principal.getName());
+    var urgency = overview.projects().stream().collect(Collectors.toMap(
+        value -> value.id(), value -> value.state().ordinal(), (first, second) -> first));
+    // Needs-you first: attention, waiting, working, idle; creation order within a group.
+    var ownedProjects = access.projects(principal.getName()).stream()
+        .sorted(java.util.Comparator.comparingInt(
+            project -> urgency.getOrDefault(project.getId(), Integer.MAX_VALUE)))
+        .toList();
     var accountById = connections.list(principal.getName()).stream()
         .collect(Collectors.toMap(value -> value.id(), value -> value));
     model.addAttribute("projects", ownedProjects);
@@ -73,6 +83,15 @@ public class ProjectController {
         .collect(Collectors.toMap(
             ProjectProviderSource::getProjectId,
             source -> accountById.get(source.getConnectionId()))));
+    model.addAttribute("stats", overview.projects().stream().collect(
+        Collectors.toMap(value -> value.id(), value -> value, (first, second) -> first)));
+    // Counted in projects, so the totals agree with the state chip of every row.
+    long working = overview.projects().stream().filter(value -> value.state().name().equals("WORKING")).count();
+    long waiting = overview.projects().stream().filter(value -> value.state().name().equals("WAITING")).count();
+    long attention = overview.projects().stream().filter(value -> value.state().name().equals("ATTENTION")).count();
+    model.addAttribute("totals", java.util.Map.of(
+        "projects", overview.projects().size(), "working", working, "waiting", waiting,
+        "attention", attention, "pendingChanges", overview.totals().pendingChanges()));
     model.addAttribute("canManageProjects", true);
     model.addAttribute("isInstanceAdmin", authentication.getAuthorities().stream()
         .anyMatch(authority -> "ROLE_INSTANCE_ADMIN".equals(authority.getAuthority())));

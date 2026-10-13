@@ -4,7 +4,7 @@
 <body>
 <header th:replace="~{fragments/layout :: topbar('projects')}"></header>
 
-<main class="page">
+<main class="page" data-auto-refresh>
   <div class="page-header">
     <div>
       <h1 class="page-title">Projects</h1>
@@ -17,6 +17,17 @@
 
   <div th:replace="~{fragments/layout :: alert('success', ${createdProject} ? |${createdProject} was added.| : null)}"></div>
 
+  <div data-auto-refresh-content>
+  <div class="dash-toolbar" th:if="${!#lists.isEmpty(projects)}">
+    <div class="dash-pulse">
+      <span class="dash-pulse-item"><i data-lucide="FolderGit2"></i><strong th:text="${totals.projects}">0</strong><span>projects</span></span>
+      <span class="dash-pulse-item is-working" th:classappend="${totals.working == 0} ? 'is-zero'"><i data-lucide="LoaderCircle"></i><strong th:text="${totals.working}">0</strong><span>working</span></span>
+      <span class="dash-pulse-item is-waiting" th:classappend="${totals.waiting == 0} ? 'is-zero'"><i data-lucide="Hourglass"></i><strong th:text="${totals.waiting}">0</strong><span>waiting for you</span></span>
+      <span class="dash-pulse-item" th:classappend="${totals.pendingChanges == 0} ? 'is-zero'"><i data-lucide="FileDiff"></i><strong th:text="${totals.pendingChanges}">0</strong><span>changes to review</span></span>
+    </div>
+  </div>
+
+
   <div th:if="${#lists.isEmpty(projects)}" class="empty-state">
     <i data-lucide="FolderGit2"></i>
     <h2>No projects yet</h2>
@@ -25,8 +36,8 @@
   </div>
 
   <ul th:unless="${#lists.isEmpty(projects)}" class="list">
-    <li th:each="project : ${projects}" class="list-row"
-        th:with="source=${projectSources[project.id]}, connection=${projectConnections[project.id]}, job=${initializationJobs[project.id]}">
+    <li th:each="project : ${projects}" class="list-row is-project"
+        th:with="source=${projectSources[project.id]}, connection=${projectConnections[project.id]}, job=${initializationJobs[project.id]}, stat=${stats[project.id]}">
       <span class="list-icon"><i data-lucide="FolderGit2"></i></span>
       <div class="list-main">
         <a class="list-title hover:text-brand-400" th:href="@{/workspace/projects/{id}(id=${project.id})}" th:text="${project.name}">Project</a>
@@ -38,13 +49,23 @@
           <span><i data-lucide="GitBranch"></i><span th:text="${project.defaultBranch}">main</span></span>
         </span>
         <span th:if="${job != null and job.errorMessage != null}" class="mt-1 block text-xs text-danger-400" th:text="${job.errorMessage}">Error</span>
+        <div class="proj-stats" th:if="${stat != null}">
+          <span class="proj-state" th:classappend="|is-${#strings.toLowerCase(stat.state)}|"
+                th:text="${stat.state.name() == 'WORKING'} ? 'Working' : (${stat.state.name() == 'WAITING'} ? 'Waiting for you' : (${stat.state.name() == 'ATTENTION'} ? 'Needs attention' : 'Idle'))">Idle</span>
+          <span title="Active worktrees"><i data-lucide="GitBranch"></i><b th:text="${stat.activeWorktrees}">0</b><span th:text="${stat.activeWorktrees == 1} ? 'worktree' : 'worktrees'">worktrees</span></span>
+          <span title="All agent runs on this project"><i data-lucide="Workflow"></i><b th:text="${stat.runsTotal}">0</b><span th:text="${stat.runsTotal == 1} ? 'run' : 'runs'">runs</span><span th:if="${stat.runsThisWeek > 0 and stat.runsThisWeek != stat.runsTotal}" class="text-ink-500" th:text="|· ${stat.runsThisWeek} this week|">· 3 this week</span></span>
+          <span th:if="${stat.pendingChanges > 0}" class="is-review" title="Proposed changes waiting for approval"><i data-lucide="FileDiff"></i><b th:text="${stat.pendingChanges}">0</b><span>to review</span></span>
+          <span th:if="${#lists.size(stat.automations) > 0}" title="Enabled automations"><i data-lucide="Bot"></i><b th:text="${#lists.size(stat.automations)}">0</b><span th:text="${#lists.size(stat.automations) == 1} ? 'automation' : 'automations'">automations</span></span>
+          <span th:if="${stat.lastActivityAt != null}" title="Last agent activity"><i data-lucide="Clock"></i><time data-relative th:attr="datetime=${stat.lastActivityAt}" th:text="${stat.lastActivityAt}">time</time></span>
+          <span th:if="${stat.lastActivityAt == null}">No activity yet</span>
+        </div>
       </div>
       <span th:if="${source != null and !source.canWrite}" class="badge badge-warn">Read only</span>
       <span th:if="${connection != null and connection.status.name() != 'ACTIVE'}" class="badge badge-warn" th:text="|Account ${#strings.toLowerCase(connection.status)}|">Account expired</span>
       <span th:if="${job != null and job.status.name() != 'SUCCEEDED' and job.status.name() != 'COMPLETED'}" class="badge"
             th:classappend="${job.status.name() == 'FAILED'} ? 'badge-danger' : 'badge-brand'" th:text="${#strings.capitalize(#strings.toLowerCase(job.status))}">Pending</span>
       <span th:if="${project.status.name() != 'ACTIVE'}" class="badge badge-neutral" th:text="${project.status}">ARCHIVED</span>
-      <div class="list-actions" th:if="${canManageProjects}">
+      <div class="list-actions basis-full justify-end sm:basis-auto" th:if="${canManageProjects}">
         <form th:if="${job != null and job.status.name() == 'FAILED'}" method="post" th:action="@{/projects/{id}/initialization/retry(id=${project.id})}">
           <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
           <button class="btn-ghost" type="submit"><i data-lucide="RefreshCw"></i> Retry</button>
@@ -55,6 +76,7 @@
       </div>
     </li>
   </ul>
+  </div>
 </main>
 </body>
 </html>
