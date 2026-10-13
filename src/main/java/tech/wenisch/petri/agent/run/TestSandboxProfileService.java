@@ -114,6 +114,17 @@ public class TestSandboxProfileService {
     return profile;
   }
 
+  /** What a project currently uses; without a saved setting it follows the default profile. */
+  @Transactional(readOnly = true)
+  public ProjectSandboxChoice projectChoice(UUID projectId) {
+    return settings.findById(projectId)
+        .map(value -> new ProjectSandboxChoice(value.profileId(), value.networkEnabled(),
+            value.autoApprovePackageInstalls(), value.autoApproveTerminalCommands()))
+        .orElseGet(() -> new ProjectSandboxChoice(
+            profiles.findFirstByDefaultProfileTrueAndEnabledTrue()
+                .map(TestSandboxProfile::getId).orElse(null), null, false, false));
+  }
+
   /** Project-wide approval switches shown in the workspace (default off). */
   @Transactional(readOnly = true)
   public ProjectApprovalSettings approvalSettings(UUID projectId) {

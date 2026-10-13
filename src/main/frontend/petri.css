@@ -223,6 +223,103 @@
   .list-icon.role-tint-planner { @apply bg-cyan-500/15 text-cyan-500; }
   .list-icon.role-tint-implementer { @apply bg-good-500/15 text-good-500; }
   .list-icon.role-tint-reviewer { @apply bg-warn-400/15 text-warn-400; }
+  /* Dashboard: live project cards. State colour carries meaning; the orb pulses only while working. */
+  .search-field { @apply relative; }
+  .search-field > svg { @apply pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-ink-500; }
+  .search-field > input { @apply pl-9; }
+  .dash-toolbar { @apply mb-5 flex flex-wrap items-center justify-between gap-3; }
+  .dash-pulse { @apply flex flex-wrap items-center gap-2; }
+  .dash-pulse-item { @apply inline-flex items-center gap-2 rounded-full border border-ink-700/70 bg-card px-3.5 py-2 text-sm text-ink-300; }
+  .dash-pulse-item svg { @apply size-3.5; }
+  .dash-pulse-item strong { @apply text-base font-semibold tabular-nums text-ink-100; }
+  .dash-pulse-item.is-working:not(.is-zero) { @apply border-brand-500/30 bg-brand-500/10 text-brand-400; }
+  .dash-pulse-item.is-waiting:not(.is-zero) { @apply border-warn-400/30 bg-warn-400/10 text-warn-400; }
+  .dash-pulse-item.is-attention:not(.is-zero) { @apply border-danger-500/30 bg-danger-500/10 text-danger-400; }
+  .dash-pulse-item.is-zero { @apply opacity-60; }
+  a.dash-pulse-item { @apply transition-colors hover:border-ink-500; }
+  .dash-pulse-item.is-working:not(.is-zero) svg { @apply animate-spin; }
+  .dash-pulse-note { @apply px-1 text-xs text-ink-500; }
+  .dash-live { @apply inline-flex items-center gap-1.5 text-xs font-medium text-ink-500; }
+  .dash-live i { @apply size-1.5 rounded-full bg-good-500; animation: pt-live 2s ease-in-out infinite; }
+  .dash-live.is-offline i { @apply bg-warn-400; animation: none; }
+  @keyframes pt-live { 50% { opacity: .35; } }
+  .dash-grid { @apply grid items-start gap-4 md:grid-cols-2; }
+  .dash-card { @apply relative flex min-w-0 flex-col overflow-hidden rounded-xl border border-ink-700/70 bg-card; transition: border-color .25s, box-shadow .25s; }
+  .dash-card.is-new { animation: pt-card-in .35s cubic-bezier(.16, 1, .3, 1) var(--dash-delay, 0ms) both; }
+  .dash-card:hover { @apply border-ink-500/60; }
+  .dash-card.is-working { @apply border-brand-500/35; }
+  .dash-card.is-waiting { @apply border-warn-400/35; }
+  .dash-card.is-attention { @apply border-danger-500/40; }
+  @keyframes pt-card-in { from { opacity: 0; transform: translateY(8px); } }
+  @keyframes pt-card-flash { from { box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-brand-500) 35%, transparent); } }
+  .dash-card-header { @apply flex items-start gap-3 px-4 pt-4; }
+  .dash-orb { @apply relative grid size-10 shrink-0 place-items-center rounded-xl bg-ink-800 text-ink-500; }
+  .dash-orb svg { @apply size-5; }
+  .dash-card.is-working .dash-orb { @apply bg-brand-500/15 text-brand-400; }
+  .dash-card.is-working .dash-orb::after { content: ''; @apply absolute inset-0 rounded-xl border border-brand-400/60; animation: pt-orb 1.8s ease-out infinite; }
+  .dash-card.is-working .dash-orb svg { @apply animate-spin; }
+  .dash-card.is-waiting .dash-orb { @apply bg-warn-400/15 text-warn-400; }
+  .dash-card.is-attention .dash-orb { @apply bg-danger-500/15 text-danger-400; }
+  .dash-card.is-idle .dash-orb { @apply bg-good-500/10 text-good-500; }
+  @keyframes pt-orb { from { opacity: .9; transform: scale(1); } to { opacity: 0; transform: scale(1.35); } }
+  .dash-title { @apply block truncate text-[15px] font-semibold leading-5 text-ink-100 hover:text-brand-400; }
+  .dash-headline { @apply mt-0.5 truncate text-[13px] leading-5 text-ink-500; }
+  a.dash-repo { @apply block text-ink-300 underline decoration-ink-700 underline-offset-2 hover:text-brand-400 hover:decoration-brand-400; }
+  .dash-time { @apply shrink-0 pt-0.5 text-[11px] text-ink-500; }
+  .dash-automations { @apply flex flex-wrap items-center gap-1.5 px-4 pt-3; }
+  .dash-automations[hidden] { @apply hidden; }
+  .dash-automations-label { @apply mr-1 text-[11px] font-medium uppercase tracking-wide text-ink-500; }
+  .dash-automation { @apply inline-flex max-w-full items-center gap-1.5 rounded-full border border-ink-700/70 px-2.5 py-1 text-[11px] font-medium text-ink-300 transition-colors hover:bg-raised; }
+  .dash-automation span { @apply truncate; }
+  .dash-dot { @apply size-1.5 shrink-0 rounded-full bg-ink-500; }
+  [data-tone="good"] > .dash-dot { @apply bg-good-500; }
+  [data-tone="danger"] > .dash-dot { @apply bg-danger-500; }
+  [data-tone="warn"] > .dash-dot { @apply bg-warn-400; }
+  [data-tone="brand"] > .dash-dot { @apply bg-brand-400; }
+  .dash-actions { @apply mt-auto flex flex-wrap items-center gap-1.5 border-t border-ink-700/60 px-3 py-2.5; }
+  .dash-action { @apply inline-flex h-8 items-center gap-1.5 rounded-lg px-2.5 text-xs font-medium text-ink-300 transition-colors hover:bg-raised hover:text-ink-100; }
+  .dash-action svg { @apply size-4; }
+  .dash-action.is-primary { @apply bg-brand-500/10 text-brand-400 hover:bg-brand-500/20; }
+  .dash-message { @apply mt-1.5 flex items-start gap-1.5 pl-5 text-xs leading-5 text-ink-500; }
+  .dash-message[hidden], .dash-detail[hidden], .dash-result[hidden], .dash-changes[hidden] { @apply hidden; }
+  .dash-message > svg { @apply mt-0.5 size-3.5 shrink-0; }
+  .dash-message-text { @apply line-clamp-2 min-w-0 flex-1 text-ink-300; }
+  .dash-message > time { @apply shrink-0 text-[11px]; }
+  .dash-result { @apply mt-1.5 block pl-5 text-[11px] text-ink-500; }
+  .dash-result[data-tone="danger"] { @apply text-danger-400; }
+  .dash-result[data-tone="good"] { @apply text-good-500; }
+  .dash-chip-icon { @apply inline-grid; }
+  .dash-card::before { content: ''; @apply absolute inset-x-0 top-0 h-[3px] bg-transparent transition-colors; }
+  .dash-card.is-working::before { @apply bg-brand-500; }
+  .dash-card.is-waiting::before { @apply bg-warn-400; }
+  .dash-card.is-attention::before { @apply bg-danger-500; }
+  .dash-card.is-idle::before { @apply bg-good-500/50; }
+  .dash-stats { @apply mt-4 grid grid-cols-3 gap-px border-y border-ink-700/60 bg-ink-700/40; }
+  .dash-stat { @apply flex flex-col-reverse gap-0.5 bg-card px-3 py-2.5; }
+  .dash-stat dd { @apply text-base font-semibold tabular-nums text-ink-100; }
+  .dash-stat dt { @apply text-[11px] text-ink-500; }
+  .dash-stat.is-zero dd { @apply font-medium text-ink-500; }
+  .dash-worktrees { @apply space-y-1 p-2; }
+  .dash-worktree { @apply block rounded-lg px-2.5 py-2 transition-colors hover:bg-raised; }
+  .dash-worktree-head { @apply flex flex-wrap items-center gap-x-2 gap-y-1 text-xs; }
+  .dash-worktree-head > svg { @apply size-3.5 shrink-0 text-ink-500; }
+  .dash-branch { @apply min-w-0 max-w-[12rem] truncate font-mono text-[12px] font-medium text-ink-100; }
+  .dash-chip { @apply inline-flex items-center gap-1 rounded-full bg-ink-800 px-2 py-0.5 text-[11px] font-medium text-ink-300; }
+  .dash-chip svg { @apply size-3; }
+  .dash-worktree.is-working .dash-chip { @apply bg-brand-500/15 text-brand-400; }
+  .dash-worktree.is-working .dash-chip svg { @apply animate-spin; }
+  .dash-worktree.is-waiting .dash-chip { @apply bg-warn-400/15 text-warn-400; }
+  .dash-worktree.is-attention .dash-chip { @apply bg-danger-500/15 text-danger-400; }
+  .dash-changes { @apply ml-auto inline-flex items-center gap-1 text-[11px] font-semibold tabular-nums text-ink-300; }
+  .dash-changes svg { @apply size-3.5; }
+  .dash-detail { @apply mt-1 line-clamp-2 block pl-5 text-xs leading-5 text-ink-500; }
+  .dash-idle[hidden] { @apply hidden; }
+  .dash-idle { @apply border-t border-ink-700/60 text-xs; }
+  .dash-idle > summary { @apply cursor-pointer list-none px-4 py-2.5 font-medium text-ink-500 transition-colors hover:text-ink-100; }
+  .dash-idle > summary::-webkit-details-marker { display: none; }
+  .dash-idle > summary::before { content: '+ '; }
+  .dash-idle[open] > summary::before { content: '− '; }
+  .dash-empty { @apply px-2.5 py-3 text-xs text-ink-500; }
   .subnav { @apply mb-6 flex gap-1 overflow-x-auto border-b border-ink-700/70; }
   .subnav a { @apply -mb-px inline-flex shrink-0 items-center gap-2 border-b-2 border-transparent px-3 py-2.5 text-sm font-medium text-ink-500 transition hover:text-ink-100; }
   .subnav a svg { @apply size-4; }

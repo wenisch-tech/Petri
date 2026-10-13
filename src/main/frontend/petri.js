@@ -1,6 +1,7 @@
 import Alpine from 'alpinejs';
 import { hydrateIcons } from './icons';
 import { initializeWorkspace } from './workspace';
+import { initializeDashboard } from './dashboard';
 import { hydrateMarkdown, scheduleMarkdown } from './markdown';
 
 const storedTheme = (() => {
@@ -65,8 +66,25 @@ function localizeTimes(scope = document) {
   });
 }
 
+/** `<time data-relative>` shows "5 min ago"; the full local date stays in the tooltip. */
+function relativeTimes(scope = document) {
+  const full = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
+  scope.querySelectorAll('time[data-relative]').forEach(element => {
+    const value = new Date(element.getAttribute('datetime'));
+    if (Number.isNaN(value.getTime())) return;
+    const seconds = Math.max(0, Math.round((Date.now() - value.getTime()) / 1000));
+    const text = seconds < 45 ? 'just now' : seconds < 3600 ? `${Math.round(seconds / 60)} min ago`
+      : seconds < 86400 ? `${Math.round(seconds / 3600)} h ago` : `${Math.round(seconds / 86400)} d ago`;
+    if (element.textContent !== text) element.textContent = text;
+    element.title = full.format(value);
+  });
+}
+
 function bootPetri() {
   hydrateIcons();
+  relativeTimes();
+  setInterval(() => relativeTimes(), 30000);
+  document.querySelector('.app-nav a.is-active')?.scrollIntoView({ inline: 'center', block: 'nearest' });
   initializeDialogs();
   // Pages that follow something in progress (an agent run) reload themselves until it ends.
   if (document.querySelector('[data-live-refresh]') && !document.querySelector('[data-workspace]')) {
@@ -173,6 +191,7 @@ function bootPetri() {
   });
 
   initializeWorkspace();
+  initializeDashboard();
 }
 
 if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', bootPetri, { once: true });
@@ -213,3 +232,30 @@ document.addEventListener('change', event => {
   };
   note.hidden = read('IMPLEMENTER') !== read('REVIEWER');
 });
+
+// Server-rendered overview pages refresh their content in place while they are visible.
+function initializeAutoRefresh() {
+  const host = document.querySelector('[data-auto-refresh]');
+  const content = host?.querySelector('[data-auto-refresh-content]');
+  if (!content) return;
+  let last = null; // the server's markup, before this page localised times or icons
+  setInterval(async () => {
+    if (document.hidden || content.contains(document.activeElement)) return;
+    try {
+      const response = await fetch(location.href, { headers: { Accept: 'text/html' }, credentials: 'same-origin', cache: 'no-store' });
+      if (!response.ok) return;
+      const next = new DOMParser().parseFromString(await response.text(), 'text/html')
+        .querySelector('[data-auto-refresh-content]');
+      if (!next) return;
+      if (last === null) { last = next.innerHTML; return; }
+      if (next.innerHTML === last) return;
+      content.innerHTML = next.innerHTML;
+      last = next.innerHTML;
+      hydrateIcons(content);
+      localizeTimes(content);
+      relativeTimes(content);
+    } catch { /* the next tick tries again */ }
+  }, 8000);
+  setTimeout(() => { if (last === null) fetch(location.href, { credentials: 'same-origin' }).then(r => r.text()).then(html => { const n = new DOMParser().parseFromString(html, 'text/html').querySelector('[data-auto-refresh-content]'); if (n && last === null) last = n.innerHTML; }).catch(() => {}); }, 1500);
+}
+document.addEventListener('DOMContentLoaded', initializeAutoRefresh);

@@ -19,6 +19,7 @@
   <div th:replace="~{fragments/layout :: alert('success', ${credentialSaved} ? 'Git credentials were encrypted and saved.' : null)}"></div>
   <div th:replace="~{fragments/layout :: alert('success', ${credentialRemoved} ? 'Git credentials were removed.' : null)}"></div>
   <div th:replace="~{fragments/layout :: alert('success', ${mirrorSynchronized} ? 'Repository mirror synchronized.' : null)}"></div>
+  <div th:replace="~{fragments/layout :: alert('success', ${sandboxSaved} ? 'Sandbox settings saved.' : null)}"></div>
   <div th:replace="~{fragments/layout :: alert('error', ${mirrorError})}"></div>
 
   <section class="card">
@@ -51,6 +52,42 @@
         <button class="btn-secondary" type="submit"><i data-lucide="RefreshCw"></i> <span th:text="${mirror.initialized} ? 'Synchronize' : 'Clone mirror'">Clone mirror</span></button>
       </form>
     </div>
+  </section>
+
+  <section class="card mt-4" th:if="${!#lists.isEmpty(sandboxProfiles)}">
+    <form method="post" th:action="@{/projects/{id}/sandbox(id=${project.id})}">
+      <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+      <div class="card-body space-y-5">
+        <div>
+          <h2 class="section-title">Test sandbox</h2>
+          <p class="section-description">Where this project's tests and agent commands run, and what the agent may do without asking.</p>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <div>
+            <label class="label" for="sandbox-profile">Profile</label>
+            <select id="sandbox-profile" class="field" name="profileId" required>
+              <option th:each="profile : ${sandboxProfiles}" th:value="${profile.id}" th:text="${profile.name}"
+                      th:selected="${profile.id == sandboxChoice.profileId}">Profile</option>
+            </select>
+          </div>
+          <div>
+            <label class="label" for="sandbox-network">Network</label>
+            <select id="sandbox-network" class="field" name="networkMode">
+              <option value="PROFILE" th:selected="${sandboxChoice.networkEnabled == null}">Use profile setting</option>
+              <option value="ENABLED" th:selected="${sandboxChoice.networkEnabled == true}">Always allow</option>
+              <option value="DISABLED" th:selected="${sandboxChoice.networkEnabled == false}">Always block</option>
+            </select>
+          </div>
+        </div>
+        <div class="space-y-2">
+          <label class="check"><input type="checkbox" name="autoApprovePackageInstalls" value="true" th:checked="${sandboxChoice.autoApprovePackageInstalls}"><span>Auto-approve package installs <span class="hint !mt-0">Agents may install Alpine packages without asking.</span></span></label>
+          <label class="check"><input type="checkbox" name="autoApproveTerminalCommands" value="true" th:checked="${sandboxChoice.autoApproveTerminalCommands}"><span>Auto-approve agent terminal commands <span class="hint !mt-0">Commands run as a user confined to the worktree.</span></span></label>
+        </div>
+      </div>
+      <div class="card-footer">
+        <button class="btn-primary" type="submit"><i data-lucide="Save"></i> Save sandbox settings</button>
+      </div>
+    </form>
   </section>
 
   <section class="card mt-4">

@@ -53,7 +53,7 @@
     <nav class="app-nav" aria-label="Primary navigation">
       <a href="/" th:classappend="${active == 'home'} ? 'is-active'" th:attr="aria-current=${active == 'home'} ? 'page'">Dashboard</a>
       <a href="/projects" th:classappend="${active == 'projects'} ? 'is-active'" th:attr="aria-current=${active == 'projects'} ? 'page'">Projects</a>
-      <a href="/runs" th:classappend="${active == 'runs'} ? 'is-active'" th:attr="aria-current=${active == 'runs'} ? 'page'">Runs</a>
+      <a href="/automations" th:classappend="${active == 'automations'} ? 'is-active'" th:attr="aria-current=${active == 'automations'} ? 'page'">Automations</a>
     </nav>
     <div class="app-topbar-actions">
       <a th:if="${isInstanceAdmin}" href="/admin" class="app-admin-link" th:classappend="${active == 'admin'} ? 'is-active'" title="Instance administration">
@@ -102,9 +102,9 @@
 <span th:fragment="statusBadge(status)" class="badge whitespace-nowrap"
       th:with="value=${status == null ? '' : status.toString()}"
       th:classappend="${ {'FAILED','ERROR','REJECTED'}.contains(value) } ? 'badge-danger'
-        : (${ {'PROPOSED','BUDGET_EXHAUSTED','CONFLICT','TIMED_OUT','CANCELLATION_REQUESTED'}.contains(value) } ? 'badge-warn'
-        : (${ {'PENDING','RUNNING','APPROVED'}.contains(value) } ? 'badge-brand'
-        : (${ {'COMPLETED','APPLIED','PASSED','ACTIVE'}.contains(value) } ? '' : 'badge-neutral')))"
+        : (${ {'PROPOSED','BUDGET_EXHAUSTED','CONFLICT','TIMED_OUT','CANCELLATION_REQUESTED','AWAITING_APPROVAL'}.contains(value) } ? 'badge-warn'
+        : (${ {'PENDING','RUNNING','APPROVED','QUEUED'}.contains(value) } ? 'badge-brand'
+        : (${ {'COMPLETED','APPLIED','PASSED','ACTIVE','POSTED'}.contains(value) } ? '' : 'badge-neutral')))"
       th:text="${#strings.capitalize(#strings.toLowerCase(#strings.replace(value, '_', ' ')))}">Status</span>
 
 <!-- Flash message. `kind` is success, error, warning or info. -->

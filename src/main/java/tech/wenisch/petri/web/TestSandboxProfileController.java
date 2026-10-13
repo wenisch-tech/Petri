@@ -12,17 +12,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import tech.wenisch.petri.agent.run.TestBuildSystem;
 import tech.wenisch.petri.agent.run.TestSandboxProfileService;
-import tech.wenisch.petri.project.ProjectRepository;
 
 @Controller
 public class TestSandboxProfileController {
   private final TestSandboxProfileService profiles;
-  private final ProjectRepository projects;
 
-  public TestSandboxProfileController(
-      TestSandboxProfileService profiles, ProjectRepository projects) {
+  public TestSandboxProfileController(TestSandboxProfileService profiles) {
     this.profiles = profiles;
-    this.projects = projects;
   }
 
   @GetMapping("/sandbox-profiles")
@@ -33,7 +29,6 @@ public class TestSandboxProfileController {
     all.forEach(profile -> environments.put(profile.getId(), profiles.maskedEnvironment(profile)));
     model.addAttribute("environments", environments);
     model.addAttribute("buildSystems", TestBuildSystem.values());
-    model.addAttribute("projects", projects.findAllByOrderByCreatedAtDesc());
     return "sandbox-profiles";
   }
 
@@ -61,26 +56,6 @@ public class TestSandboxProfileController {
     } catch (RuntimeException exception) {
       redirect.addFlashAttribute("error", exception.getMessage());
     }
-    return "redirect:/sandbox-profiles";
-  }
-
-  @PostMapping("/sandbox-profiles/project")
-  String configureProject(
-      @RequestParam UUID projectId,
-      @RequestParam UUID profileId,
-      @RequestParam String networkMode,
-      @RequestParam(defaultValue = "false") boolean autoApprovePackageInstalls,
-      @RequestParam(defaultValue = "false") boolean autoApproveTerminalCommands,
-      Principal principal,
-      RedirectAttributes redirect) {
-    Boolean network = switch (networkMode) {
-      case "ENABLED" -> true;
-      case "DISABLED" -> false;
-      default -> null;
-    };
-    profiles.configureProject(projectId, profileId, network, autoApprovePackageInstalls,
-        autoApproveTerminalCommands, principal.getName());
-    redirect.addFlashAttribute("notice", "Project sandbox configured");
     return "redirect:/sandbox-profiles";
   }
 }

@@ -7,18 +7,22 @@
 <main class="page">
   <div class="page-header">
     <div>
-      <h1 class="page-title">Welcome back</h1>
-      <p class="page-description">Signed in as <span class="text-ink-300" th:text="${username}">user</span>. Pick up a project or start a new one.</p>
+      <h1 class="page-title">Dashboard</h1>
+      <p class="page-description">What every project is doing right now, and what waits for you.</p>
     </div>
     <div class="page-actions">
       <a class="btn-primary" href="/projects/new"><i data-lucide="Plus"></i> Add project</a>
     </div>
   </div>
 
-  <div class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_20rem]">
+  <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_18rem]" data-dashboard>
     <section class="min-w-0">
+      <div class="dash-toolbar">
+        <div class="dash-pulse" data-dashboard-pulse aria-live="polite"></div>
+        <span class="dash-live" data-dashboard-live title="The dashboard refreshes itself"><i></i><span>Live</span></span>
+      </div>
       <div class="section-header">
-        <div><h2 class="section-title">Recent projects</h2></div>
+        <div><h2 class="section-title">Projects</h2></div>
         <a th:unless="${#lists.isEmpty(recentProjects)}" class="text-sm font-medium text-brand-400 hover:underline" href="/projects"
            th:text="${projectCount == 1} ? 'View all 1 project' : |View all ${projectCount} projects|">View all projects</a>
       </div>
@@ -28,7 +32,8 @@
         <p>Import a repository from a connected Git account or register one by URL.</p>
         <a class="btn-primary" href="/projects/new"><i data-lucide="Plus"></i> Add project</a>
       </div>
-      <ul th:unless="${#lists.isEmpty(recentProjects)}" class="list">
+      <div class="dash-grid" data-dashboard-projects th:unless="${#lists.isEmpty(recentProjects)}">
+      <ul class="list col-span-full">
         <li th:each="project : ${recentProjects}">
           <a class="list-row list-row-link" th:href="@{/workspace/projects/{id}(id=${project.id})}">
             <span class="list-icon"><i data-lucide="FolderGit2"></i></span>
@@ -42,6 +47,7 @@
           </a>
         </li>
       </ul>
+      </div>
     </section>
 
     <nav class="space-y-3" aria-labelledby="shortcuts-title">
@@ -50,9 +56,9 @@
         <span class="list-icon"><i data-lucide="PlugZap"></i></span>
         <span><span class="block text-sm font-semibold">Git accounts</span><span class="block text-xs text-ink-500">Connect GitHub, GitLab or Forgejo</span></span>
       </a>
-      <a class="card card-body flex items-center gap-3 transition hover:border-ink-500 hover:bg-ink-800/50" href="/runs">
-        <span class="list-icon"><i data-lucide="Workflow"></i></span>
-        <span><span class="block text-sm font-semibold">Agent runs</span><span class="block text-xs text-ink-500">Inspect turns, changes and tests</span></span>
+      <a class="card card-body flex items-center gap-3 transition hover:border-ink-500 hover:bg-ink-800/50" href="/model-providers">
+        <span class="list-icon"><i data-lucide="Cpu"></i></span>
+        <span><span class="block text-sm font-semibold">LLM providers</span><span class="block text-xs text-ink-500">Keys, models and your own endpoints</span></span>
       </a>
       <a class="card card-body flex items-center gap-3 transition hover:border-ink-500 hover:bg-ink-800/50" href="/api-keys">
         <span class="list-icon"><i data-lucide="KeyRound"></i></span>

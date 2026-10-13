@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Automations')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('automations')}"></header>
+
+<main class="page" data-auto-refresh
+      th:with="statusParam=${overview.filter == 'all' ? '' : overview.filter}, projectParam=${overview.projectId == null ? '' : overview.projectId.toString()}">
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Automations</h1>
+      <p class="page-description">What your automations did most recently, across all projects.</p>
+    </div>
+  </div>
+
+  <div data-auto-refresh-content>
+    <div class="dash-toolbar">
+      <div class="dash-pulse">
+        <a class="dash-pulse-item is-working" th:classappend="${overview.counts.active == 0} ? 'is-zero'" th:href="@{/automations(status='active',q=${overview.query},project=${projectParam})}"><i data-lucide="LoaderCircle"></i><strong th:text="${overview.counts.active}">0</strong><span>running</span></a>
+        <a class="dash-pulse-item is-waiting" th:classappend="${overview.counts.awaitingApproval == 0} ? 'is-zero'" th:href="@{/automations(status='approval',q=${overview.query},project=${projectParam})}"><i data-lucide="Hourglass"></i><strong th:text="${overview.counts.awaitingApproval}">0</strong><span>waiting for approval</span></a>
+        <a class="dash-pulse-item is-attention" th:classappend="${overview.counts.failedToday == 0} ? 'is-zero'" th:href="@{/automations(status='failed',q=${overview.query},project=${projectParam})}"><i data-lucide="TriangleAlert"></i><strong th:text="${overview.counts.failedToday}">0</strong><span>failed in 24 h</span></a>
+        <span class="dash-pulse-note" th:text="|${overview.counts.postedWeek} posted in 7 d|">0 posted</span>
+      </div>
+    </div>
+
+    <section class="section">
+      <div class="section-header">
+        <div><h2 class="section-title">Runs</h2>
+          <p class="section-description" th:text="${overview.total == 0} ? 'Nothing matches.' : |${overview.from}–${overview.to} of ${overview.total}|">1–20 of 87</p></div>
+        <nav class="flex flex-wrap items-center gap-1 text-xs" aria-label="Filter runs">
+          <a class="rounded-md px-2.5 py-1.5 font-medium" th:attr="aria-current=${overview.filter == 'all'} ? 'true'" th:classappend="${overview.filter == 'all'} ? 'bg-raised text-ink-100' : 'text-ink-300 hover:text-ink-100'" th:href="@{/automations(q=${overview.query},project=${projectParam})}">All</a>
+          <a class="rounded-md px-2.5 py-1.5 font-medium" th:attr="aria-current=${overview.filter == 'active'} ? 'true'" th:classappend="${overview.filter == 'active'} ? 'bg-raised text-ink-100' : 'text-ink-300 hover:text-ink-100'" th:href="@{/automations(status='active',q=${overview.query},project=${projectParam})}">Running</a>
+          <a class="rounded-md px-2.5 py-1.5 font-medium" th:attr="aria-current=${overview.filter == 'approval'} ? 'true'" th:classappend="${overview.filter == 'approval'} ? 'bg-raised text-ink-100' : 'text-ink-300 hover:text-ink-100'" th:href="@{/automations(status='approval',q=${overview.query},project=${projectParam})}">Needs approval</a>
+          <a class="rounded-md px-2.5 py-1.5 font-medium" th:attr="aria-current=${overview.filter == 'failed'} ? 'true'" th:classappend="${overview.filter == 'failed'} ? 'bg-raised text-ink-100' : 'text-ink-300 hover:text-ink-100'" th:href="@{/automations(status='failed',q=${overview.query},project=${projectParam})}">Failed</a>
+        </nav>
+      </div>
+
+      <form method="get" action="/automations" class="mb-4 flex flex-wrap items-center gap-2" role="search">
+        <input type="hidden" name="status" th:value="${statusParam}" th:disabled="${statusParam == ''}">
+        <div class="search-field min-w-0 flex-1 basis-60">
+          <i data-lucide="Search" aria-hidden="true"></i>
+          <input class="field text-sm" type="search" name="q" th:value="${overview.query}" placeholder="Search title, PR number, commit or error" aria-label="Search automation runs" maxlength="100">
+        </div>
+        <select class="field !w-auto text-sm" name="project" aria-label="Project">
+          <option value="">All projects</option>
+          <option th:each="option : ${overview.projectOptions}" th:value="${option.id}" th:text="${option.name}" th:selected="${option.id == overview.projectId}">Project</option>
+        </select>
+        <button class="btn-secondary" type="submit" aria-label="Search runs">Search</button>
+        <a th:if="${overview.query != '' or overview.projectId != null or overview.filter != 'all'}" class="btn-ghost" href="/automations">Clear</a>
+      </form>
+
+      <div th:if="${#lists.isEmpty(overview.runs)}" class="empty-state">
+        <i data-lucide="Bot"></i>
+        <h2 th:text="${overview.total == 0 and overview.filter == 'all' and overview.query == '' and overview.projectId == null} ? 'No automation runs yet' : 'Nothing matches'">No automation runs yet</h2>
+        <p th:if="${overview.total == 0 and overview.filter == 'all' and overview.query == '' and overview.projectId == null}">Enable an automation in a project, for example code review on pull requests.</p>
+        <a th:if="${overview.total == 0 and overview.filter == 'all' and overview.query == '' and overview.projectId == null}" class="btn-primary" href="/projects"><i data-lucide="FolderGit2"></i> Choose a project</a>
+        <a th:unless="${overview.total == 0 and overview.filter == 'all' and overview.query == '' and overview.projectId == null}" class="btn-secondary" href="/automations">Show all runs</a>
+      </div>
+
+      <ul th:unless="${#lists.isEmpty(overview.runs)}" class="list">
+        <li th:each="run : ${overview.runs}" class="list-row">
+          <div class="list-main basis-full sm:basis-0">
+            <span class="list-title">
+              <a th:if="${run.webUrl != null}" th:href="${run.webUrl}" target="_blank" rel="noopener noreferrer" class="hover:text-brand-400" th:text="|#${run.reference} ${run.title}|">#1 Title</a>
+              <span th:unless="${run.webUrl != null}" th:text="|#${run.reference} ${run.title}|">#1 Title</span>
+            </span>
+            <span class="list-meta">
+              <a th:href="@{/automations(project=${run.projectId})}" class="hover:text-ink-100" th:text="${run.projectName}">project</a>
+              <span th:text="|${run.name} · ${run.trigger}|">Code review · pull requests</span>
+              <code th:text="${#strings.substring(run.headSha, 0, run.headSha.length() < 7 ? run.headSha.length() : 7)}">abc1234</code>
+              <span th:if="${run.changedFiles > 0}" th:text="|${run.changedFiles} file${run.changedFiles == 1 ? '' : 's'}|">3 files</span>
+              <span th:if="${run.durationSeconds != null}" th:text="${run.durationSeconds < 90} ? |${run.durationSeconds} s| : |${run.durationSeconds / 60} min|">42 s</span>
+              <a th:if="${run.status == 'POSTED' and run.commentUrl != null}" th:href="${run.commentUrl}" target="_blank" rel="noopener noreferrer" class="font-medium text-brand-400 hover:underline">View review on PR</a>
+            </span>
+            <span th:if="${run.error != null}" class="mt-1 block text-xs leading-5 text-danger-400" th:text="${run.error}">error</span>
+            <span th:if="${run.error == null and (run.verdict != null or run.summary != null)}" class="mt-1 flex items-start gap-2 text-xs leading-5 text-ink-500">
+              <span th:if="${run.verdict != null}" class="badge badge-neutral shrink-0" th:text="${run.verdict}">Comments</span>
+              <span th:if="${run.summary != null}" class="line-clamp-2 min-w-0 [overflow-wrap:anywhere]" th:text="${run.summary}">summary</span>
+            </span>
+          </div>
+          <span th:replace="~{fragments/layout :: statusBadge(${run.status})}"></span>
+          <time class="whitespace-nowrap text-xs text-ink-500" data-relative th:attr="datetime=${run.createdAt}" th:text="${run.createdAt}">time</time>
+          <div class="list-actions">
+            <a th:if="${run.agentRunId != null}" class="btn-ghost" th:href="@{/runs/{id}(id=${run.agentRunId})}"><i data-lucide="Workflow"></i> Run details</a>
+            <a th:if="${run.status == 'AWAITING_APPROVAL' or run.status == 'FAILED'}" class="btn-secondary btn-sm"
+               th:href="@{/workspace/projects/{id}(id=${run.projectId}, view='automations')}" th:text="${run.status == 'FAILED'} ? 'Open project' : 'Review'">Review</a>
+          </div>
+        </li>
+      </ul>
+
+      <nav th:if="${overview.pages > 1}" class="mt-4 flex items-center justify-between gap-3 text-sm" aria-label="Pagination">
+        <a th:if="${overview.page > 0}" class="btn-secondary btn-sm" th:href="@{/automations(status=${statusParam},q=${overview.query},project=${projectParam},page=${overview.page - 1})}"><i data-lucide="ArrowLeft"></i> Newer</a>
+        <span th:unless="${overview.page > 0}"></span>
+        <span class="text-xs text-ink-500" th:text="|Page ${overview.page + 1} of ${overview.pages}|">Page 1 of 5</span>
+        <a th:if="${overview.page + 1 < overview.pages}" class="btn-secondary btn-sm" th:href="@{/automations(status=${statusParam},q=${overview.query},project=${projectParam},page=${overview.page + 1})}">Older <i data-lucide="ArrowRight"></i></a>
+        <span th:unless="${overview.page + 1 < overview.pages}"></span>
+      </nav>
+    </section>
+
+    <section th:if="${!#lists.isEmpty(overview.projects)}" class="section">
+      <div class="section-header"><div><h2 class="section-title">Projects</h2></div></div>
+      <ul class="list">
+        <li th:each="entry : ${overview.projects}" class="list-row">
+          <span class="list-icon"><i data-lucide="FolderGit2"></i></span>
+          <div class="list-main basis-[calc(100%-4rem)] sm:basis-0">
+            <a class="list-title hover:text-brand-400" th:href="@{/automations(project=${entry.projectId})}" th:text="${entry.projectName}">Project</a>
+            <span class="list-meta">
+              <span th:each="item : ${entry.automations}" th:if="${item.enabled}" th:text="|${item.name} · ${item.trigger}|">Code review · pull requests</span>
+              <span th:if="${#lists.isEmpty(entry.automations) or !#lists.contains(entry.automations.![enabled], true)}">No automation enabled</span>
+              <span th:text="|${entry.runs} run${entry.runs == 1 ? '' : 's'}|">3 runs</span>
+            </span>
+          </div>
+          <th:block th:if="${entry.latest != null}">
+            <span th:replace="~{fragments/layout :: statusBadge(${entry.latest.status})}"></span>
+            <time class="whitespace-nowrap text-xs text-ink-500" data-relative th:attr="datetime=${entry.latest.createdAt}" th:text="${entry.latest.createdAt}">time</time>
+          </th:block>
+          <div class="list-actions">
+            <a class="btn-ghost" th:href="@{/workspace/projects/{id}(id=${entry.projectId}, view='automations')}"><i data-lucide="Bot"></i> Manage</a>
+          </div>
+        </li>
+      </ul>
+    </section>
+
+  </div>
+</main>
+</body>
+</html>

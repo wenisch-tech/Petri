@@ -89,48 +89,6 @@
       </ul>
     </section>
 
-    <section class="section">
-      <div class="section-header">
-        <div>
-          <h2 class="section-title">Project override</h2>
-          <p class="section-description">Pin a project to a profile and set its approval automation.</p>
-        </div>
-      </div>
-      <form class="card" method="post" action="/sandbox-profiles/project">
-        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
-        <div class="card-body space-y-5">
-          <div class="grid gap-4 sm:grid-cols-3">
-            <div>
-              <label class="label" for="override-project">Project</label>
-              <select id="override-project" class="field" name="projectId" required>
-                <option th:each="project : ${projects}" th:value="${project.id}" th:text="${project.name}">Project</option>
-              </select>
-            </div>
-            <div>
-              <label class="label" for="override-profile">Profile</label>
-              <select id="override-profile" class="field" name="profileId" required>
-                <option th:each="profile : ${profiles}" th:value="${profile.id}" th:text="${profile.name}">Profile</option>
-              </select>
-            </div>
-            <div>
-              <label class="label" for="override-network">Network</label>
-              <select id="override-network" class="field" name="networkMode">
-                <option value="PROFILE">Use profile setting</option>
-                <option value="ENABLED">Always allow</option>
-                <option value="DISABLED">Always block</option>
-              </select>
-            </div>
-          </div>
-          <div class="space-y-2">
-            <label class="check"><input type="checkbox" name="autoApprovePackageInstalls" value="true"><span>Auto-approve package installs <span class="hint !mt-0">Agents may install Alpine packages without asking.</span></span></label>
-            <label class="check"><input type="checkbox" name="autoApproveTerminalCommands" value="true"><span>Auto-approve agent terminal commands <span class="hint !mt-0">Commands run as a user confined to the worktree.</span></span></label>
-          </div>
-        </div>
-        <div class="card-footer">
-          <button class="btn-primary" type="submit" th:disabled="${#lists.isEmpty(projects) || #lists.isEmpty(profiles)}">Apply override</button>
-        </div>
-      </form>
-    </section>
   </main>
 </div>
 </body>

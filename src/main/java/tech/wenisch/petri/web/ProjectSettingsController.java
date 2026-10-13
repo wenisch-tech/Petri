@@ -13,6 +13,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.server.ResponseStatusException;
 import org.springframework.web.servlet.mvc.support.RedirectAttributes;
+import tech.wenisch.petri.agent.run.TestSandboxProfileService;
 import tech.wenisch.petri.git.GitAuthenticationType;
 import tech.wenisch.petri.git.GitOperationException;
 import tech.wenisch.petri.git.ProjectGitCredentialService;
@@ -28,16 +29,19 @@ public class ProjectSettingsController {
   private final ProjectMirrorService mirrors;
   private final ProjectAccessService access;
   private final ProjectProviderSourceService providerSources;
+  private final TestSandboxProfileService sandboxProfiles;
 
   public ProjectSettingsController(
       ProjectGitCredentialService credentials,
       ProjectMirrorService mirrors,
       ProjectAccessService access,
-      ProjectProviderSourceService providerSources) {
+      ProjectProviderSourceService providerSources,
+      TestSandboxProfileService sandboxProfiles) {
     this.credentials = credentials;
     this.mirrors = mirrors;
     this.access = access;
     this.providerSources = providerSources;
+    this.sandboxProfiles = sandboxProfiles;
   }
 
   @GetMapping("/projects/{projectId}/settings")
@@ -101,6 +105,31 @@ public class ProjectSettingsController {
     }
   }
 
+  @PostMapping("/projects/{projectId}/sandbox")
+  String saveSandbox(
+      @PathVariable UUID projectId,
+      @org.springframework.web.bind.annotation.RequestParam UUID profileId,
+      @org.springframework.web.bind.annotation.RequestParam(defaultValue = "PROFILE") String networkMode,
+      @org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean autoApprovePackageInstalls,
+      @org.springframework.web.bind.annotation.RequestParam(defaultValue = "false") boolean autoApproveTerminalCommands,
+      Principal principal,
+      RedirectAttributes redirectAttributes) {
+    access.requireProject(projectId, principal.getName());
+    Boolean network = switch (networkMode) {
+      case "ENABLED" -> true;
+      case "DISABLED" -> false;
+      default -> null;
+    };
+    try {
+      sandboxProfiles.configureProject(projectId, profileId, network, autoApprovePackageInstalls,
+          autoApproveTerminalCommands, principal.getName());
+      redirectAttributes.addFlashAttribute("sandboxSaved", true);
+    } catch (IllegalArgumentException exception) {
+      redirectAttributes.addFlashAttribute("mirrorError", exception.getMessage());
+    }
+    return "redirect:/projects/" + projectId + "/settings";
+  }
+
   @PostMapping("/projects/{projectId}/mirror/sync")
   String synchronizeMirror(
       @PathVariable UUID projectId,
@@ -131,5 +160,8 @@ public class ProjectSettingsController {
     model.addAttribute("authenticationTypes", GitAuthenticationType.values());
     model.addAttribute("mirror", mirrors.status(projectId));
     model.addAttribute("providerSource", providerSources.find(projectId));
+    model.addAttribute("sandboxProfiles", sandboxProfiles.all().stream()
+        .filter(value -> value.isEnabled()).toList());
+    model.addAttribute("sandboxChoice", sandboxProfiles.projectChoice(projectId));
   }
 }
