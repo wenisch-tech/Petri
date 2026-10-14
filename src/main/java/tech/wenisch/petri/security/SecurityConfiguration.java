@@ -16,6 +16,7 @@ import org.springframework.security.core.userdetails.UsernameNotFoundException;
 import org.springframework.security.crypto.factory.PasswordEncoderFactories;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.client.registration.ClientRegistrationRepository;
+import org.springframework.security.web.savedrequest.HttpSessionRequestCache;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.LoginUrlAuthenticationEntryPoint;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
@@ -93,10 +94,35 @@ public class SecurityConfiguration {
             apiRequests).defaultAuthenticationEntryPointFor(
                 new LoginUrlAuthenticationEntryPoint("/login"),
                 new NegatedRequestMatcher(apiRequests)))
-        .formLogin(form -> form.loginPage("/login").defaultSuccessUrl("/", true).permitAll())
+        // The page that was asked for before signing in is remembered and opened after the login;
+        // the dashboard is only the fallback when there was none.
+        .requestCache(cache -> cache.requestCache(loginRedirectCache()))
+        .formLogin(form -> form.loginPage("/login").defaultSuccessUrl("/").permitAll())
         .logout(logout -> logout.logoutSuccessUrl("/login?logout"))
         .addFilterBefore(new ApiKeyAuthenticationFilter(apiKeys), UsernamePasswordAuthenticationFilter.class)
         .build();
+  }
+
+  /**
+   * Remembers only requests a person opened in the browser as a page. Background requests of the
+   * workspace (fragments loaded with {@code embedded=true}, JSON and event streams) must not become
+   * the landing page after a login: they would show a bare fragment.
+   */
+  static HttpSessionRequestCache loginRedirectCache() {
+    HttpSessionRequestCache cache = new HttpSessionRequestCache();
+    cache.setMatchingRequestParameterName(null);
+    cache.setRequestMatcher(request -> {
+      if (!"GET".equals(request.getMethod())) return false;
+      String accept = request.getHeader("Accept");
+      if (accept == null || !accept.contains("text/html")) return false;
+      if ("XMLHttpRequest".equals(request.getHeader("X-Requested-With"))) return false;
+      if ("true".equals(request.getParameter("embedded"))) return false;
+      String path = request.getRequestURI().substring(request.getContextPath().length());
+      return !path.equals("/login") && !path.equals("/favicon.ico")
+          && !path.startsWith("/api/") && !path.startsWith("/workspace/api/")
+          && !path.startsWith("/chat/") && !path.startsWith("/js/") && !path.startsWith("/css/");
+    });
+    return cache;
   }
 
   @Bean
