@@ -34,8 +34,12 @@ public class DashboardService {
   private final AppUserRepository users;
   private final Clock clock;
 
+  private final tech.wenisch.petri.vulnerability.VulnerabilityReportService vulnerabilities;
+
   public DashboardService(
-      NamedParameterJdbcTemplate jdbc, ProjectRepository projects, AppUserRepository users) {
+      NamedParameterJdbcTemplate jdbc, ProjectRepository projects, AppUserRepository users,
+      tech.wenisch.petri.vulnerability.VulnerabilityReportService vulnerabilities) {
+    this.vulnerabilities = vulnerabilities;
     this.jdbc = jdbc;
     this.projects = projects;
     this.users = users;
@@ -52,7 +56,8 @@ public class DashboardService {
   public record Worktree(
       UUID id, String branch, State state, String headline, String detail, int pendingChanges,
       int runsTotal, int runsThisWeek, LastResult lastResult, LastMessage lastMessage,
-      Instant lastActivityAt, UUID chatId) {}
+      Instant lastActivityAt, UUID chatId,
+      tech.wenisch.petri.vulnerability.VulnerabilityReportService.Summary vulnerabilities) {}
 
   public record AutomationInfo(String name, String trigger, String lastStatus, Instant lastAt) {}
 
@@ -60,7 +65,8 @@ public class DashboardService {
       UUID id, String name, String repositoryUri, String defaultBranch, State state,
       String headline, Instant lastActivityAt, int activeWorktrees, int working, int waiting,
       int pendingChanges, int runsTotal, int runsThisWeek, List<AutomationInfo> automations,
-      List<Worktree> worktrees) {}
+      List<Worktree> worktrees,
+      tech.wenisch.petri.vulnerability.VulnerabilityReportService.Summary vulnerabilities) {}
 
   public record Totals(int projects, int working, int waiting, int attention, int pendingChanges,
       int runsToday) {}
@@ -94,6 +100,8 @@ public class DashboardService {
         });
 
     Map<UUID, List<AutomationInfo>> automations = loadAutomations(projectIds);
+    Map<UUID, List<tech.wenisch.petri.vulnerability.VulnerabilityReportService.Summary>> scans =
+        vulnerabilities.summaries(projectIds);
     Map<UUID, WorktreeFacts> facts = new HashMap<>();
     for (UUID id : worktreeIds) facts.put(id, new WorktreeFacts());
     if (!worktreeIds.isEmpty()) loadFacts(worktreeIds, now, facts);
@@ -107,7 +115,14 @@ public class DashboardService {
     for (Project project : owned) {
       List<Worktree> rows = new ArrayList<>();
       for (WorktreeRow row : byProject.getOrDefault(project.getId(), List.of())) {
-        rows.add(describe(row, facts.get(row.id)));
+        Worktree described = describe(row, facts.get(row.id));
+        var branchScan = scans.getOrDefault(project.getId(), List.of()).stream()
+            .filter(value -> row.branch != null && row.branch.equals(value.branch())).findFirst()
+            .orElse(null);
+        rows.add(new Worktree(described.id(), described.branch(), described.state(),
+            described.headline(), described.detail(), described.pendingChanges(),
+            described.runsTotal(), described.runsThisWeek(), described.lastResult(),
+            described.lastMessage(), described.lastActivityAt(), described.chatId(), branchScan));
         runsToday += facts.get(row.id).runsToday;
       }
       rows.sort(Comparator
@@ -132,7 +147,13 @@ public class DashboardService {
       cards.add(new ProjectCard(
           project.getId(), project.getName(), project.getRepositoryUri(), project.getDefaultBranch(),
           state, headline, last, rows.size(), projectWorking, projectWaiting, projectPending,
-          projectRunsTotal, projectRuns, automations.getOrDefault(project.getId(), List.of()), rows));
+          projectRunsTotal, projectRuns, automations.getOrDefault(project.getId(), List.of()), rows,
+          // The default branch when it was scanned; otherwise the most recently scanned branch.
+          scans.getOrDefault(project.getId(), List.of()).stream()
+              .filter(value -> project.getDefaultBranch() != null
+                  && project.getDefaultBranch().equals(value.branch()))
+              .findFirst()
+              .orElse(scans.getOrDefault(project.getId(), List.of()).stream().findFirst().orElse(null))));
     }
     cards.sort(Comparator
         .comparing((ProjectCard value) -> value.state().ordinal())
@@ -340,7 +361,7 @@ public class DashboardService {
     }
     if (result != null) last = latest(last, result.at());
     return new Worktree(row.id, row.branch, state, headline, detail, fact.pendingChanges,
-        fact.runsTotal, fact.runsThisWeek, result, fact.message, last, chatId);
+        fact.runsTotal, fact.runsThisWeek, result, fact.message, last, chatId, null);
   }
 
   private static String stageLabel(String stage) {

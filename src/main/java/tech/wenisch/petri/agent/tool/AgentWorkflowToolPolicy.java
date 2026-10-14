@@ -9,8 +9,8 @@ public final class AgentWorkflowToolPolicy {
       "get_pull_request", "scan_vulnerabilities", "install_packages");
   private static final Set<String> IMPLEMENT = Set.of(
       "list_files", "read_file", "search_files", "show_diff", "list_skills", "load_skill",
-      "get_pull_request", "scan_vulnerabilities", "create_patch", "create_file", "run_tests",
-      "install_packages", "run_command");
+      "get_pull_request", "scan_vulnerabilities", "submit_vulnerability_report", "create_patch",
+      "create_file", "run_tests", "install_packages", "run_command");
 
   private AgentWorkflowToolPolicy() {}
 

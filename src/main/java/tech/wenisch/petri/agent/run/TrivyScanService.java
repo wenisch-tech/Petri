@@ -39,18 +39,29 @@ public class TrivyScanService {
   public record Result(
       String version, boolean complete, Map<String, Integer> bySeverity,
       Map<String, Integer> byType, int total, int fixable, List<Finding> findings,
-      boolean truncated, String note) {}
+      boolean truncated, String note, List<Resolution> dependencyResolution) {
+    Result withResolution(List<Resolution> value) {
+      return new Result(version, complete, bySeverity, byType, total, fixable, findings, truncated,
+          note, value);
+    }
+  }
+
+  /** What was done for one package manager of the project before scanning. */
+  public record Resolution(String ecosystem, String directory, String status, String note) {}
 
   private final WorkspacePaths paths;
+  private final DependencyResolver resolver;
   private final LocalToolchain toolchain;
   private final Confinement confinement;
   private final ObjectMapper json;
   private final String command;
 
   TrivyScanService(
-      WorkspacePaths paths, LocalToolchain toolchain, Confinement confinement, ObjectMapper json,
+      WorkspacePaths paths, DependencyResolver resolver, LocalToolchain toolchain,
+      Confinement confinement, ObjectMapper json,
       @Value("${petri.trivy.command:trivy}") String command) {
     this.paths = paths;
+    this.resolver = resolver;
     this.toolchain = toolchain;
     this.confinement = confinement;
     this.json = json;
@@ -76,6 +87,12 @@ public class TrivyScanService {
   public Result scan(
       Path worktree, String subPath, List<String> scanners, List<String> severities,
       boolean ignoreUnfixed) throws IOException {
+    return scan(worktree, subPath, scanners, severities, ignoreUnfixed, true);
+  }
+
+  public Result scan(
+      Path worktree, String subPath, List<String> scanners, List<String> severities,
+      boolean ignoreUnfixed, boolean resolveDependencies) throws IOException {
     Path trivy = executable();
     if (trivy == null) {
       throw new IllegalStateException("Trivy is not installed in this Petri instance. The "
@@ -108,6 +125,29 @@ public class TrivyScanService {
     Path home = Files.createTempDirectory(paths.temporaryDirectory(), "petri-trivy-");
     try {
       Path report = home.resolve("report.json");
+      // Maven artifacts land in the shared cache below and are read from it as the local
+      // repository; otherwise Trivy fetches every pom of the tree from Maven Central itself and is
+      // rate limited (HTTP 429).
+      Path repository = cache.resolve("maven");
+      Files.createDirectories(repository);
+      Files.createDirectories(home.resolve(".m2"));
+      Files.createSymbolicLink(home.resolve(".m2").resolve("repository"), repository);
+      // The scan runs on a throw-away copy of the project, in which each package manager's own
+      // tool produces what is missing (a resolved dependency set or a lockfile). The repository
+      // itself is never written to.
+      Path scanRoot = target;
+      List<Resolution> steps = List.of();
+      if (resolveDependencies) {
+        Path copy = Files.createDirectory(home.resolve("project"));
+        if (resolver.copy(target, copy)) {
+          scanRoot = copy;
+          steps = resolver.resolve(copy, cache, home);
+        } else {
+          steps = List.of(new Resolution("project", ".", DependencyResolver.SKIPPED,
+              "the project is too large to copy, so dependencies were not resolved and only "
+                  + "committed lockfiles were read"));
+        }
+      }
       List<String> argv = new ArrayList<>(List.of(
           trivy.toString(), "fs", "--quiet", "--no-progress", "--skip-version-check",
           "--format", "json", "--output", report.toString(),
@@ -116,15 +156,31 @@ public class TrivyScanService {
           "--cache-dir", cache.toString(),
           "--timeout", "10m"));
       if (ignoreUnfixed) argv.add("--ignore-unfixed");
-      argv.add(target.toString());
+      argv.add(scanRoot.toString());
       Map<String, String> extra = new LinkedHashMap<>();
       extra.put("TRIVY_DISABLE_TELEMETRY", "true");
       extra.put("TRIVY_CACHE_DIR", cache.toString());
       List<String> wrapped = confinement.available()
-          ? confinement.wrap(List.of(root, trivy.getParent()), List.of(cache, home), argv)
+          ? confinement.wrap(List.of(scanRoot, trivy.getParent()), List.of(cache, home), argv)
           : argv;
-      TestCommandResult run = BoundedProcess.run(wrapped, root,
+      TestCommandResult run = BoundedProcess.run(wrapped, scanRoot,
           toolchain.environment(home, extra), TIMEOUT, OUTPUT_LIMIT, "trivy");
+      String note = null;
+      if (!run.timedOut() && run.exitCode() != 0 && !argv.contains("--offline-scan")
+          && remoteResolutionFailed(run.output())) {
+        // Maven Central rate-limits (HTTP 429) the transitive resolution of pom.xml files. Scan
+        // again without it: direct dependencies are still checked, indirect ones may be missing.
+        List<String> offline = new ArrayList<>(argv);
+        offline.add(offline.size() - 1, "--offline-scan");
+        run = BoundedProcess.run(
+            confinement.available()
+                ? confinement.wrap(List.of(scanRoot, trivy.getParent()), List.of(cache, home), offline)
+                : offline,
+            scanRoot, toolchain.environment(home, extra), TIMEOUT, OUTPUT_LIMIT, "trivy");
+        note = "The remote Maven repository refused the lookup of transitive dependencies, so Java "
+            + "results list only dependencies that are declared or already cached. Run again later "
+            + "for the full tree.";
+      }
       if (run.timedOut()) {
         throw new IllegalStateException("The scan did not finish within " + TIMEOUT.toMinutes()
             + " minutes. Scan a subdirectory with the path argument instead.");
@@ -133,10 +189,32 @@ public class TrivyScanService {
         throw new IllegalStateException("Trivy failed (exit " + run.exitCode() + "): "
             + tail(run.output(), 1_200));
       }
-      return parse(Files.readString(report), levels);
+      Result parsed = parse(Files.readString(report), levels);
+      List<String> gaps = new ArrayList<>();
+      for (Resolution step : steps) {
+        if (DependencyResolver.FAILED.equals(step.status())
+            || DependencyResolver.TOOL_MISSING.equals(step.status())) {
+          gaps.add(step.ecosystem() + " in " + step.directory() + ": " + step.note());
+        }
+      }
+      String combined = String.join(" ", java.util.stream.Stream.of(
+              note, gaps.isEmpty() ? null : "Not every dependency was resolved (" + String.join("; ", gaps)
+                  + "), so the list may miss vulnerable dependencies.", parsed.note())
+          .filter(java.util.Objects::nonNull).toList());
+      boolean complete = note == null && gaps.isEmpty();
+      return new Result(parsed.version(), complete, parsed.bySeverity(), parsed.byType(),
+          parsed.total(), parsed.fixable(), parsed.findings(), parsed.truncated(),
+          combined.isBlank() ? null : combined, steps);
     } finally {
       deleteQuietly(home);
     }
+  }
+
+  private static boolean remoteResolutionFailed(String output) {
+    if (output == null) return false;
+    String text = output.toLowerCase(Locale.ROOT);
+    return text.contains("remote maven repository") || text.contains("429 too many requests")
+        || text.contains("maven") && text.contains("failed to fetch");
   }
 
   Result parse(String report, List<String> requested) {
@@ -188,7 +266,7 @@ public class TrivyScanService {
         : null;
     String version = text(root.path("Trivy"), "Version");
     return new Result(version == null ? "unknown" : version,
-        true, bySeverity, byType, total, fixable, shown, truncated, note);
+        true, bySeverity, byType, total, fixable, shown, truncated, note, null);
   }
 
   private static void add(

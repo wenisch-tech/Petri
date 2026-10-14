@@ -296,6 +296,56 @@
   .file-dir { @apply truncate font-mono text-xs text-ink-500; }
   .file-status.is-added { @apply text-good-500; }
   .file-status.is-removed, .file-status.is-deleted { @apply text-danger-400; }
+  .vuln-count { @apply inline-flex items-center gap-1.5 rounded-full border border-ink-700/70 px-3 py-1 text-sm text-ink-300; }
+  .vuln-count.is-critical { @apply border-danger-500/50 bg-danger-500/10 text-danger-400; }
+  .vuln-count.is-high { @apply border-danger-500/30 bg-danger-500/5 text-danger-400; }
+  .vuln-count.is-medium { @apply border-warn-400/40 bg-warn-400/10 text-warn-400; }
+  .vuln-severity { @apply inline-flex items-center rounded-full border border-ink-700/70 px-2 py-0.5 text-xs font-semibold text-ink-300; }
+  .vuln-severity.is-critical { @apply border-danger-500/50 bg-danger-500/10 text-danger-400; }
+  .vuln-severity.is-high { @apply border-danger-500/30 bg-danger-500/5 text-danger-400; }
+  .vuln-severity.is-medium { @apply border-warn-400/40 bg-warn-400/10 text-warn-400; }
+  .vuln-mini { @apply inline-flex items-center gap-1 rounded-full border border-ink-700/70 px-2 py-0.5 text-xs font-medium text-ink-300; }
+  .vuln-mini strong { @apply font-semibold tabular-nums; }
+  .vuln-mini.is-critical { @apply border-danger-500/60 bg-danger-500/15 text-danger-400; }
+  .vuln-mini.is-high { @apply border-danger-500/40 bg-danger-500/10 text-danger-400; }
+  .vuln-mini.is-medium { @apply border-warn-400/40 bg-warn-400/10 text-warn-400; }
+  .vuln-mini.is-low { @apply border-brand-400/30 bg-brand-500/10 text-brand-400; }
+  .vuln-mini.is-clean { @apply border-good-500/40 bg-good-500/10 text-good-500; }
+  .vuln-mini.is-none { @apply text-ink-500; }
+  .dash-vuln-link { @apply inline-flex flex-wrap items-center gap-1; }
+  .dash-vulns-inline { @apply inline-flex items-center; }
+  .workspace-view-tab { white-space: nowrap; }
+  .workspace-chat-more { @apply relative flex items-center; }
+  .workspace-tab-menu-panel { @apply fixed z-50 min-w-[11rem] rounded-xl border border-ink-700/70 bg-ink-900 p-1.5 shadow-lg; }
+  .workspace-tab-menu-panel[hidden] { display: none; }
+  .workspace-tab-menu-panel button, .workspace-tab-menu-panel a { @apply flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-ink-300 transition hover:bg-ink-800 hover:text-ink-100; }
+  .workspace-tab-menu-panel svg { @apply size-4 shrink-0; }
+  .tab-badges { @apply ml-1.5 inline-flex items-center gap-1; }
+  .tab-badge { @apply inline-flex min-w-[1.25rem] items-center justify-center rounded-full bg-ink-700/60 px-1.5 text-[11px] font-semibold leading-5 tabular-nums text-ink-300; }
+  .tab-badge.is-critical { @apply bg-danger-500/25 text-danger-400; }
+  .tab-badge.is-high { @apply bg-danger-500/15 text-danger-400; }
+  .tab-badge.is-medium { @apply bg-warn-400/20 text-warn-400; }
+  .tab-badge.is-low { @apply bg-brand-500/15 text-brand-400; }
+  .tab-badge.is-clean { @apply bg-good-500/15 text-good-500; }
+  .vuln-table td, .vuln-table th { @apply align-top; }
+  .vuln-table { table-layout: fixed; width: 100%; min-width: 52rem; }
+  .vuln-table th:nth-child(1) { width: 25%; }
+  .vuln-table th:nth-child(2) { width: 14%; }
+  .vuln-table th:nth-child(3) { width: 9%; }
+  .vuln-table th:nth-child(4), .vuln-table th:nth-child(5), .vuln-table th:nth-child(6) { width: 17.3%; }
+  .vuln-table td { @apply break-words; }
+  .vuln-ids { @apply flex flex-wrap content-start gap-1; }
+  .vuln-cell { @apply text-sm leading-5; }
+  .vuln-sort { @apply inline-flex items-center gap-1 whitespace-nowrap bg-transparent p-0 font-semibold uppercase tracking-wider text-ink-500 hover:text-ink-100; font-size: inherit; }
+  .vuln-sort span { @apply w-3 text-brand-400; }
+  .vuln-count { @apply cursor-pointer transition; }
+  .vuln-count.is-active { @apply ring-2 ring-brand-500 font-semibold; }
+  .vuln-counts:has(.is-active) .vuln-count:not(.is-active) { @apply opacity-60; }
+  .vuln-states { @apply mb-3 grid gap-3 sm:grid-cols-2; }
+  .vuln-states dt { @apply text-xs font-semibold uppercase tracking-wider text-ink-500; }
+  .vuln-states dd { @apply mt-0.5 text-sm text-ink-300; }
+  .vuln-id { @apply inline-flex items-center whitespace-nowrap rounded-md border border-ink-700/70 bg-ink-800/60 px-1.5 py-0.5 font-mono text-xs text-ink-300; }
+  a.vuln-id { @apply text-brand-400 hover:underline; }
   .pr-link { @apply inline-flex items-center gap-1 rounded-full bg-brand-500/10 px-2 py-0.5 text-xs font-medium text-brand-400 hover:underline; }
   .pr-link svg { @apply size-3.5; }
   .diff-add { @apply font-mono text-xs text-good-500; }
@@ -675,9 +725,9 @@
   .workspace-dirty-dot { @apply text-brand-400; }
   .workspace-chat-header { @apply flex h-10 shrink-0 items-center justify-between gap-2 border-b border-ink-700/70 px-3; }
   .workspace-chat-selector { @apply max-w-64 min-w-0 flex-1 bg-transparent; }
-  .workspace-chat-tools { @apply flex shrink-0 items-end gap-2 border-t border-ink-700/70 bg-chrome px-3 py-2; }
+  .workspace-chat-tools { @apply flex shrink-0 items-center gap-2 border-t border-ink-700/70 bg-chrome px-3 py-1.5; }
   .workspace-chat-tools label { @apply grid min-w-0 gap-1 text-[10px] font-bold uppercase tracking-wider text-ink-500; }
-  .workspace-chat-tools label > span { @apply px-1; }
+  .workspace-chat-tools label > span:not(.workspace-model-unavailable) { @apply sr-only; }
   .workspace-model-field { @apply flex-1; }
   .workspace-model-selector { @apply min-w-0 flex-1; }
   .workspace-mode-selector { @apply w-28 shrink-0; }
@@ -705,6 +755,7 @@
   .workspace-tool-row.cat-exec .workspace-tool-icon { @apply bg-cyan-500/15 text-cyan-500; }
   .workspace-tool-row.cat-review .workspace-tool-icon { @apply bg-good-500/15 text-good-500; }
   .workspace-tool-title { @apply min-w-0 font-medium leading-4 text-ink-300; }
+  .workspace-tool-since { @apply shrink-0 text-[11px] text-ink-500; }
   .workspace-tool-detail { @apply min-w-0 flex-1 truncate font-mono text-[11px] text-ink-500; }
   .workspace-tool-state { @apply ml-auto grid size-4 shrink-0 place-items-center text-good-500; }
   .workspace-tool-state svg { @apply size-3.5; }
@@ -870,7 +921,11 @@
   .workspace-composer textarea { @apply max-h-48 min-h-9 resize-none overflow-y-auto px-3 py-2 text-[13px] leading-5; grid-column: 1; grid-row: 1; }
   .workspace-composer > .workspace-guide-toggle { grid-column: 1 / -1; grid-row: 2; }
   .workspace-composer > div { display: contents; }
-  .workspace-composer > div > span { @apply truncate text-[11px] leading-4 text-ink-500; grid-column: 1 / -1; grid-row: 3; }
+  .workspace-composer > div > span { @apply self-center truncate text-[11px] leading-4 text-ink-500; grid-column: 1; grid-row: 3; }
+  /* Stop sits on the status line, under Send: small, so it is reachable without competing with it. */
+  .workspace-composer [data-chat-stop] { @apply !h-7 !min-h-7 gap-1.5 !rounded-md !border-danger-500/40 !bg-danger-500/10 !px-2.5 text-xs font-semibold !text-danger-400 hover:!bg-danger-500/20; grid-column: 2; grid-row: 3; }
+  .workspace-composer [data-chat-stop][hidden] { display: none; }
+  .workspace-composer [data-chat-stop] svg { @apply size-3 fill-current; }
   .workspace-composer .btn-primary { @apply !min-h-9 !px-3 text-xs; grid-column: 2; grid-row: 1; }
   .workspace-dialog { @apply m-auto max-h-[calc(100dvh-2rem)] w-[min(28rem,calc(100vw-2rem))] overflow-y-auto rounded-xl border border-ink-700 bg-ink-900 p-0 text-ink-100 shadow-2xl backdrop:bg-black/60; }
   .workspace-dialog:not([open]) { @apply hidden; }

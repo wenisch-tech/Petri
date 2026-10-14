@@ -87,13 +87,62 @@ function initializeEmbeddedViews(state) {
   const content = panel?.querySelector('[data-workspace-embedded-content]');
   if (!panel || !content) return;
   const base = `/projects/${state.projectId}`;
-  const urls = { pullrequests: `${base}/pull-requests`, pipelines: `${base}/pipelines`, automations: `${base}/automations`, skills: `${base}/skills`, runs: `${base}/runs`, settings: `${base}/settings`, roles: `${base}/settings/roles`, environment: `${base}/settings/environment`, mcp: `${base}/settings/mcp` };
-  const titles = { pullrequests: 'Pull requests', pipelines: 'Pipelines', automations: 'Automations', skills: 'Skills', runs: 'Runs', settings: 'Settings', roles: 'Model settings', environment: 'Environment', mcp: 'MCP' };
+  const urls = { pullrequests: `${base}/pull-requests`, vulnerabilities: `${base}/vulnerabilities`, pipelines: `${base}/pipelines`, automations: `${base}/automations`, skills: `${base}/skills`, runs: `${base}/runs`, settings: `${base}/settings`, roles: `${base}/settings/roles`, environment: `${base}/settings/environment`, mcp: `${base}/settings/mcp` };
+  const titles = { pullrequests: 'Pull requests', vulnerabilities: 'Vulnerabilities', pipelines: 'Pipelines', automations: 'Automations', skills: 'Skills', runs: 'Run history', settings: 'Settings', roles: 'Model settings', environment: 'Environment', mcp: 'MCP' };
   // Pages that belong under a tab of the view bar.
   const parentView = { roles: 'settings', environment: 'settings', mcp: 'settings' };
   const runPath = /^\/runs\/([0-9a-fA-F-]{36})$/;
   const prPath = /^\/projects\/[0-9a-fA-F-]{36}\/pull-requests\/(\d+)$/;
   const buttons = [...document.querySelectorAll('.workspace-view-tab[data-workspace-view]')];
+  // The numbers on the tabs: open pull requests, findings of the open branch, configured automations.
+  const badge = (container, text, tone, title) => {
+    const item = el('span', `tab-badge${tone ? ` is-${tone}` : ''}`, text);
+    if (title) item.title = title;
+    container.append(item);
+  };
+  const refreshTabCounts = async () => {
+    if (document.hidden) return;
+    try {
+      const query = state.worktreeId ? `?worktree=${state.worktreeId}` : '';
+      const counts = await request(`/workspace/api/projects/${state.projectId}/tab-counts${query}`);
+      const put = (name, fill) => {
+        const box = document.querySelector(`[data-tab-badges="${name}"]`);
+        if (!box) return;
+        box.replaceChildren();
+        fill(box);
+      };
+      put('pullrequests', box => {
+        if (counts.openPullRequests) badge(box, String(counts.openPullRequests), '', `${counts.openPullRequests} open`);
+      });
+      put('vulnerabilities', box => {
+        const scan = counts.vulnerabilities;
+        if (!scan) return;
+        let shown = 0;
+        for (const [key, label] of [['critical', 'critical'], ['high', 'high'], ['medium', 'medium'], ['low', 'low']]) {
+          if (!scan[key]) continue;
+          badge(box, String(scan[key]), key, `${scan[key]} ${label}`);
+          shown++;
+        }
+        if (!shown) badge(box, '0', 'clean', 'No findings in the latest scan');
+      });
+      put('automations', box => {
+        if (counts.automations) {
+          badge(box, String(counts.automations), '', `${counts.automations} configured, ${counts.automationsEnabled} enabled`);
+        }
+      });
+    } catch { /* the tabs work without the numbers */ }
+  };
+  refreshTabCounts();
+  setInterval(refreshTabCounts, 60000);
+  window.addEventListener('focus', refreshTabCounts);
+  // A page action (a scan, a merge, a new automation) changes the numbers; refresh soon after it,
+  // but not on every live refresh of a running page.
+  let lastCounts = Date.now();
+  window.addEventListener('petri-content', () => {
+    if (Date.now() - lastCounts < 15000) return;
+    lastCounts = Date.now();
+    setTimeout(refreshTabCounts, 1500);
+  });
   const gitBar = document.querySelector('[data-git-bar]');
   const trail = document.querySelector('[data-breadcrumb-trail]');
   // `current` is the project view; `detail` is the run shown inside the Runs view, if any.
@@ -198,7 +247,9 @@ function initializeEmbeddedViews(state) {
     const token = `${current}|${detail}`;
     if (!silent) content.setAttribute('aria-busy', 'true');
     try {
-      const extra = currentSearch ? `&${currentSearch.replace(/^\?/, '')}` : '';
+      // The scan belongs to the branch that is open in the workspace.
+      const branchScope = current === 'vulnerabilities' && state.worktreeId ? `&worktree=${state.worktreeId}` : '';
+      const extra = (currentSearch ? `&${currentSearch.replace(/^\?/, '')}` : '') + branchScope;
       const response = await fetch(`${pagePath()}?embedded=true${extra}`,
         { headers: { Accept: 'text/html' }, cache: 'no-store', credentials: 'same-origin' });
       if (!response.ok) throw new Error(`The page could not be loaded (HTTP ${response.status})`);
@@ -243,6 +294,34 @@ function initializeEmbeddedViews(state) {
     event.preventDefault();
     show(link.dataset.crumbView);
   });
+
+  // The "…" menu in the chat footer, next to the approval settings: views that are not tabs.
+  const more = document.querySelector('[data-chat-more]');
+  if (more) {
+    const toggle = more.querySelector('[data-chat-more-toggle]');
+    const panel = more.querySelector('[data-chat-more-panel]');
+    const closeMenu = () => { panel.hidden = true; toggle.setAttribute('aria-expanded', 'false'); };
+    toggle.addEventListener('click', event => {
+      event.stopPropagation();
+      if (!panel.hidden) { closeMenu(); return; }
+      panel.hidden = false;
+      // The footer is at the bottom of the screen, so the panel opens upwards.
+      const box = toggle.getBoundingClientRect();
+      const height = panel.offsetHeight;
+      panel.style.left = `${Math.max(8, Math.min(box.right - panel.offsetWidth, window.innerWidth - panel.offsetWidth - 8))}px`;
+      panel.style.top = `${Math.max(8, box.top - height - 6)}px`;
+      toggle.setAttribute('aria-expanded', 'true');
+    });
+    panel.addEventListener('click', event => {
+      const open = event.target.closest('[data-open-view]');
+      if (!open) return;
+      event.preventDefault();
+      closeMenu();
+      show(open.dataset.openView);
+    });
+    document.addEventListener('click', event => { if (!more.contains(event.target)) closeMenu(); });
+    document.addEventListener('keydown', event => { if (event.key === 'Escape') closeMenu(); });
+  }
 
   // The skills page runs a skill as a new direct chat in the chat panel.
   content.addEventListener('click', event => {
@@ -425,6 +504,8 @@ async function runSkill(state, name) {
   selector.dispatchEvent(new Event('change'));
   mode.value = 'DIRECT';
   mode.dispatchEvent(new Event('change'));
+  // Skills take more steps than a chat message: they read files, scan and then report.
+  state.skillTurns = 99;
   input.value = `Use the load_skill tool to load the skill "${name}" and follow it for this project.`;
   input.dispatchEvent(new Event('input'));
   send.click();
@@ -1907,9 +1988,10 @@ function initializeChat(state) {
       } else {
         const option = model?.selectedOptions[0];
         const body = { prompt, providerInstanceId: model?.value || null, provider: option?.dataset.kind || null, model: option?.dataset.model,
-          maxModelTurns: 20, maxOutputTokens: option?.dataset.tokens ? Number(option.dataset.tokens) : null,
+          maxModelTurns: state.skillTurns || 20, maxOutputTokens: option?.dataset.tokens ? Number(option.dataset.tokens) : null,
           contextWindowTokens: option?.dataset.context ? Number(option.dataset.context) : null,
           reasoningEffort: option?.dataset.reasoning || null, textVerbosity: option?.dataset.verbosity || null };
+        state.skillTurns = null;
         const endpoint = state.chatId ? `/workspace/api/chats/${state.chatId}/messages` : `${state.api}/chats`;
         const result = await request(endpoint, { method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify(body) });
         state.chatId = result.chat.id;
@@ -1932,6 +2014,21 @@ function initializeChat(state) {
     if (!state.chatId) state.chatMode = mode.value;
     chat.querySelector('[data-chat-automation-group]').hidden = state.chatMode !== 'DIRECT';
   });
+  const stopButton = chat.querySelector('[data-chat-stop]');
+  stopButton?.addEventListener('click', async () => {
+    if (!state.chatId) return;
+    stopButton.disabled = true;
+    chat.querySelector('[data-chat-status]').textContent = 'Stopping…';
+    try {
+      renderSnapshot(state, await request(`/workspace/api/chats/${state.chatId}/cancel`, { method: 'POST', headers: csrfHeaders() }), true);
+      refreshChatList(state);
+    } catch (error) {
+      stopButton.disabled = false;
+      chat.querySelector('[data-chat-status]').textContent = error.message;
+    }
+  });
+  refreshChatList(state);
+  setInterval(() => refreshChatList(state), 5000);
   selector.addEventListener('change', () => {
     state.chatId = selector.value || null;
     state.chatMode = selector.selectedOptions[0]?.dataset.mode || 'ORCHESTRATED';
@@ -2073,12 +2170,78 @@ function initializeApprovalSettings(state, chat) {
 }
 async function saveAutomation(state) { const chat = state.chat; try { const result = await request(`/workspace/api/chats/${state.chatId}/automation`, { method: 'PUT', headers: { 'Content-Type': 'application/json', ...csrfHeaders() }, body: JSON.stringify({ autoApproveChanges: chat.querySelector('[data-auto-changes]').checked, autoApproveTests: chat.querySelector('[data-auto-tests]').checked }) }); renderSnapshot(state, result); } catch (error) { chat.querySelector('[data-chat-status]').textContent = error.message; } }
 async function snapshot(state, preservePosition = false) { if (!state.chatId) { state.mcpCalls = []; renderSnapshot(state, null); return; } try { renderSnapshot(state, await request(`/workspace/api/chats/${state.chatId}/snapshot`), preservePosition); refreshExplorerSoon(state, 800); loadMcpCalls(state); } catch (error) { state.chat.querySelector('[data-chat-status]').textContent = error.message; } }
+// Direct chats can be stopped while a turn runs or waits in the queue; workflows have their own
+// "Cancel task" control in the workflow panel.
+function updateStopButton(state) {
+  const stop = state.chat?.querySelector('[data-chat-stop]');
+  if (!stop) return;
+  const chat = state.snapshot?.chat;
+  const running = Boolean(chat && chat.executionMode === 'DIRECT' && chat.active);
+  stop.hidden = !running;
+  if (!running) stop.disabled = false;
+  // The list shows each chat's state, so it follows every change of the open one quickly.
+  clearTimeout(state.listRefresh);
+  state.listRefresh = setTimeout(() => refreshChatList(state), 800);
+}
+
+const chatStateLabels = {
+  RUNNING: 'Running', QUEUED: 'Queued', STOPPING: 'Stopping', WAITING: 'Waiting for you',
+  HOLD: 'On hold', IDLE: 'Idle', FAILED: 'Failed', STOPPED: 'Stopped'
+};
+
+// Labels every chat of the selector with what it is doing and lists the active ones first.
+async function refreshChatList(state) {
+  if (!state.api || !state.chat) return;
+  const selector = state.chat.querySelector('[data-chat-selector]');
+  if (!selector || document.hidden) return;
+  let items;
+  try { items = await request(`${state.api}/chats`); } catch { return; }
+  const current = selector.value;
+  const options = new Map([...selector.options].filter(option => option.value).map(option => [option.value, option]));
+  const fresh = document.createDocumentFragment();
+  const groups = { active: document.createElement('optgroup'), earlier: document.createElement('optgroup') };
+  groups.active.label = 'Active';
+  groups.earlier.label = 'Earlier';
+  for (const item of items) {
+    let option = options.get(item.id);
+    if (!option) { option = new Option(item.title, item.id); options.set(item.id, option); }
+    option.dataset.mode = item.mode;
+    option.dataset.state = item.state;
+    option.textContent = `${chatStateLabels[item.state] || item.state} · ${item.title}`;
+    (item.active ? groups.active : groups.earlier).append(option);
+    options.delete(item.id);
+  }
+  const placeholder = [...selector.options].find(option => !option.value);
+  const leftovers = [...options.values()];
+  selector.replaceChildren(...(placeholder ? [placeholder] : []));
+  if (groups.active.children.length) selector.append(groups.active);
+  if (groups.earlier.children.length) selector.append(groups.earlier);
+  // Chats that belong to another worktree (a followed automation run) stay selectable.
+  leftovers.forEach(option => selector.append(option));
+  selector.value = current;
+}
+
+// Explains why a chat is idle after a run that did not complete, instead of just "Queue paused".
+function pausedStatus(data) {
+  const waiting = data.chat.queuedRunCount || 0;
+  const last = (data.runs || []).map(value => value.run).filter(run => run.startedAt).at(-1);
+  let reason = 'The last run did not finish';
+  if (last?.status === 'BUDGET_EXHAUSTED') reason = `Stopped after ${last.maxModelTurns} model turns without finishing`;
+  else if (last?.status === 'FAILED') reason = `The last run failed${last.errorMessage ? `: ${last.errorMessage}` : ''}`;
+  else if (last?.status === 'CANCELLED') reason = 'Stopped';
+  const next = waiting > 0
+    ? `${waiting} queued message${waiting === 1 ? '' : 's'} wait until you send a new one.`
+    : 'Send a message to continue.';
+  return `${reason}. ${next}`;
+}
+
 function renderSnapshot(state, data, preservePosition = false) {
   const chat = state.chat, timeline = state.scroller, previousTop = timeline.scrollTop;
   const wasBottom = timeline.scrollHeight - previousTop - timeline.clientHeight < 100;
   const empty = chat.querySelector('[data-chat-empty]');
   state.snapshot = data;
   updateAgentTab(state);
+  updateStopButton(state);
   timeline.replaceChildren();
   if (!data) {
     if (empty) { timeline.append(empty); empty.hidden = false; }
@@ -2100,7 +2263,7 @@ function renderSnapshot(state, data, preservePosition = false) {
   const waitingWorkflow = (data.workflows || []).some(value => value.status === 'WAITING_FOR_USER');
   chat.querySelector('[data-chat-status]').textContent = waitingWorkflow
     ? 'Workflow needs your input' : workingWorkflow || data.chat.active
-      ? 'Petri is working…' : data.chat.queuePaused ? 'Queue paused' : 'Ready';
+      ? 'Petri is working…' : data.chat.queuePaused ? pausedStatus(data) : 'Ready';
   const entries = [
     ...(data.runs || []).map(value => ({ index: value.run.chatMessageIndex, kind: 'run', value })),
     ...(data.workflows || []).map(value => ({ index: value.chatMessageIndex, kind: 'workflow', value }))
@@ -2130,7 +2293,7 @@ function scheduleRunningPoll(state, data) {
   clearTimeout(state.runningPoll);
   if (items.some(running)) state.runningPoll = setTimeout(() => snapshot(state, true), 1500);
 }
-function renderRun(state, entry, timeline) { const run = entry.run; const user = el('article', 'workspace-message workspace-message-user'); user.append(el('p', '', run.prompt)); const meta = el('div', 'workspace-message-meta', `Turn ${run.chatMessageIndex + 1} · ${run.status}`); user.append(meta); timeline.append(user); for (const turn of run.turns || []) { if (turn.kind === 'USER_PROMPT') continue; if (turn.kind === 'MODEL_RESPONSE' && !(turn.content || '').trim()) continue; if (turn.kind === 'MODEL_RESPONSE') { const assistant = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.raw = turn.content || ''; applyMarkdown(body, turn.content || ''); assistant.append(body); timeline.append(assistant); } else if (turn.kind === 'ERROR') timeline.append(el('article', 'workspace-message-error', turn.content || 'Agent error')); else { const row = renderToolTurn(run, turn); if (row) timeline.append(row); } } if (run.partialOutput) { const partial = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.runOutput = run.id; body.dataset.raw = run.partialOutput; applyMarkdown(body, run.partialOutput); partial.append(el('small', 'workspace-writing', 'Petri · writing…'), body); timeline.append(partial); } for (const proposal of entry.proposals || []) timeline.append(proposalCard(state, proposal)); for (const test of entry.tests || []) timeline.append(testCard(state, test)); for (const install of entry.packageInstalls || []) timeline.append(packageCard(state, install)); for (const command of entry.terminalCommands || []) timeline.append(terminalCard(state, command)); }
+function renderRun(state, entry, timeline) { const run = entry.run; const user = el('article', 'workspace-message workspace-message-user'); user.append(el('p', '', run.prompt)); const meta = el('div', 'workspace-message-meta', `Turn ${run.chatMessageIndex + 1} · ${run.status}`); user.append(meta); timeline.append(user); const trailing = []; for (const turn of run.turns || []) { if (turn.kind === 'USER_PROMPT') continue; if (turn.kind === 'MODEL_RESPONSE' && !(turn.content || '').trim()) continue; if (turn.kind === 'MODEL_RESPONSE') { trailing.length = 0; const assistant = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.raw = turn.content || ''; applyMarkdown(body, turn.content || ''); assistant.append(body); timeline.append(assistant); } else if (turn.kind === 'ERROR') timeline.append(el('article', 'workspace-message-error', turn.content || 'Agent error')); else { const row = renderToolTurn(run, turn); if (row) { timeline.append(row); trailing.push(row); } } } keepLatestToolCallsOpen(state, trailing); if (run.partialOutput) { const partial = el('article', 'workspace-message workspace-message-assistant'); const body = el('p'); body.dataset.runOutput = run.id; body.dataset.raw = run.partialOutput; applyMarkdown(body, run.partialOutput); partial.append(el('small', 'workspace-writing', 'Petri · writing…'), body); timeline.append(partial); } for (const proposal of entry.proposals || []) timeline.append(proposalCard(state, proposal)); for (const test of entry.tests || []) timeline.append(testCard(state, test)); for (const install of entry.packageInstalls || []) timeline.append(packageCard(state, install)); for (const command of entry.terminalCommands || []) timeline.append(terminalCard(state, command)); }
 
 const workflowStages = [
   ['ORCHESTRATOR_INTAKE', 'Intake'], ['PLANNING', 'Plan'],
@@ -2520,6 +2683,25 @@ function prettyJson(value) {
 }
 
 /** One compact row per tool call (call and result merged) or loop guard intervention. */
+/**
+ * The tool calls after the newest message stay open, so their input and result are visible while
+ * the agent works: every call still running, and the one that finished last. They fold away by
+ * themselves once the agent writes its next message. A row the user opened or closed keeps that.
+ */
+function keepLatestToolCallsOpen(state, rows) {
+  state.toolToggles ||= new Map();
+  const finished = rows.filter(row => row.dataset.toolState !== 'running');
+  const open = new Set(rows.filter(row => row.dataset.toolState === 'running'));
+  if (finished.length) open.add(finished.at(-1));
+  for (const row of rows) {
+    const id = row.dataset.toolCall;
+    row.open = id && state.toolToggles.has(id) ? state.toolToggles.get(id) : open.has(row);
+    row.querySelector('summary')?.addEventListener('click', () => {
+      if (id) state.toolToggles.set(id, !row.open);
+    });
+  }
+}
+
 function renderToolTurn(run, turn) {
   const turns = run.turns || [];
   let icon; let title; let detail = ''; let state = 'completed'; let input = ''; let output = '';
@@ -2549,12 +2731,23 @@ function renderToolTurn(run, turn) {
     output = prettyJson(turn.content);
   }
   const row = el('details', `workspace-tool-row is-${state} cat-${toolCategory(turn.toolName)}`);
+  row.dataset.toolCall = turn.toolCallId || turn.id || '';
+  row.dataset.toolState = state;
   const summary = el('summary');
   const iconBox = el('span', 'workspace-tool-icon'); iconBox.append(renderIcon(icon));
   const stateIcon = el('span', 'workspace-tool-state');
   stateIcon.append(renderIcon(state === 'running' ? 'LoaderCircle' : state === 'failed' ? 'CircleX' : state === 'completed' ? 'Check' : 'CircleAlert'));
   summary.append(iconBox, el('span', 'workspace-tool-title', title));
   if (detail) summary.append(el('span', 'workspace-tool-detail', detail));
+  if (state === 'running') {
+    const started = (turn.kind === 'TOOL_CALL' ? turn : (turns.find(value => value.kind === 'TOOL_CALL' && value.toolCallId === turn.toolCallId) || turn)).createdAt;
+    if (started) {
+      const since = el('time', 'workspace-tool-since', 'just now');
+      since.setAttribute('datetime', started);
+      since.dataset.relative = '';
+      summary.append(since);
+    }
+  }
   summary.append(stateIcon);
   row.append(summary);
   if (input || output) {

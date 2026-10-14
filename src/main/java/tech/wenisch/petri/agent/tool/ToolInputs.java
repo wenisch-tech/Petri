@@ -22,6 +22,10 @@ final class ToolInputs {
   static int integer(Map<String, Object> input, String name, int fallback, int minimum, int maximum) {
     Object raw = input.get(name);
     if (raw == null) return fallback;
+    // Several models send numbers as strings ("20"); a whole number in quotes is accepted.
+    if (raw instanceof String text && text.strip().matches("-?\\d{1,9}")) {
+      raw = Integer.valueOf(text.strip());
+    }
     if (!(raw instanceof Number number)) throw new IllegalArgumentException(name + " must be a number");
     int value = number.intValue();
     if (value < minimum || value > maximum || number.doubleValue() != value) {

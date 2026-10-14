@@ -60,6 +60,45 @@ function repositoryLink(uri) {
   return { label, href: web };
 }
 
+// ---- vulnerabilities --------------------------------------------------------------------------
+
+const SEVERITY_ORDER = [['critical', 'Critical'], ['high', 'High'], ['medium', 'Medium'], ['low', 'Low']];
+
+// Counts per severity of the latest scan. `compact` keeps only what needs attention first.
+function patchVulnerabilities(container, summary, href, compact) {
+  const signature = JSON.stringify(summary ? [summary.branch, summary.critical, summary.high, summary.medium, summary.low, summary.complete] : null);
+  if (container.dataset.sig === signature) return;
+  container.dataset.sig = signature;
+  container.replaceChildren();
+  if (!summary) {
+    if (compact) { container.hidden = true; return; }
+    container.hidden = false;
+    const link = el('a', 'vuln-mini is-none', 'Not scanned');
+    link.href = href;
+    link.title = 'No vulnerability scan yet. Open the Vulnerabilities tab to run one.';
+    container.append(el('span', 'dash-automations-label', 'Vulnerabilities'), link);
+    return;
+  }
+  container.hidden = false;
+  const link = el('a', 'dash-vuln-link');
+  link.href = href;
+  link.title = `Latest scan of ${summary.branch || 'the branch'}${summary.complete ? '' : ' (incomplete)'}`;
+  if (!compact) container.append(el('span', 'dash-automations-label', `Vulnerabilities${summary.branch ? ` · ${summary.branch}` : ''}`));
+  let shown = 0;
+  for (const [key, label] of SEVERITY_ORDER) {
+    const count = summary[key];
+    if (!count) continue;
+    const chip = el('span', `vuln-mini is-${key}`);
+    chip.append(el('strong', '', String(count)), el('span', '', compact ? label[0] : label));
+    chip.title = `${count} ${label.toLowerCase()}`;
+    link.append(chip);
+    shown++;
+  }
+  if (!shown) link.append(el('span', 'vuln-mini is-clean', compact ? '0' : 'No findings'));
+  if (!summary.complete) link.append(el('span', 'vuln-mini is-none', compact ? '?' : 'incomplete'));
+  container.append(link);
+}
+
 // ---- worktree row -----------------------------------------------------------------------------
 
 function createWorktree() {
@@ -73,14 +112,16 @@ function createWorktree() {
   chip.append(chipIcon, chipText);
   const changes = el('span', 'dash-changes');
   changes.append(icon('FileDiff'), el('span'));
-  head.append(icon('GitBranch'), branch, chip, changes);
+  const vulns = el('span', 'dash-vulns-inline');
+  vulns.hidden = true;
+  head.append(icon('GitBranch'), branch, chip, vulns, changes);
   const detail = el('span', 'dash-detail');
   const message = el('span', 'dash-message');
   message.append(icon('Bot'), el('span', 'dash-message-text'));
   const result = el('span', 'dash-result');
   link.append(head, detail, message, result);
   item.append(link);
-  return { item, link, branch, chip, chipIcon, chipText, changes, detail, message, result, state: null };
+  return { item, link, branch, chip, chipIcon, chipText, changes, vulns, detail, message, result, state: null };
 }
 
 function patchWorktree(ref, projectId, worktree) {
@@ -93,6 +134,7 @@ function patchWorktree(ref, projectId, worktree) {
     ref.state = worktree.state;
   }
   setText(ref.chipText, worktree.headline);
+  patchVulnerabilities(ref.vulns, worktree.vulnerabilities, `/workspace/projects/${projectId}?view=vulnerabilities`, true);
   if (ref.changes.hidden !== (worktree.pendingChanges === 0)) ref.changes.hidden = worktree.pendingChanges === 0;
   setText(ref.changes.lastChild, worktree.pendingChanges);
   setAttr(ref.changes, 'title', `${worktree.pendingChanges} change${worktree.pendingChanges === 1 ? '' : 's'} awaiting review`);
@@ -150,6 +192,7 @@ function createCard(card) {
   header.append(orb, titles, time);
 
   const automations = el('div', 'dash-automations');
+  const vulns = el('div', 'dash-automations dash-vulns');
   const stats = el('dl', 'dash-stats');
   const statRefs = {
     working: stat('Working', 'Worktrees with an agent running'),
@@ -170,9 +213,9 @@ function createCard(card) {
   const settings = action(`/workspace/projects/${card.id}?view=settings`, 'Settings', 'Settings', false, card.name);
   actions.append(open, auto, settings);
 
-  root.append(header, automations, stats, busy, idleBox, actions);
+  root.append(header, automations, vulns, stats, busy, idleBox, actions);
   return {
-    root, orb, title, headline, time, automations, statRefs, busy, idleBox, idleSummary, idle,
+    root, orb, title, headline, time, automations, vulns, statRefs, busy, idleBox, idleSummary, idle,
     worktrees: new Map(), state: null, empty: el('li', 'dash-empty')
   };
 }
@@ -218,6 +261,7 @@ function patchCard(ref, card) {
   if (ref.time.dataset.at !== (card.lastActivityAt || '')) ref.time.dataset.at = card.lastActivityAt || '';
   setText(ref.time, relative(card.lastActivityAt) || 'no activity yet');
   patchAutomations(ref, card.automations || []);
+  patchVulnerabilities(ref.vulns, card.vulnerabilities, `/workspace/projects/${card.id}?view=vulnerabilities`, false);
   setText(ref.statRefs.working.value, card.working);
   setText(ref.statRefs.review.value, card.pendingChanges);
   setText(ref.statRefs.runs.value, card.runsTotal);

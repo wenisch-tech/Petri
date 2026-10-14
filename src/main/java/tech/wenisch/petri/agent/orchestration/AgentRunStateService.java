@@ -180,7 +180,8 @@ class AgentRunStateService {
       arguments = objectMapper.readValue(
           call.argumentsJson(), new TypeReference<Map<String, Object>>() {});
     } catch (JacksonException exception) {
-      throw new IllegalArgumentException("Tool arguments are not valid JSON", exception);
+      throw new IllegalArgumentException("Tool arguments are not valid JSON. If the call was long, "
+          + "it was probably cut off by the output limit: send a shorter call.", exception);
     }
     ToolExecutionResult result = tools.execute(
         call.name(), new ToolExecutionContext(run.worktreeId(), run.id(), run.workflowRole(),

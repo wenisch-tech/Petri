@@ -55,7 +55,7 @@ public class ScanVulnerabilitiesTool implements AgentTool {
     try {
       result = trivy.scan(worktree, ToolInputs.string(input, "path", null, 500),
           strings(input.get("scanners")), strings(input.get("severities")),
-          Boolean.TRUE.equals(input.get("ignoreUnfixed")));
+          Boolean.TRUE.equals(input.get("ignoreUnfixed")), true);
     } catch (IOException exception) {
       throw new IllegalStateException("The scan could not be run: " + exception.getMessage());
     }
@@ -65,6 +65,15 @@ public class ScanVulnerabilitiesTool implements AgentTool {
     output.put("fixable", result.fixable());
     output.put("bySeverity", result.bySeverity());
     output.put("byType", result.byType());
+    output.put("complete", result.complete());
+    if (result.dependencyResolution() != null) {
+      List<Map<String, Object>> steps = new ArrayList<>();
+      for (TrivyScanService.Resolution step : result.dependencyResolution()) {
+        steps.add(Map.of("ecosystem", step.ecosystem(), "directory", step.directory(),
+            "status", step.status(), "note", step.note() == null ? "" : step.note()));
+      }
+      output.put("dependencyResolution", steps);
+    }
     output.put("findingsShown", result.findings().size());
     output.put("findingsTruncated", result.truncated());
     if (result.note() != null) output.put("note", result.note());

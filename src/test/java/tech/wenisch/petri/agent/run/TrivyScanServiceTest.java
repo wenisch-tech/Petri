@@ -10,7 +10,8 @@ import tools.jackson.databind.json.JsonMapper;
 
 class TrivyScanServiceTest {
   private final TrivyScanService service = new TrivyScanService(
-      mock(WorkspacePaths.class), mock(LocalToolchain.class), mock(Confinement.class),
+      mock(WorkspacePaths.class), mock(DependencyResolver.class), mock(LocalToolchain.class),
+      mock(Confinement.class),
       JsonMapper.builder().build(), "trivy");
 
   @Test

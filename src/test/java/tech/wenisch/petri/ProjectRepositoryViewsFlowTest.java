@@ -33,6 +33,7 @@ class ProjectRepositoryViewsFlowTest {
   @Autowired AppUserRepository users;
   @Autowired ProjectRepository projects;
   @MockitoBean ProjectRepositoryActivityService activity;
+  @Autowired tech.wenisch.petri.vulnerability.VulnerabilityReportService vulnerabilities;
 
   @Test
   void pullRequestAndPipelineViewsRenderStatesAndAreOwnerScoped() throws Exception {
@@ -102,6 +103,24 @@ class ProjectRepositoryViewsFlowTest {
     mockMvc.perform(get("/projects/{id}/skills", project.getId())
             .with(user("bob@petri.local").roles("USER")))
         .andExpect(status().isNotFound());
+    mockMvc.perform(get("/projects/{id}/vulnerabilities", project.getId())
+            .with(user("alice@petri.local").roles("USER")).param("embedded", "true"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("No vulnerability scan for this branch yet")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("data-run-skill=\"vulnerability-scan\"")));
+    vulnerabilities.save(project.getId(), "main", null, "Trivy 0.76.0", "One real issue.", false,
+        "Maven was not resolved", List.of(new tech.wenisch.petri.vulnerability.VulnerabilityReportService.Finding(
+            "CVE-2026-1 in lib", "HIGH", "pom.xml: lib 1.0", "lib 1.0 is vulnerable", "lib 1.1",
+            "Upgrade **lib**.", List.of("https://example.test/advisory"),
+            List.of("CVE-2026-1"))), null);
+    mockMvc.perform(get("/projects/{id}/vulnerabilities", project.getId())
+            .with(user("alice@petri.local").roles("USER")).param("embedded", "true"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("State today")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Target state")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("https://nvd.nist.gov/vuln/detail/CVE-2026-1")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("CVE-2026-1 in lib")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Maven was not resolved")));
     mockMvc.perform(get("/projects/{id}/automations/runs/{run}/follow", project.getId(), UUID.randomUUID())
             .with(user("alice@petri.local").roles("USER")))
         .andExpect(status().isNotFound());

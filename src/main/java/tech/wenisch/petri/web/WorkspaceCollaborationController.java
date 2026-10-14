@@ -134,6 +134,78 @@ public class WorkspaceCollaborationController {
         projectId, actor.getId(), actor.getEmail(), target.provider(), target.id(), request.model());
   }
 
+  /** One chat of the selector with what it is doing right now. */
+  public record WorkspaceChatListItem(
+      UUID id, String title, String mode, String state, boolean active, int queued) {}
+
+  @GetMapping("/worktrees/{worktreeId}/chats")
+  public List<WorkspaceChatListItem> chats(@PathVariable UUID worktreeId, Principal principal) {
+    access.requireWorktree(worktreeId, principal.getName());
+    AppUser actor = actor(principal);
+    List<WorkspaceChatListItem> items = new java.util.ArrayList<>();
+    for (AgentChatView chat : runs.listChats(worktreeId, actor.getId())) {
+      String state = chatState(chat, actor);
+      boolean active = List.of("RUNNING", "QUEUED", "STOPPING", "WAITING", "HOLD").contains(state);
+      items.add(new WorkspaceChatListItem(chat.id(), chat.title(), chat.executionMode().name(),
+          state, active, chat.queuedRunCount()));
+    }
+    // Active chats first; the order inside each group stays most recently updated first.
+    items.sort(java.util.Comparator.comparing((WorkspaceChatListItem item) -> !item.active()));
+    return items;
+  }
+
+  /**
+   * RUNNING, QUEUED, STOPPING, WAITING (needs the person), HOLD, or the idle outcomes IDLE,
+   * FAILED and STOPPED.
+   */
+  private String chatState(AgentChatView chat, AppUser actor) {
+    if (chat.executionMode() == tech.wenisch.petri.agent.orchestration.AgentChatExecutionMode.ORCHESTRATED) {
+      String result = "IDLE";
+      for (AgentWorkflowView workflow : workflows.chatWorkflows(chat.id(), actor.getId())) {
+        switch (workflow.status()) {
+          case WAITING_FOR_USER -> { return "WAITING"; }
+          case HUMAN_HOLD -> { return "HOLD"; }
+          case CANCELLING -> { return "STOPPING"; }
+          case PENDING, RUNNING -> { return "RUNNING"; }
+          case CANCELLED -> result = "STOPPED";
+          default -> result = "IDLE";
+        }
+      }
+      return result;
+    }
+    boolean pending = false;
+    for (AgentRunView run : chat.runs()) {
+      switch (run.status()) {
+        case RUNNING -> { return "RUNNING"; }
+        case CANCELLATION_REQUESTED -> { return "STOPPING"; }
+        case PENDING -> pending = true;
+        default -> { }
+      }
+    }
+    if (pending) return chat.queuePaused() ? "HOLD" : "QUEUED";
+    if (chat.runs().isEmpty()) return "IDLE";
+    return switch (chat.runs().get(chat.runs().size() - 1).status()) {
+      case FAILED, BUDGET_EXHAUSTED -> "FAILED";
+      case CANCELLED -> "STOPPED";
+      default -> "IDLE";
+    };
+  }
+
+  /** Stops what a direct chat is doing: the running turn and everything queued behind it. */
+  @PostMapping("/chats/{chatId}/cancel")
+  public WorkspaceChatSnapshot cancel(@PathVariable UUID chatId, Principal principal) {
+    AppUser actor = actor(principal);
+    runs.chat(chatId, actor.getId());
+    for (AgentRunView run : runs.chatRuns(chatId)) {
+      switch (run.status()) {
+        case PENDING, RUNNING ->
+            runs.requestCancellation(run.id(), actor.getId(), "workspace:" + actor.getEmail());
+        default -> { }
+      }
+    }
+    return snapshotFor(chatId, actor);
+  }
+
   @GetMapping("/chats/{chatId}/snapshot")
   public WorkspaceChatSnapshot snapshot(@PathVariable UUID chatId, Principal principal) {
     return snapshotFor(chatId, actor(principal));

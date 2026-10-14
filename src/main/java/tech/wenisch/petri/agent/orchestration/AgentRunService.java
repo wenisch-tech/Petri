@@ -17,6 +17,9 @@ import tech.wenisch.petri.git.WorkspaceGitOperationCoordinator;
 
 @Service
 public class AgentRunService {
+  /** An execution that has not renewed its lease for this long has no live executor. */
+  private static final java.time.Duration ABANDONED_AFTER = java.time.Duration.ofSeconds(90);
+
   private static final int MAX_PROMPT_LENGTH = 200_000;
   private static final int DEFAULT_MAX_MODEL_TURNS = 20;
 
@@ -358,7 +361,14 @@ public class AgentRunService {
       throw new IllegalArgumentException("Agent run belongs to another creator");
     }
     if (!run.terminal()) {
-      run.requestCancellation(Instant.now(clock));
+      Instant now = Instant.now(clock);
+      run.requestCancellation(now);
+      // A run whose executor is gone (restart, crash) would stay "stopping" forever, because only
+      // the executor acknowledges a cancellation. Finish it here when nobody holds its lease.
+      if (run.status() == AgentRunStatus.CANCELLATION_REQUESTED
+          && run.executionLeaseExpired(now, ABANDONED_AFTER)) {
+        run.cancelled(now);
+      }
       auditLog.record(
           auditActor, "AGENT_RUN_CANCELLATION_REQUESTED", "AGENT_RUN", run.id(),
           "Requested cancellation of agent run");

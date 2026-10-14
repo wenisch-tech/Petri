@@ -1,0 +1,149 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(|${project.name} vulnerabilities|)}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('projects')}"></header>
+
+<th:block th:fragment="content">
+<main class="page-narrow !max-w-6xl">
+  <a class="back-link" href="/projects"><i data-lucide="ArrowLeft"></i> Projects</a>
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Vulnerabilities</h1>
+      <p class="page-description">
+        <span th:if="${branch != null}">Branch <code class="rounded bg-ink-700/50 px-1.5 text-xs" th:text="${branch}">main</code></span>
+        <span th:if="${report != null}">
+          · scanned <time data-relative th:attr="datetime=${report.updatedAt}" th:text="${report.updatedAt}">time</time>
+          <span th:if="${report.scanner != null}" th:text="|with ${report.scanner}|">with Trivy</span>
+        </span>
+      </p>
+    </div>
+    <div class="page-actions" th:if="${report != null}">
+      <button type="button" class="btn-secondary" data-run-skill="vulnerability-scan">
+        <i data-lucide="Play"></i> Scan again
+      </button>
+    </div>
+  </div>
+
+  <div th:if="${report == null}" class="empty-state">
+    <i data-lucide="ShieldAlert"></i>
+    <h2>No vulnerability scan for this branch yet</h2>
+    <p>Run the vulnerability scan skill. It scans dependencies, secrets and configuration with Trivy and
+      saves the findings here as a table.</p>
+    <button type="button" class="btn-primary" data-run-skill="vulnerability-scan"><i data-lucide="Play"></i> Run vulnerability scan</button>
+  </div>
+
+  <th:block th:if="${report != null}">
+    <div th:unless="${report.complete}" class="alert alert-error" role="status">
+      <i data-lucide="CircleAlert"></i>
+      <span>The scan did not cover everything<span th:if="${report.completenessNote != null}" th:text="|: ${report.completenessNote}|"></span>.
+        An empty or short list is not a clean bill of health.</span>
+    </div>
+
+    <div x-init="apply()"
+         x-data="{
+           sortKey: 'severity', dir: 1, filter: null,
+           rank: { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, INFO: 4 },
+           sort(key) { if (this.sortKey === key) this.dir = -this.dir; else { this.sortKey = key; this.dir = 1; } this.apply(); },
+           toggle(level) { this.filter = this.filter === level ? null : level; this.apply(); },
+           apply() {
+             const body = this.$refs.body;
+             if (!body) return;
+             const rows = [...body.querySelectorAll('tr')];
+             const key = this.sortKey;
+             rows.sort((a, b) => {
+               const x = a.dataset[key] ?? '', y = b.dataset[key] ?? '';
+               let order = key === 'severity' || key === 'number' ? Number(x) - Number(y) : x.localeCompare(y, undefined, { numeric: true });
+               if (order === 0) order = Number(a.dataset.number) - Number(b.dataset.number);
+               return order * this.dir;
+             });
+             rows.forEach(row => { body.append(row); row.hidden = this.filter !== null && row.dataset.level !== this.filter; });
+             this.$root.querySelectorAll('[data-detail]').forEach(card => { card.hidden = this.filter !== null && card.dataset.level !== this.filter; });
+           },
+           aria(key) { return this.sortKey === key ? (this.dir === 1 ? 'ascending' : 'descending') : 'none'; },
+           mark(key) { return this.sortKey === key ? (this.dir === 1 ? '↑' : '↓') : ''; }
+         }">
+    <section class="mb-5">
+      <div class="vuln-counts mb-3 flex flex-wrap items-center gap-2" role="group" aria-label="Filter findings by severity">
+        <button type="button" th:each="level : ${severities}" th:if="${report.count(level) > 0}"
+                class="vuln-count" th:classappend="|is-${#strings.toLowerCase(level)}|"
+                th:attr="data-level=${level},aria-pressed=false" @click="toggle($el.dataset.level)"
+                :class="{ 'is-active': filter === $el.dataset.level }" :aria-pressed="filter === $el.dataset.level">
+          <strong th:text="${report.count(level)}">1</strong> <span th:text="${#strings.capitalize(#strings.toLowerCase(level))}">High</span>
+        </button>
+        <span th:if="${#lists.isEmpty(report.findings)}" class="vuln-count is-none">No findings</span>
+        <button type="button" class="btn-ghost !min-h-8 text-xs" x-show="filter !== null" x-cloak @click="toggle(filter)">Show all</button>
+      </div>
+      <div class="card card-body petri-md text-sm leading-6 text-ink-300" data-markdown th:text="${report.summary}">Summary</div>
+    </section>
+
+    <section th:unless="${#lists.isEmpty(report.findings)}" class="mb-8">
+      <div class="table-shell">
+        <table class="data-table vuln-table">
+          <thead>
+            <tr>
+              <th scope="col" :aria-sort="aria('finding')"><button type="button" class="vuln-sort" @click="sort('finding')">Finding <span x-text="mark('finding')"></span></button></th>
+              <th scope="col" :aria-sort="aria('identifier')"><button type="button" class="vuln-sort" @click="sort('identifier')">Identifier <span x-text="mark('identifier')"></span></button></th>
+              <th scope="col" :aria-sort="aria('severity')"><button type="button" class="vuln-sort" @click="sort('severity')">Severity <span x-text="mark('severity')"></span></button></th>
+              <th scope="col" :aria-sort="aria('where')"><button type="button" class="vuln-sort" @click="sort('where')">Where <span x-text="mark('where')"></span></button></th>
+              <th scope="col" :aria-sort="aria('today')"><button type="button" class="vuln-sort" @click="sort('today')">State today <span x-text="mark('today')"></span></button></th>
+              <th scope="col" :aria-sort="aria('target')"><button type="button" class="vuln-sort" @click="sort('target')">Target state <span x-text="mark('target')"></span></button></th>
+            </tr>
+          </thead>
+          <tbody x-ref="body">
+            <tr th:each="finding, row : ${report.findings}"
+                th:attr="data-number=${row.count},data-level=${finding.severity},data-severity=${finding.severity == 'CRITICAL' ? 0 : (finding.severity == 'HIGH' ? 1 : (finding.severity == 'MEDIUM' ? 2 : (finding.severity == 'LOW' ? 3 : 4)))},data-finding=${#strings.toLowerCase(finding.title)},data-identifier=${#lists.isEmpty(finding.identifiers) ? '~' : #strings.toLowerCase(finding.identifiers[0])},data-where=${#strings.toLowerCase(finding.where)},data-today=${#strings.toLowerCase(finding.stateToday)},data-target=${#strings.toLowerCase(finding.targetState)}">
+              <td class="vuln-title"><a class="font-medium text-ink-100 hover:text-brand-400" th:href="|#finding-${row.count}|"
+                     th:text="|${row.count}. ${finding.title}|">1. Title</a></td>
+              <td class="vuln-ids">
+                <th:block th:each="link : ${finding.identifierLinks}">
+                  <a th:if="${link.url != null}" class="vuln-id" th:href="${link.url}" target="_blank" rel="noopener noreferrer" th:text="${link.id}">CVE-2026-1</a>
+                  <span th:unless="${link.url != null}" class="vuln-id" th:text="${link.id}">KSV-0046</span>
+                </th:block>
+                <span th:if="${#lists.isEmpty(finding.identifiers)}" class="text-ink-500">—</span>
+              </td>
+              <td><span class="vuln-severity" th:classappend="|is-${#strings.toLowerCase(finding.severity)}|"
+                        th:text="${#strings.capitalize(#strings.toLowerCase(finding.severity))}">High</span></td>
+              <td class="vuln-cell font-mono text-xs"><div class="line-clamp-3" th:title="${finding.where}" th:text="${finding.where}">where</div></td>
+              <td class="vuln-cell"><div class="line-clamp-3" th:title="${finding.stateToday}" th:text="${finding.stateToday}">today</div></td>
+              <td class="vuln-cell"><div class="line-clamp-3" th:title="${finding.targetState}" th:text="${finding.targetState}">target</div></td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </section>
+
+    <section th:unless="${#lists.isEmpty(report.findings)}">
+      <h2 class="section-title mb-3">Details</h2>
+      <div class="space-y-4">
+        <article th:each="finding, row : ${report.findings}" th:id="|finding-${row.count}|" data-detail
+                 th:attr="data-level=${finding.severity}" class="card card-body">
+          <header class="mb-2 flex flex-wrap items-center gap-2">
+            <span class="vuln-severity" th:classappend="|is-${#strings.toLowerCase(finding.severity)}|"
+                  th:text="${#strings.capitalize(#strings.toLowerCase(finding.severity))}">High</span>
+            <h3 class="text-base font-semibold text-ink-100" th:text="|${row.count}. ${finding.title}|">Title</h3>
+          </header>
+          <p class="mb-2 flex flex-wrap items-center gap-1.5 text-xs text-ink-500">
+            <th:block th:each="link : ${finding.identifierLinks}">
+              <a th:if="${link.url != null}" class="vuln-id" th:href="${link.url}" target="_blank" rel="noopener noreferrer" th:text="${link.id}">CVE-2026-1</a>
+              <span th:unless="${link.url != null}" class="vuln-id" th:text="${link.id}">KSV-0046</span>
+            </th:block>
+            <span class="font-mono" th:text="${finding.where}">where</span>
+          </p>
+          <dl class="vuln-states">
+            <div><dt>State today</dt><dd th:text="${finding.stateToday}">today</dd></div>
+            <div><dt>Target state</dt><dd th:text="${finding.targetState}">target</dd></div>
+          </dl>
+          <div class="petri-md text-sm leading-6 text-ink-300" data-markdown th:text="${finding.description}">Description</div>
+          <ul th:unless="${#lists.isEmpty(finding.references)}" class="mt-3 space-y-1 text-xs">
+            <li th:each="link : ${finding.references}"><a class="text-brand-400 hover:underline" th:href="${link}" target="_blank" rel="noopener noreferrer" th:text="${link}">link</a></li>
+          </ul>
+        </article>
+      </div>
+    </section>
+    </div>
+  </th:block>
+</main>
+</th:block>
+</body>
+</html>

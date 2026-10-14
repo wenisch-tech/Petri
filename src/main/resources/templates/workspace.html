@@ -11,8 +11,8 @@
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
   <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
-  <link rel="stylesheet" href="/css/petri.css?v=68">
-  <script defer src="/js/petri.js?v=65"></script>
+  <link rel="stylesheet" href="/css/petri.css?v=78">
+  <script defer src="/js/petri.js?v=76"></script>
 </head>
 <body class="workspace-body">
   <header class="topbar workspace-topbar relative z-40">
@@ -37,11 +37,11 @@
   <section class="workspace-gitbar" data-git-bar>
     <nav class="workspace-viewbar" role="tablist" aria-label="Project views">
       <a class="workspace-view-tab is-active" role="tab" th:href="@{/workspace/projects/{id}(id=${project.id})}" data-workspace-view="workspace"><i data-lucide="FileCode2"></i><span>Workspace</span></a>
-      <a class="workspace-view-tab" role="tab" th:href="@{/projects/{id}/pull-requests(id=${project.id})}" data-workspace-view="pullrequests"><i data-lucide="GitPullRequestArrow"></i><span>Pull requests</span></a>
+      <a class="workspace-view-tab" role="tab" th:href="@{/projects/{id}/pull-requests(id=${project.id})}" data-workspace-view="pullrequests"><i data-lucide="GitPullRequestArrow"></i><span>Pull requests</span><span class="tab-badges" data-tab-badges="pullrequests"></span></a>
+      <a class="workspace-view-tab" role="tab" th:href="@{/projects/{id}/vulnerabilities(id=${project.id})}" data-workspace-view="vulnerabilities"><i data-lucide="ShieldAlert"></i><span>Vulnerabilities</span><span class="tab-badges" data-tab-badges="vulnerabilities"></span></a>
       <a class="workspace-view-tab" role="tab" th:href="@{/projects/{id}/pipelines(id=${project.id})}" data-workspace-view="pipelines"><i data-lucide="Rocket"></i><span>Pipelines</span></a>
-      <a class="workspace-view-tab" role="tab" th:href="@{/projects/{id}/automations(id=${project.id})}" data-workspace-view="automations"><i data-lucide="Bot"></i><span>Automations</span></a>
       <a class="workspace-view-tab" role="tab" th:href="@{/projects/{id}/skills(id=${project.id})}" data-workspace-view="skills"><i data-lucide="Sparkles"></i><span>Skills</span></a>
-      <a class="workspace-view-tab" role="tab" th:href="@{/projects/{id}/runs(id=${project.id})}" data-workspace-view="runs"><i data-lucide="Workflow"></i><span>Runs</span></a>
+      <a class="workspace-view-tab" role="tab" th:href="@{/projects/{id}/automations(id=${project.id})}" data-workspace-view="automations"><i data-lucide="Bot"></i><span>Automations</span><span class="tab-badges" data-tab-badges="automations"></span></a>
       <a class="workspace-view-tab" role="tab" th:href="@{/projects/{id}/settings(id=${project.id})}" data-workspace-view="settings"><i data-lucide="Settings"></i><span>Settings</span></a>
     </nav>
     <div class="workspace-git-pane">
@@ -196,7 +196,7 @@
         <small data-approval-hint>Workflow chats: approving the plan already covers file changes and tests. Package installs and terminal commands always ask unless enabled above.</small>
       </div>
       <div th:unless="${modelConfigured}" class="workspace-warning mx-3 mb-2">No model is ready for you yet. <a class="underline" href="/model-providers">Add your API key</a><span th:if="${isInstanceAdmin}"> or <a class="underline" href="/model-settings">configure a provider</a></span>.</div>
-      <form class="workspace-composer" data-chat-form><textarea class="field" data-chat-input rows="1" required maxlength="200000" placeholder="Ask Petri to work in this project…" th:disabled="${!modelConfigured}"></textarea><label class="workspace-guide-toggle" data-guide-toggle hidden><input type="checkbox" data-guide-active checked><span>Guide active task</span></label><div><span class="text-xs text-ink-500" data-chat-status>Ready</span><button class="btn-primary" type="button" data-chat-send th:disabled="${!modelConfigured}" aria-label="Send message"><i data-lucide="Send"></i><span>Send</span></button></div></form>
+      <form class="workspace-composer" data-chat-form><textarea class="field" data-chat-input rows="1" required maxlength="200000" placeholder="Ask Petri to work in this project…" th:disabled="${!modelConfigured}"></textarea><label class="workspace-guide-toggle" data-guide-toggle hidden><input type="checkbox" data-guide-active checked><span>Guide active task</span></label><div><span class="text-xs text-ink-500" data-chat-status>Ready</span><button class="btn-secondary" type="button" data-chat-stop hidden aria-label="Stop the running task"><i data-lucide="Square"></i><span>Stop</span></button><button class="btn-primary" type="button" data-chat-send th:disabled="${!modelConfigured}" aria-label="Send message"><i data-lucide="Send"></i><span>Send</span></button></div></form>
       <div class="workspace-chat-tools" aria-label="Chat configuration">
         <label><span>Mode</span><select class="workspace-mode-selector" data-chat-mode aria-label="Agent mode" title="Agent mode">
           <option value="ORCHESTRATED">Workflow</option><option value="DIRECT">Direct</option>
@@ -209,6 +209,12 @@
         </select></label>
         <span class="workspace-model-unavailable" data-model-unavailable th:hidden="${!savedModelUnavailable}">Saved model unavailable</span>
         <button class="icon-button" type="button" data-automation-menu title="Approval settings" aria-label="Approval settings"><i data-lucide="ShieldCheck"></i></button>
+        <span class="workspace-chat-more" data-chat-more>
+          <button class="icon-button" type="button" data-chat-more-toggle aria-haspopup="true" aria-expanded="false" title="More" aria-label="More project views"><i data-lucide="MoreHorizontal"></i></button>
+          <div class="workspace-tab-menu-panel" data-chat-more-panel hidden>
+            <a th:href="@{/projects/{id}/runs(id=${project.id})}" data-open-view="runs"><i data-lucide="History"></i><span>Run history</span></a>
+          </div>
+        </span>
       </div>
     </aside>
 
