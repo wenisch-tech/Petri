@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.14.0 - 2026-10-14
+
+## [0.14.0](https://github.com/wenisch-tech/Petri/compare/v0.13.0...v0.14.0) (2026-10-14)
+
+
+### Features
+
+* wired code review skill into pull requests ([ecaef40](https://github.com/wenisch-tech/Petri/commit/ecaef409db247e091571811b8c93d99ff06b9f05))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.14.0
+
+
 ## v0.13.0 - 2026-10-13
 
 ## [0.13.0](https://github.com/wenisch-tech/Petri/compare/v0.12.0...v0.13.0) (2026-10-13)
