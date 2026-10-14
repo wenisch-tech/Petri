@@ -394,6 +394,16 @@ async function runSkill(state, name) {
     const branch = state.root.dataset.defaultBranch;
     if (!branch) throw new Error('Open a branch first: the chat works on a branch of this project.');
     try { sessionStorage.setItem(`petri:run-skill:${state.projectId}`, name); } catch { /* optional */ }
+    // Without a branch the model picker is not wired up yet, so keep the user's choice for the page
+    // that opens next, which starts the chat with the project's saved model.
+    const picker = state.root.querySelector('[data-model-selector]');
+    const chosen = picker?.selectedOptions[0];
+    if (chosen && picker.value) {
+      await request(`/workspace/api/projects/${state.projectId}/model-preference`, {
+        method: 'PUT', headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+        body: JSON.stringify({ providerInstanceId: picker.value, provider: chosen.dataset.kind, model: chosen.dataset.model })
+      });
+    }
     const worktree = await request(`/workspace/api/projects/${state.projectId}/branches/open`, {
       method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
       body: JSON.stringify({ name: branch, kind: 'REMOTE' })

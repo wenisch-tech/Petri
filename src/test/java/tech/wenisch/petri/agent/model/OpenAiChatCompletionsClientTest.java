@@ -125,4 +125,64 @@ class OpenAiChatCompletionsClientTest {
 
     assertThat(request.path("response_format").path("type").asText()).isEqualTo("json_object");
   }
+
+  @Test
+  void streamedToolCallsSurviveEmptyIdsRepeatedNamesAndEmptyArguments() throws Exception {
+    HttpServer server = HttpServer.create(new InetSocketAddress("localhost", 0), 0);
+    server.createContext("/v1/chat/completions", exchange -> {
+      exchange.getRequestBody().readAllBytes();
+      // Qwen-style stream: the id and name come first, later chunks repeat them as empty strings,
+      // a second call reuses index 0 with another id, and one call has no arguments at all.
+      String sse = String.join("\n\n",
+          "data: {\"id\":\"c1\",\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_a\",\"function\":{\"name\":\"read_file\",\"arguments\":\"\"}}]}}]}",
+          "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"\",\"function\":{\"name\":\"\",\"arguments\":\"{\\\"path\\\":\\\"a\\\"}\"}}]}}]}",
+          "data: {\"choices\":[{\"delta\":{\"tool_calls\":[{\"index\":0,\"id\":\"call_b\",\"function\":{\"name\":\"list_files\",\"arguments\":\"\"}}]}}]}",
+          "data: {\"choices\":[{\"finish_reason\":\"tool_calls\",\"delta\":{}}]}",
+          "data: {\"choices\":[],\"usage\":{\"prompt_tokens\":5,\"completion_tokens\":3}}",
+          "data: [DONE]", "");
+      byte[] body = sse.getBytes(StandardCharsets.UTF_8);
+      exchange.getResponseHeaders().set("Content-Type", "text/event-stream");
+      exchange.sendResponseHeaders(200, body.length);
+      exchange.getResponseBody().write(body);
+      exchange.close();
+    });
+    server.start();
+    try {
+      ModelCredentialService credentials = mock(ModelCredentialService.class);
+      when(credentials.requireMaterial(ModelProvider.OPENAI_COMPATIBLE)).thenReturn(
+          new ModelCredentialMaterial(ModelProvider.OPENAI_COMPATIBLE, "key",
+              "http://localhost:" + server.getAddress().getPort() + "/v1", "qwen"));
+      OpenAiCompatibleTransport transport = new OpenAiCompatibleTransport(
+          credentials, HttpClient.newHttpClient(), Duration.ofSeconds(5), 20_000);
+      OpenAiChatCompletionsCodec codec = new OpenAiChatCompletionsCodec(objectMapper, false);
+
+      ModelResponse response = codec.stream(transport, ModelProvider.OPENAI_COMPATIBLE,
+          new ModelRequest("qwen", "Be useful.", "Hi", null, List.of(), List.of(), 512, null, null),
+          delta -> { });
+
+      // A trailing usage-only chunk (no choices) keeps the finish reason of the real chunk.
+      assertThat(response.status()).isEqualTo("completed");
+      assertThat(response.inputTokens()).isEqualTo(5);
+      assertThat(response.toolCalls()).hasSize(2);
+      assertThat(response.toolCalls().get(0).callId()).isEqualTo("call_a");
+      assertThat(response.toolCalls().get(0).name()).isEqualTo("read_file");
+      assertThat(response.toolCalls().get(0).argumentsJson()).isEqualTo("{\"path\":\"a\"}");
+      assertThat(response.toolCalls().get(1).callId()).isEqualTo("call_b");
+      assertThat(response.toolCalls().get(1).argumentsJson()).isEqualTo("{}");
+    } finally {
+      server.stop(0);
+    }
+  }
+
+  @Test
+  void missingAndRepeatedToolCallIdsAreReplacedSoTheRunCanBePersisted() {
+    List<ModelToolCall> calls = OpenAiChatCompletionsCodec.normalised(List.of(
+        new ModelToolCall("same", "read_file", "{}"),
+        new ModelToolCall("same", "list_files", ""),
+        new ModelToolCall("", " ", "{}")));
+
+    assertThat(calls).extracting(ModelToolCall::callId).doesNotHaveDuplicates().doesNotContain("");
+    assertThat(calls.get(1).argumentsJson()).isEqualTo("{}");
+    assertThat(calls.get(2).name()).isEqualTo("unknown");
+  }
 }

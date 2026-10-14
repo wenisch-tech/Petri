@@ -54,13 +54,13 @@ final class OpenAiCompatibleTransport {
   /** A null reference addresses the oldest global instance of the kind with its shared key. */
   byte[] post(ModelProvider provider, ModelCredentialRef ref, String resource, String json) {
     ModelCredentialMaterial credential = material(provider, ref);
-    URI uri = URI.create(credential.baseUrl() + resource);
+    URI uri = endpoint(credential.baseUrl(), resource);
     HttpRequest.Builder request = HttpRequest.newBuilder(uri)
         .timeout(timeout)
         .header("Content-Type", "application/json")
         .header("Accept", "application/json");
     if (credential.apiKey() != null && !credential.apiKey().isBlank()) {
-      request.header("Authorization", "Bearer " + credential.apiKey());
+      request.header("Authorization", bearer(credential.apiKey()));
     }
     try {
       HttpResponse<InputStream> response = httpClient.send(
@@ -85,18 +85,19 @@ final class OpenAiCompatibleTransport {
       Thread.currentThread().interrupt();
       throw new ModelClientException(provider.displayName() + " request was interrupted", exception);
     } catch (IOException exception) {
-      throw new ModelClientException(provider.displayName() + " request failed", exception);
+      throw new ModelClientException(provider.displayName() + " request failed: " + describe(exception, uri), exception);
     }
   }
 
   /** Lists what the instance's endpoint offers, using the viewer's key before the shared one. */
   byte[] get(ModelCredentialRef ref, String resource) {
     ModelCredentialMaterial credential = credentials.requireMaterial(ref);
-    HttpRequest.Builder request = HttpRequest.newBuilder(URI.create(credential.baseUrl() + resource))
+    URI uri = endpoint(credential.baseUrl(), resource);
+    HttpRequest.Builder request = HttpRequest.newBuilder(uri)
         .timeout(timeout)
         .header("Accept", "application/json");
     if (credential.apiKey() != null && !credential.apiKey().isBlank()) {
-      request.header("Authorization", "Bearer " + credential.apiKey());
+      request.header("Authorization", bearer(credential.apiKey()));
     }
     String name = credential.provider().displayName();
     try {
@@ -118,7 +119,7 @@ final class OpenAiCompatibleTransport {
       Thread.currentThread().interrupt();
       throw new ModelClientException(name + " request was interrupted", exception);
     } catch (IOException exception) {
-      throw new ModelClientException(name + " request failed", exception);
+      throw new ModelClientException(name + " request failed: " + describe(exception, uri), exception);
     }
   }
 
@@ -130,13 +131,13 @@ final class OpenAiCompatibleTransport {
       ModelProvider provider, ModelCredentialRef ref, String resource, String json,
       Consumer<String> eventData) {
     ModelCredentialMaterial credential = material(provider, ref);
-    URI uri = URI.create(credential.baseUrl() + resource);
+    URI uri = endpoint(credential.baseUrl(), resource);
     HttpRequest.Builder request = HttpRequest.newBuilder(uri)
         .timeout(timeout)
         .header("Content-Type", "application/json")
         .header("Accept", "text/event-stream");
     if (credential.apiKey() != null && !credential.apiKey().isBlank()) {
-      request.header("Authorization", "Bearer " + credential.apiKey());
+      request.header("Authorization", bearer(credential.apiKey()));
     }
     try {
       HttpResponse<InputStream> response = httpClient.send(
@@ -180,7 +181,7 @@ final class OpenAiCompatibleTransport {
       Thread.currentThread().interrupt();
       throw new ModelClientException(provider.displayName() + " streaming request was interrupted", exception);
     } catch (IOException exception) {
-      throw new ModelClientException(provider.displayName() + " streaming request failed", exception);
+      throw new ModelClientException(provider.displayName() + " streaming request failed: " + describe(exception, uri), exception);
     }
   }
 
@@ -188,5 +189,62 @@ final class OpenAiCompatibleTransport {
     return ref == null || ref.instanceId() == null
         ? credentials.requireMaterial(provider)
         : credentials.requireMaterial(ref);
+  }
+
+  /**
+   * The Authorization header value. A key pasted with a line break or a space inside cannot be sent
+   * (the JDK rejects the header), so say so instead of failing as an unspecific invalid response.
+   */
+  private static String bearer(String apiKey) {
+    String key = apiKey.strip();
+    for (int index = 0; index < key.length(); index++) {
+      char value = key.charAt(index);
+      if (value < 33 || value > 126) {
+        throw new ModelClientException("The API key of this provider contains a space, line break "
+            + "or non-ASCII character and cannot be sent. Enter the key again without it.");
+      }
+    }
+    return "Bearer " + key;
+  }
+
+  private static URI endpoint(String baseUrl, String resource) {
+    try {
+      return URI.create(baseUrl + resource);
+    } catch (IllegalArgumentException exception) {
+      throw new ModelClientException(
+          "The base URL of this provider is not a valid URL. Check it in the provider settings.");
+    }
+  }
+
+  /**
+   * A short, secret-free reason for a transport failure, so "request failed" tells the user whether
+   * the host cannot be found, refuses the connection, times out or breaks TLS.
+   */
+  static String describe(IOException exception, URI uri) {
+    String target = uri.getHost() + (uri.getPort() > 0 ? ":" + uri.getPort() : "");
+    Throwable cause = exception;
+    while (cause != null) {
+      if (cause instanceof java.net.UnknownHostException) {
+        return "the host name " + uri.getHost() + " cannot be resolved from the Petri server";
+      }
+      if (cause instanceof java.net.http.HttpConnectTimeoutException) {
+        return "could not connect to " + target + " in time (network or firewall?)";
+      }
+      if (cause instanceof java.net.http.HttpTimeoutException) {
+        return "the provider at " + target + " did not answer in time";
+      }
+      if (cause instanceof java.net.ConnectException) {
+        return "connection to " + target + " was refused or unreachable from the Petri server";
+      }
+      if (cause instanceof javax.net.ssl.SSLException) {
+        return "the TLS connection to " + target + " failed (" + cause.getClass().getSimpleName()
+            + "); check the certificate or the server's trust store";
+      }
+      cause = cause.getCause();
+    }
+    String message = exception.getMessage();
+    String detail = message == null || message.isBlank() ? "" : ": " + (message.length() > 160
+        ? message.substring(0, 160) : message);
+    return exception.getClass().getSimpleName() + detail + " (" + target + ")";
   }
 }

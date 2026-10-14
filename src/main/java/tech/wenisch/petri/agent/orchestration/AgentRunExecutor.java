@@ -193,6 +193,13 @@ public class AgentRunExecutor {
         }
       }
     } catch (RuntimeException exception) {
+      // The message can carry request data, so only the type and the call site are logged.
+      StackTraceElement[] frames = exception.getStackTrace();
+      StringBuilder site = new StringBuilder();
+      for (int index = 0; index < Math.min(6, frames.length); index++) {
+        site.append("\n    at ").append(frames[index]);
+      }
+      log.warn("Agent run {} failed with {}{}", runId, exception.getClass().getName(), site);
       stateService.failExecution(runId, claimId, safeExecutionMessage(exception), actor);
     }
     AgentRunView result = runService.get(runId, expectedWorktreeId);

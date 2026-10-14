@@ -86,26 +86,39 @@ final class OpenAiChatCompletionsCodec {
         JsonNode toolCalls = delta.path("tool_calls");
         if (toolCalls.isArray()) for (JsonNode item : toolCalls) {
           int index = item.path("index").asInt();
+          // Some providers repeat the id and name as empty strings in later chunks and some send
+          // parallel calls with the same index; neither may overwrite or merge a call.
+          String chunkId = item.path("id").isTextual() && !item.path("id").textValue().isBlank()
+              ? item.path("id").textValue() : null;
+          StreamToolCall existing = calls.get(index);
+          if (existing != null && chunkId != null && existing.id != null && !existing.id.equals(chunkId)) {
+            index = calls.keySet().stream().mapToInt(Integer::intValue).max().orElse(-1) + 1;
+          }
           StreamToolCall call = calls.computeIfAbsent(index, ignored -> new StreamToolCall());
-          if (item.path("id").isTextual()) call.id = item.path("id").textValue();
+          if (chunkId != null) call.id = chunkId;
           JsonNode function = item.path("function");
-          if (function.path("name").isTextual()) call.name = function.path("name").textValue();
+          if (function.path("name").isTextual() && !function.path("name").textValue().isBlank()) {
+            call.name = function.path("name").textValue();
+          }
           String argumentsDelta = function.path("arguments").isTextual()
               ? function.path("arguments").textValue() : "";
           if (!argumentsDelta.isEmpty()) call.arguments.append(argumentsDelta);
           listener.onToolCallDelta(index, call.id, call.name, argumentsDelta);
         }
-        if (!choice.path("finish_reason").isNull()) finish[0] = choice.path("finish_reason").asText();
+        // A trailing usage chunk has no choices; its missing finish_reason must not blank the status.
+        if (choice.path("finish_reason").isTextual() && !choice.path("finish_reason").textValue().isBlank()) {
+          finish[0] = choice.path("finish_reason").textValue();
+        }
         usage[0] = root.path("usage").path("prompt_tokens").asInt(usage[0]);
         usage[1] = root.path("usage").path("completion_tokens").asInt(usage[1]);
       } catch (JacksonException exception) {
         throw new ModelClientException("Could not decode streaming model response", exception);
       }
     });
-    List<ModelToolCall> modelCalls = calls.values().stream().map(call -> new ModelToolCall(
-        call.id == null ? "call_" + UUID.randomUUID() : call.id,
-        call.name == null ? "unknown" : call.name,
-        call.arguments.toString())).toList();
+    List<ModelToolCall> modelCalls = normalised(calls.entrySet().stream()
+        .sorted(Map.Entry.comparingByKey()).map(entry -> new ModelToolCall(
+            entry.getValue().id, entry.getValue().name, entry.getValue().arguments.toString()))
+        .toList());
     String status = "stop".equals(finish[0]) || "tool_calls".equals(finish[0])
         ? "completed" : finish[0] == null ? "incomplete" : finish[0];
     ModelResponse response = new ModelResponse(responseId[0] == null ? "chatcmpl_" + UUID.randomUUID() : responseId[0],
@@ -140,7 +153,6 @@ final class OpenAiChatCompletionsCodec {
         for (JsonNode call : toolCalls) {
           JsonNode function = call.path("function");
           String id = optionalText(call, "id");
-          if (id == null) id = "call_" + UUID.randomUUID();
           String name = requiredText(function, "name");
           JsonNode arguments = function.path("arguments");
           String argumentJson = arguments.isTextual()
@@ -148,6 +160,7 @@ final class OpenAiChatCompletionsCodec {
               : objectMapper.writeValueAsString(arguments);
           calls.add(new ModelToolCall(id, name, argumentJson));
         }
+        calls = normalised(calls);
       }
       String responseId = optionalText(root, "id");
       if (responseId == null) responseId = "chatcmpl_" + UUID.randomUUID();
@@ -185,6 +198,26 @@ final class OpenAiChatCompletionsCodec {
         }
       }
     }
+  }
+
+  /**
+   * Makes tool calls safe to persist: a missing or repeated call id gets a fresh one, a call
+   * without a name keeps a placeholder the tool registry then refuses with a clear message, and
+   * empty arguments (common for tools without required input) become an empty object.
+   */
+  static List<ModelToolCall> normalised(List<ModelToolCall> calls) {
+    java.util.Set<String> seen = new java.util.HashSet<>();
+    List<ModelToolCall> result = new ArrayList<>();
+    for (ModelToolCall call : calls) {
+      String id = call.callId() == null || call.callId().isBlank() || !seen.add(call.callId())
+          ? "call_" + UUID.randomUUID() : call.callId();
+      seen.add(id);
+      String name = call.name() == null || call.name().isBlank() ? "unknown" : call.name();
+      String arguments = call.argumentsJson() == null || call.argumentsJson().isBlank()
+          ? "{}" : call.argumentsJson();
+      result.add(new ModelToolCall(id, name, arguments));
+    }
+    return result;
   }
 
   private static String content(JsonNode value) {
