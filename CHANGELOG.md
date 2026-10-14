@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.15.0 - 2026-10-14
+
+## [0.15.0](https://github.com/wenisch-tech/Petri/compare/v0.14.0...v0.15.0) (2026-10-14)
+
+
+### Features
+
+* initial suppport for git related skills ([6bc657d](https://github.com/wenisch-tech/Petri/commit/6bc657dd0a39a7855712d7f17eac0fddf4f49413))
+* introduced vulnerability  discovery ([d975ec1](https://github.com/wenisch-tech/Petri/commit/d975ec179eb8ea665c0bb2e6d9ef3e1a75915d3d))
+* user is redirected to target page after signin when no session has been found ([5c43ceb](https://github.com/wenisch-tech/Petri/commit/5c43cebd2a8d92bad3d17075afe1c9123f20b271))
+
+
+### Bug Fixes
+
+* fixed streaming problem when no choices received ([ccc23ea](https://github.com/wenisch-tech/Petri/commit/ccc23eaddd9c652102350cd4e52f9d2e0800eef6))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.15.0
+
+
 ## v0.14.0 - 2026-10-14
 
 ## [0.14.0](https://github.com/wenisch-tech/Petri/compare/v0.13.0...v0.14.0) (2026-10-14)
