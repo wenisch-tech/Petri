@@ -108,6 +108,21 @@ function initializeFooter() {
   document.body.append(footer);
 }
 
+// A form or its submit button can ask for confirmation before posting. The workspace handles its
+// embedded pages itself and stops the event, so this only sees standalone pages.
+document.addEventListener('submit', event => {
+  const form = event.target;
+  if (!(form instanceof HTMLFormElement)) return;
+  const message = event.submitter?.dataset.confirm || form.dataset.confirm;
+  if (message && !window.confirm(message)) event.preventDefault();
+});
+
+window.addEventListener('petri-content', event => {
+  relativeTimes(event.detail);
+  localizeTimes(event.detail);
+  hydrateMarkdown(event.detail);
+});
+
 function bootPetri() {
   initializeFooter();
   hydrateIcons();

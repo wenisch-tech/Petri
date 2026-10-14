@@ -37,6 +37,7 @@ public class AutomationScheduler {
   private final ProjectProviderSourceService sources;
   private final GitAccountConnectionService connections;
   private final CodeReviewAutomation review;
+  private final PullRequestImprovementService improvements;
   private final boolean enabled;
   private final int maxPerPoll;
   private final Semaphore concurrency;
@@ -48,6 +49,7 @@ public class AutomationScheduler {
       ProjectAutomationRepository automations, AutomationSettingsService settings,
       AutomationRunService runs, ProjectProviderSourceService sources,
       GitAccountConnectionService connections, CodeReviewAutomation review,
+      PullRequestImprovementService improvements,
       @Value("${petri.automation.enabled:true}") boolean enabled,
       @Value("${petri.automation.max-per-poll:5}") int maxPerPoll,
       @Value("${petri.automation.max-concurrent:2}") int maxConcurrent) {
@@ -57,6 +59,7 @@ public class AutomationScheduler {
     this.sources = sources;
     this.connections = connections;
     this.review = review;
+    this.improvements = improvements;
     this.enabled = enabled;
     this.maxPerPoll = Math.max(1, maxPerPoll);
     this.concurrency = new Semaphore(Math.max(1, maxConcurrent));
@@ -78,6 +81,16 @@ public class AutomationScheduler {
     }
   }
 
+  @Scheduled(initialDelay = 60_000, fixedDelay = 15_000)
+  void advanceImprovements() {
+    if (!enabled) return;
+    try {
+      improvements.advanceAll();
+    } catch (RuntimeException exception) {
+      log.warn("Advancing improvements failed: {}", exception.getMessage());
+    }
+  }
+
   @Scheduled(initialDelay = 45_000, fixedDelay = 60_000)
   void fireCron() {
     if (!enabled) return;
@@ -96,6 +109,42 @@ public class AutomationScheduler {
             automation.getProjectId(), exception.getMessage());
       }
     }
+  }
+
+  /**
+   * Runs one review automation on one pull request because a person asked for it from the pull
+   * request. Uses the project's saved model settings for that automation when it has any. Drafts
+   * are allowed and a head that was already reviewed is reviewed again.
+   *
+   * @return the automation run, which shows its progress on the project's Automations tab
+   */
+  public UUID runOnDemand(
+      UUID projectId, AutomationKind kind, long number, AutomationPostMode postMode) {
+    ProjectProviderSource source = sources.find(projectId);
+    if (source == null) {
+      throw new IllegalStateException(
+          "The project is not linked to a connected Git account, so there is no pull request to work on");
+    }
+    PullRequestRef pr = connections.openPullRequests(
+            source.getConnectionId(), source.getExternalRepositoryId(), source.getFullName())
+        .pullRequests().stream().filter(value -> value.number() == number).findFirst()
+        .orElseThrow(() -> new IllegalStateException(
+            "Pull request #" + number + " is closed or merged"));
+    ProjectAutomation saved = automations.findByProjectIdAndKindAndTrigger(
+            projectId, kind, AutomationTrigger.PULL_REQUEST)
+        .or(() -> automations.findByProjectIdAndKindAndTrigger(
+            projectId, kind, AutomationTrigger.CRON)).orElse(null);
+    UUID provider = saved == null ? null : saved.getProviderInstanceId();
+    String model = saved == null ? null : saved.getModel();
+    int turns = saved == null ? 20 : saved.getMaxModelTurns();
+    Optional<UUID> runId = runs.register(projectId, kind, AutomationTrigger.MANUAL, pr, postMode,
+        true, true, inFlight);
+    if (runId.isEmpty()) {
+      throw new IllegalStateException("This pull request is already being worked on");
+    }
+    submit(new CodeReviewAutomation.Job(
+        runId.get(), projectId, pr, postMode, provider, model, turns, kind, true));
+    return runId.get();
   }
 
   /** Manual trigger from the UI; returns how many reviews were queued. */
@@ -129,7 +178,8 @@ public class AutomationScheduler {
       throw new IllegalStateException("This review is already queued or running");
     }
     submit(new CodeReviewAutomation.Job(runId.get(), projectId, pr, automation.getPostMode(),
-        automation.getProviderInstanceId(), automation.getModel(), automation.getMaxModelTurns()));
+        automation.getProviderInstanceId(), automation.getModel(), automation.getMaxModelTurns(),
+        automation.getKind()));
   }
 
   private int queue(ProjectAutomation automation, boolean includeAll, boolean retryFailed) {
@@ -159,7 +209,8 @@ public class AutomationScheduler {
           pr, automation.getPostMode(), retryFailed, inFlight);
       if (runId.isEmpty()) continue;
       submit(new CodeReviewAutomation.Job(runId.get(), projectId, pr, automation.getPostMode(),
-          automation.getProviderInstanceId(), automation.getModel(), automation.getMaxModelTurns()));
+          automation.getProviderInstanceId(), automation.getModel(), automation.getMaxModelTurns(),
+        automation.getKind()));
       queued++;
     }
     // A capped poll keeps its baseline so the remaining pull requests are picked up next time.

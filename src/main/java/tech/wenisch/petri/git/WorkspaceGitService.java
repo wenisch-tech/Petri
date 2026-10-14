@@ -134,6 +134,29 @@ public class WorkspaceGitService {
     });
   }
 
+  /** Creates a branch at one exact commit that is already in the mirror, with a worktree for it. */
+  public ProjectWorktreeView createBranchAtCommit(
+      UUID projectId, String requestedName, String commitSha, String actorEmail) {
+    return operations.project(projectId, () -> {
+      project(projectId);
+      Path mirror = mirror(projectId);
+      requireInitialized(projectId);
+      String name = validBranch(mirror, requestedName);
+      if (commitSha == null || !commitSha.matches("[0-9a-f]{40}")) {
+        throw new IllegalArgumentException("Invalid commit");
+      }
+      requireSuccess(run(mirror, List.of("--git-dir=" + mirror, "cat-file", "-e", commitSha + "^{commit}")),
+          "find commit");
+      if (refExists(mirror, "refs/heads/" + name)) {
+        throw new IllegalStateException("Local branch already exists");
+      }
+      requireSuccess(run(mirror, List.of(
+          "--git-dir=" + mirror, "branch", "--no-track", "--", name, commitSha)), "create branch");
+      audit(actorEmail, "GIT_BRANCH_CREATED", projectId, "Created branch " + name + " at " + commitSha);
+      return worktrees.createBranchWorktree(projectId, name, commitSha, null, actorEmail);
+    });
+  }
+
   public ProjectWorktreeView openBranch(
       UUID projectId, String requestedName, GitBranchKind kind, String actorEmail) {
     return operations.project(projectId, () -> {
@@ -579,6 +602,32 @@ public class WorkspaceGitService {
       audit(actorEmail, forceWithLease ? "GIT_FORCE_WITH_LEASE_PUSHED" : "GIT_PUSHED",
           worktreeId, "Pushed branch " + record.branchName());
       return status(worktreeId);
+    });
+  }
+
+  /**
+   * Pushes the worktree's HEAD to a branch of another repository, for example the fork a pull
+   * request comes from. The project's Git credential is used; the remote must be HTTPS.
+   */
+  @Transactional
+  public String pushToRemote(
+      UUID worktreeId, String remoteUrl, String remoteBranch, String actorEmail) {
+    ProjectWorktree record = record(worktreeId);
+    return operations.worktree(worktreeId, () -> {
+      requireRemoteWrite(record.projectId());
+      requireNoActiveExecution(worktreeId);
+      requireClean(worktreeId);
+      if (remoteUrl == null || !remoteUrl.startsWith("https://") || remoteUrl.contains("@")
+          || remoteUrl.chars().anyMatch(Character::isWhitespace)) {
+        throw new IllegalArgumentException("Invalid remote URL");
+      }
+      Path root = locator.requireActiveWorktree(worktreeId);
+      String branch = validBranch(mirror(record.projectId()), remoteBranch);
+      GitCommandResult pushed = remote(record.projectId(), root, List.of(
+          "-c", "remote.origin.mirror=false", "push", remoteUrl, "HEAD:refs/heads/" + branch));
+      requireSuccess(pushed, "push to the pull request's branch");
+      audit(actorEmail, "GIT_PUSHED", worktreeId, "Pushed HEAD to branch " + branch + " of a fork");
+      return output(root, List.of("rev-parse", "HEAD"));
     });
   }
 

@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(|${project.name} pull request|)}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('projects')}"></header>
+
+<th:block th:fragment="content">
+<main class="page-narrow !max-w-6xl" th:attr="data-live-refresh=${petriRunsLive} ? 'true' : null,data-follow-run=${prFollowRun},data-follow-project=${prFollowRun != null} ? ${project.id} : null">
+  <a class="back-link" th:href="@{/projects/{id}/pull-requests(id=${project.id})}"><i data-lucide="ArrowLeft"></i> Pull requests</a>
+
+  <div th:replace="~{fragments/layout :: alert('success', ${prNotice})}"></div>
+  <div th:replace="~{fragments/layout :: alert('error', ${prError})}"></div>
+
+  <div th:if="${view.unavailable != null}" class="empty-state">
+    <i data-lucide="GitPullRequestArrow"></i>
+    <h2>Pull requests are not available</h2>
+    <p th:text="${view.unavailable}">Reason</p>
+    <a class="btn-primary" href="/git-accounts"><i data-lucide="PlugZap"></i> Git accounts</a>
+  </div>
+
+  <div th:if="${view.unavailable == null and view.error != null}" class="alert alert-error">
+    <i data-lucide="CircleAlert"></i><span th:text="${view.error}">error</span>
+  </div>
+
+  <th:block th:if="${view.unavailable == null and view.detail != null}" th:with="pr=${view.detail.summary}">
+    <div class="page-header">
+      <div class="min-w-0">
+        <h1 class="page-title"><span th:text="${pr.title}">Title</span> <span class="text-ink-500" th:text="|#${pr.number}|">#1</span></h1>
+        <p class="pr-meta">
+          <span class="badge badge-good" th:if="${pr.state.name() == 'OPEN' and !pr.draft}"><i data-lucide="GitPullRequestArrow"></i> Open</span>
+          <span class="badge badge-neutral" th:if="${pr.state.name() == 'OPEN' and pr.draft}"><i data-lucide="GitPullRequestArrow"></i> Draft</span>
+          <span class="badge badge-brand" th:if="${pr.state.name() == 'MERGED'}"><i data-lucide="GitMerge"></i> Merged</span>
+          <span class="badge badge-neutral" th:if="${pr.state.name() == 'CLOSED'}"><i data-lucide="CircleX"></i> Closed</span>
+          <span th:if="${pr.authorLogin != null}"><strong class="font-semibold text-ink-100" th:text="${pr.authorLogin}">author</strong> <span th:text="${pr.state.name() == 'OPEN'} ? 'wants to merge' : 'opened this'">wants to merge</span></span>
+          <span class="pr-branches"><code th:text="${pr.headRef}">feature</code><i data-lucide="ArrowRight"></i><code th:text="${pr.baseRef}">main</code></span>
+          <span th:if="${pr.updatedAt != null}">updated <time data-relative th:attr="datetime=${pr.updatedAt}" th:text="${pr.updatedAt}">time</time></span>
+        </p>
+      </div>
+      <div class="page-actions">
+        <form th:if="${pr.state.name() == 'OPEN'}" method="post" th:action="@{/projects/{id}/pull-requests/{n}/actions(id=${project.id}, n=${pr.number})}"
+              class="contents"
+              th:attr="data-confirm=${#lists.isEmpty(view.runs) or view.runs[0].status == 'SUCCESS'} ? 'Merge this pull request into its base branch?' : 'The latest CI run has not passed. Merge this pull request into its base branch anyway?'">
+          <input type="hidden" name="action" value="merge">
+          <button type="submit" class="btn-primary"><i data-lucide="GitMerge"></i> Merge</button>
+        </form>
+        <form th:if="${pr.state.name() == 'OPEN'}" method="post" th:action="@{/projects/{id}/pull-requests/{n}/actions(id=${project.id}, n=${pr.number})}"
+              class="contents" data-confirm="Close this pull request without merging?">
+          <input type="hidden" name="action" value="close">
+          <button type="submit" class="btn-danger"><i data-lucide="CircleX"></i> Close</button>
+        </form>
+        <a th:if="${pr.webUrl != null}" class="btn-secondary" th:href="${pr.webUrl}" target="_blank" rel="noopener noreferrer"><i data-lucide="ExternalLink"></i> Open on provider</a>
+      </div>
+    </div>
+
+    <div x-data="{ tab: 'overview', init() { const key = 'prTab:' + this.$el.dataset.pr; let saved = null; try { saved = sessionStorage.getItem(key); } catch (e) { saved = null; } this.tab = this.$el.dataset.tab || saved || 'overview'; this.$watch('tab', value => { try { sessionStorage.setItem(key, value); } catch (e) { /* optional */ } }); } }"
+         th:attr="data-tab=${prTab},data-pr=${pr.number}">
+    <section th:if="${!#lists.isEmpty(view.runs)}" class="run-banner" th:with="latest=${view.runs[0]}"
+             th:classappend="|is-${#strings.toLowerCase(latest.status)}|" aria-label="Latest pipeline run">
+      <span class="run-banner-icon">
+        <i th:attr="data-lucide=${latest.status == 'SUCCESS'} ? 'CircleCheck' : (${latest.status == 'FAILED'} ? 'CircleX' : (${latest.status == 'RUNNING'} ? 'LoaderCircle' : (${latest.status == 'PENDING'} ? 'Clock' : (${latest.status == 'CANCELLED'} ? 'Ban' : 'CircleDashed'))))"></i>
+      </span>
+      <div class="min-w-0 flex-1">
+        <p class="run-banner-title">
+          <span th:text="${latest.name}">CI</span>
+          <span th:text="${latest.status == 'SUCCESS' ? 'passed' : (latest.status == 'FAILED' ? 'failed' : (latest.status == 'RUNNING' ? 'is running' : (latest.status == 'PENDING' ? 'is queued' : #strings.toLowerCase(latest.status))))}">passed</span>
+        </p>
+        <p class="run-banner-meta">
+          <span th:if="${latest.sha != null}">commit <code th:text="${#strings.substring(latest.sha, 0, latest.sha.length() < 7 ? latest.sha.length() : 7)}">abc1234</code></span>
+          <span th:if="${latest.event != null}" th:text="${#strings.replace(latest.event, '_', ' ')}">push</span>
+          <time data-relative th:attr="datetime=${latest.updatedAt != null ? latest.updatedAt : latest.createdAt}" th:text="${latest.updatedAt != null ? latest.updatedAt : latest.createdAt}">time</time>
+          <span th:if="${latest.detail != null and latest.status != 'SUCCESS' and latest.status != 'FAILED'}" th:text="${latest.detail}">detail</span>
+        </p>
+      </div>
+      <div class="run-banner-actions">
+        <button type="button" class="btn-ghost" th:if="${#lists.size(view.runs) > 1}" @click="tab = 'runs'"
+                th:text="|All ${#lists.size(view.runs)} runs|">All runs</button>
+        <a th:if="${latest.webUrl != null}" class="btn-secondary" th:href="${latest.webUrl}" target="_blank" rel="noopener noreferrer">View run <i data-lucide="ExternalLink"></i></a>
+      </div>
+    </section>
+
+      <nav class="subnav" role="tablist" aria-label="Pull request sections"
+           @keydown.arrow-right.prevent="tab = { overview: 'comments', comments: 'runs', runs: 'overview' }[tab]; $nextTick(() => $el.querySelector('[aria-selected=true]').focus())"
+           @keydown.arrow-left.prevent="tab = { overview: 'runs', comments: 'overview', runs: 'comments' }[tab]; $nextTick(() => $el.querySelector('[aria-selected=true]').focus())"
+           @keydown.home.prevent="tab = 'overview'; $nextTick(() => $el.querySelector('[aria-selected=true]').focus())"
+           @keydown.end.prevent="tab = 'runs'; $nextTick(() => $el.querySelector('[aria-selected=true]').focus())">
+        <button type="button" role="tab" id="pr-tab-overview" aria-controls="pr-panel-overview" :tabindex="tab === 'overview' ? 0 : -1" :class="tab === 'overview' && 'is-active'" :aria-selected="tab === 'overview'" @click="tab = 'overview'"><i data-lucide="FileText"></i> Overview</button>
+        <button type="button" role="tab" id="pr-tab-comments" aria-controls="pr-panel-comments" :tabindex="tab === 'comments' ? 0 : -1" :class="tab === 'comments' && 'is-active'" :aria-selected="tab === 'comments'" @click="tab = 'comments'"><i data-lucide="MessageSquare"></i> Comments <span class="tab-count" th:text="${#lists.size(view.detail.comments)}">0</span></button>
+        <button type="button" role="tab" id="pr-tab-runs" aria-controls="pr-panel-runs" :tabindex="tab === 'runs' ? 0 : -1" :class="tab === 'runs' && 'is-active'" :aria-selected="tab === 'runs'" @click="tab = 'runs'"><i data-lucide="Workflow"></i> Runs <span class="tab-count" th:text="${#lists.size(view.runs)}">0</span></button>
+      </nav>
+
+      <div x-show="tab === 'overview'" id="pr-panel-overview" role="tabpanel" aria-labelledby="pr-tab-overview" class="grid gap-6 lg:grid-cols-[minmax(0,1fr)_21rem]">
+        <section class="min-w-0">
+          <h2 class="section-title mb-2">Description</h2>
+          <div class="card card-body">
+            <div th:if="${view.detail.description != null and !#strings.isEmpty(view.detail.description)}"
+                 x-data="{ expanded: false, long: false }"
+                 x-init="$nextTick(() => setTimeout(() => { long = $refs.body.scrollHeight > 440 }, 150))">
+              <div x-ref="body" class="petri-md text-sm leading-6 text-ink-300 pr-description" :class="!expanded && long && 'is-clamped'" data-markdown th:text="${view.detail.description}">Body</div>
+              <button type="button" class="btn-ghost mt-2" x-show="long" x-cloak @click="expanded = !expanded" :aria-expanded="expanded"
+                      x-text="expanded ? 'Show less' : 'Show full description'">Show full description</button>
+            </div>
+            <p th:unless="${view.detail.description != null and !#strings.isEmpty(view.detail.description)}" class="text-sm text-ink-500">No description provided.</p>
+          </div>
+        </section>
+        <aside class="min-w-0 lg:sticky lg:top-4 lg:self-start">
+          <div class="pr-petri" x-data="{ open: false }" @keydown.escape="if (open) { open = false; $refs.trigger.focus(); }" @click.outside="open = false">
+            <button type="button" x-ref="trigger" class="btn-secondary w-full" @click="open = !open" :aria-expanded="open" aria-controls="pr-petri-menu">
+              <i data-lucide="Sparkles"></i> Let Petri work on this <i data-lucide="ChevronDown" class="ml-auto"></i>
+            </button>
+            <div x-show="open" x-cloak id="pr-petri-menu" class="pr-petri-menu" role="group" aria-label="What Petri should do with this pull request">
+              <form th:each="kind : ${petriKinds}" method="post"
+                    th:action="@{/projects/{id}/pull-requests/{n}/automations(id=${project.id}, n=${pr.number})}">
+                <input type="hidden" name="kind" th:value="${kind.name()}">
+                <button type="submit" class="pr-petri-item" @click="open = false"
+                        th:attr="data-confirm=${kind.improves()} ? 'Petri will review this pull request, post the review as a comment, fix the findings on its branch and push the result. Continue?' : (${kind.comments()} ? 'Petri will review this pull request and post the review as a comment. Continue?' : null)">
+                  <strong th:text="${kind.title}">Code review</strong>
+                  <span th:text="${kind.description}">What it does</span>
+                </button>
+              </form>
+            </div>
+            <h3 th:unless="${#lists.isEmpty(petriRuns)}" class="pr-petri-heading">Petri on this pull request</h3>
+            <ul th:unless="${#lists.isEmpty(petriRuns)}" class="pr-petri-runs">
+              <li th:each="run : ${petriRuns}">
+                <span class="min-w-0 flex-1">
+                  <span class="block truncate text-sm font-medium text-ink-100" th:text="${run.kind.title}">Code review</span>
+                  <span class="block truncate text-xs text-ink-500" th:text="${run.error != null ? run.error : (run.note != null ? run.note : 'Head ' + #strings.substring(run.headSha, 0, run.headSha.length() < 7 ? run.headSha.length() : 7))}">note</span>
+                </span>
+                <span th:replace="~{fragments/layout :: statusBadge(${run.status})}">Status</span>
+                <a th:if="${run.agentRunId != null}" class="btn-ghost !min-h-8 !px-2" th:href="@{/runs/{id}(id=${run.agentRunId})}"
+                   title="Open the agent run" th:attr="aria-label=|Open the agent run of ${run.kind.title}|"><i data-lucide="Workflow"></i></a>
+              </li>
+            </ul>
+          </div>
+          <h2 class="section-title mb-2">Changed files
+            <span class="tab-count" th:text="${#lists.size(view.detail.files)}">0</span>
+            <span class="diff-add ml-1" th:text="|+${view.detail.additions}|">+0</span>
+            <span class="diff-del" th:text="|−${view.detail.deletions}|">−0</span>
+          </h2>
+          <p th:if="${#lists.isEmpty(view.detail.files)}" class="text-sm text-ink-500">No changed files were reported.</p>
+          <ul th:unless="${#lists.isEmpty(view.detail.files)}" class="file-list">
+            <li th:each="file : ${view.detail.files}" th:title="${file.previousPath != null ? file.previousPath + ' → ' + file.path : file.path}">
+              <i data-lucide="FileDiff" class="file-status" th:classappend="|is-${#strings.toLowerCase(file.status)}|" th:title="${file.status}"></i>
+              <span class="sr-only" th:text="|${file.status}: |">modified:</span>
+              <span class="file-name">
+                <span class="file-base" th:text="${file.name}">A.java</span>
+                <span class="file-dir" th:if="${!#strings.isEmpty(file.directory)}" th:text="${file.directory}">src</span>
+              </span>
+              <span class="diff-add" th:text="|+${file.additions}|" th:attr="aria-label=|${file.additions} additions|">+1</span>
+              <span class="diff-del" th:text="|−${file.deletions}|" th:attr="aria-label=|${file.deletions} deletions|">−1</span>
+            </li>
+          </ul>
+        </aside>
+      </div>
+
+      <section x-show="tab === 'comments'" x-cloak id="pr-panel-comments" role="tabpanel" aria-labelledby="pr-tab-comments">
+        <form method="post" th:action="@{/projects/{id}/pull-requests/{n}/actions(id=${project.id}, n=${pr.number})}" class="pr-composer">
+          <label for="pr-comment" class="sr-only">Comment</label>
+          <textarea id="pr-comment" name="body" rows="4" class="field text-sm" th:text="${prDraft}"
+                    placeholder="Leave a comment. Markdown is supported."></textarea>
+          <div class="pr-composer-actions">
+            <button type="submit" name="action" value="comment" class="btn-primary"><i data-lucide="MessageSquare"></i> Comment</button>
+            <span class="flex-1"></span>
+            <th:block th:if="${pr.state.name() == 'OPEN'}">
+              <button type="submit" name="action" value="request_changes" class="btn-secondary"
+                      data-confirm="Post a review that requests changes on this pull request?"
+                      th:if="${view.repository == null or view.repository.provider != 'GITLAB'}"><i data-lucide="CircleAlert"></i> Request changes</button>
+              <button type="submit" name="action" value="approve" class="btn-secondary"
+                      data-confirm="Approve this pull request? The approval is posted to the provider."><i data-lucide="CircleCheck"></i> Approve</button>
+            </th:block>
+          </div>
+        </form>
+        <p th:if="${#lists.isEmpty(view.detail.comments)}" class="mt-4 text-sm text-ink-500">No comments yet.</p>
+        <div class="mt-4 space-y-3">
+          <article th:each="comment : ${view.detail.comments}" class="card card-body">
+            <header class="mb-2 flex flex-wrap items-center gap-2 text-xs text-ink-500">
+              <strong class="text-sm text-ink-100" th:text="${comment.author != null ? comment.author : 'Unknown'}">author</strong>
+              <span class="badge badge-neutral" th:if="${comment.review != null}" th:text="${#strings.capitalize(#strings.toLowerCase(#strings.replace(comment.review, '_', ' ')))}">Approved</span>
+              <time data-relative th:if="${comment.createdAt != null}" th:attr="datetime=${comment.createdAt}" th:text="${comment.createdAt}">time</time>
+              <a th:if="${comment.webUrl != null}" class="ml-auto underline" th:href="${comment.webUrl}" target="_blank" rel="noopener noreferrer">View on provider</a>
+            </header>
+            <div class="petri-md text-sm leading-6 text-ink-300" data-markdown th:text="${comment.body}">Body</div>
+          </article>
+        </div>
+      </section>
+
+      <section x-show="tab === 'runs'" x-cloak id="pr-panel-runs" role="tabpanel" aria-labelledby="pr-tab-runs">
+        <p th:if="${#lists.isEmpty(view.runs)}" class="text-sm text-ink-500">No pipeline runs are associated with this pull request.</p>
+        <ul th:unless="${#lists.isEmpty(view.runs)}" class="list">
+          <li th:each="run : ${view.runs}" class="list-row" th:classappend="${run.status == 'FAILED'} ? 'is-failed-row'">
+            <span class="list-icon pipe-icon" th:classappend="|is-${#strings.toLowerCase(run.status)}|">
+              <i th:attr="data-lucide=${run.status == 'SUCCESS'} ? 'CircleCheck' : (${run.status == 'FAILED'} ? 'CircleX' : (${run.status == 'RUNNING'} ? 'LoaderCircle' : (${run.status == 'PENDING'} ? 'Clock' : (${run.status == 'CANCELLED'} ? 'Ban' : 'CircleDashed'))))"></i>
+            </span>
+            <div class="list-main">
+              <span class="list-title">
+                <a th:if="${run.webUrl != null}" class="hover:text-brand-400" th:href="${run.webUrl}" target="_blank" rel="noopener noreferrer" th:text="${run.name}">Workflow</a>
+                <span th:unless="${run.webUrl != null}" th:text="${run.name}">Workflow</span>
+              </span>
+              <span class="list-meta">
+                <code th:if="${run.sha != null}" th:text="${#strings.substring(run.sha, 0, run.sha.length() < 7 ? run.sha.length() : 7)}">abc1234</code>
+                <span th:if="${run.event != null}" th:text="${#strings.replace(run.event, '_', ' ')}">push</span>
+                <time data-relative th:attr="datetime=${run.updatedAt != null ? run.updatedAt : run.createdAt}" th:text="${run.updatedAt != null ? run.updatedAt : run.createdAt}">time</time>
+              </span>
+            </div>
+            <span class="badge badge-neutral" th:text="${#strings.capitalize(#strings.toLowerCase(run.status))}">Status</span>
+          </li>
+        </ul>
+      </section>
+    </div>
+  </th:block>
+</main>
+</th:block>
+</body>
+</html>

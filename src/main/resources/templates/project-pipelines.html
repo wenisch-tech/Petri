@@ -1,0 +1,75 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(|${project.name} pipelines|)}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('projects')}"></header>
+
+<th:block th:fragment="content">
+<main class="page-narrow" data-live-refresh="true">
+  <a class="back-link" href="/projects"><i data-lucide="ArrowLeft"></i> Projects</a>
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Pipelines</h1>
+      <p class="page-description" th:if="${view.repository != null}">
+        <span th:text="${view.repository.fullName}">owner/repo</span>
+        <span th:if="${view.repository.provider != null}" class="text-ink-500" th:text="|· ${#strings.capitalize(#strings.toLowerCase(view.repository.provider))}|">· GitHub</span>
+      </p>
+    </div>
+    <div class="page-actions" th:if="${view.repository != null and view.repository.webUrl != null}">
+      <a class="btn-secondary" th:href="${view.repository.webUrl}" target="_blank" rel="noopener noreferrer"><i data-lucide="ExternalLink"></i> Open on provider</a>
+    </div>
+  </div>
+
+  <div th:if="${view.unavailable != null}" class="empty-state">
+    <i data-lucide="Rocket"></i>
+    <h2>Pipelines are not available</h2>
+    <p th:text="${view.unavailable}">Reason</p>
+    <a class="btn-primary" href="/git-accounts"><i data-lucide="PlugZap"></i> Git accounts</a>
+  </div>
+
+  <th:block th:if="${view.unavailable == null}">
+    <div th:if="${view.error != null}" class="alert alert-error"><i data-lucide="CircleAlert"></i><span th:text="${view.error}">error</span><a class="ml-auto shrink-0 underline" href="/git-accounts">Git accounts</a></div>
+
+    <div th:if="${view.error == null and !#lists.isEmpty(view.items)}" class="dash-pulse mb-5">
+      <span class="dash-pulse-item is-working" th:classappend="${view.running == 0} ? 'is-zero'"><i data-lucide="LoaderCircle"></i><strong th:text="${view.running}">0</strong><span>in progress</span></span>
+      <span class="dash-pulse-item is-attention" th:classappend="${view.failed == 0} ? 'is-zero'"><i data-lucide="TriangleAlert"></i><strong th:text="${view.failed}">0</strong><span>failed</span></span>
+      <span class="dash-pulse-item" th:classappend="${view.succeeded == 0} ? 'is-zero'"><i data-lucide="CircleCheck"></i><strong th:text="${view.succeeded}">0</strong><span>passed</span></span>
+      <span class="dash-pulse-note">latest 30 runs, all branches</span>
+    </div>
+
+    <div th:if="${view.error == null and #lists.isEmpty(view.items)}" class="empty-state">
+      <i data-lucide="Rocket"></i>
+      <h2>No pipeline runs yet</h2>
+      <p>Once CI runs for this repository, the latest results appear here.</p>
+    </div>
+
+    <ul th:if="${view.error == null and !#lists.isEmpty(view.items)}" class="list">
+      <li th:each="run : ${view.items}" class="list-row pr-row" th:classappend="${run.status == 'FAILED'} ? 'is-failed-row'">
+        <span class="list-icon pipe-icon" th:classappend="|is-${#strings.toLowerCase(run.status)}|">
+          <i th:attr="data-lucide=${run.status == 'SUCCESS'} ? 'CircleCheck' : (${run.status == 'FAILED'} ? 'CircleX' : (${run.status == 'RUNNING'} ? 'LoaderCircle' : (${run.status == 'PENDING'} ? 'Clock' : (${run.status == 'CANCELLED'} ? 'Ban' : 'CircleDashed'))))"></i>
+        </span>
+        <div class="list-main">
+          <span class="list-title">
+            <a th:if="${run.webUrl != null}" class="hover:text-brand-400" th:href="${run.webUrl}" th:title="${run.name}" target="_blank" rel="noopener noreferrer" th:text="${run.name}">Workflow</a>
+            <span th:unless="${run.webUrl != null}" th:text="${run.name}">Workflow</span>
+          </span>
+          <span class="list-meta">
+            <span class="inline-flex items-center gap-1 font-mono" th:if="${run.ref != null}"><i data-lucide="GitBranch"></i><span th:text="${run.ref}">main</span></span>
+            <code th:if="${run.sha != null}" th:text="${#strings.substring(run.sha, 0, run.sha.length() < 7 ? run.sha.length() : 7)}">abc1234</code>
+            <span th:if="${run.event != null}" th:text="${run.event}">push</span>
+            <span th:if="${run.pullRequest != null}">
+              <a class="pr-link" th:href="@{/projects/{id}/pull-requests/{n}(id=${project.id}, n=${run.pullRequest})}"
+               th:title="${run.pullRequestTitle != null ? run.pullRequestTitle : 'Open pull request'}"><i data-lucide="GitPullRequestArrow"></i><span th:text="|#${run.pullRequest}|">#1</span></a>
+            </span>
+            <time data-relative th:attr="datetime=${run.updatedAt != null ? run.updatedAt : run.createdAt}" th:text="${run.updatedAt != null ? run.updatedAt : run.createdAt}">time</time>
+          </span>
+        </div>
+        <span class="badge" th:classappend="${run.status == 'FAILED'} ? 'badge-danger' : (${run.status == 'RUNNING' or run.status == 'PENDING'} ? 'badge-brand' : (${run.status == 'SUCCESS'} ? '' : 'badge-neutral'))"
+              th:text="${run.status == 'SUCCESS'} ? 'Passed' : (${run.status == 'FAILED'} ? 'Failed' : (${run.status == 'RUNNING'} ? 'Running' : (${run.status == 'PENDING'} ? 'Queued' : (${run.status == 'CANCELLED'} ? 'Cancelled' : (${run.status == 'SKIPPED'} ? 'Skipped' : 'Unknown')))))">Passed</span>
+      </li>
+    </ul>
+  </th:block>
+</main>
+</th:block>
+</body>
+</html>

@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(|${project.name} pull requests|)}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('projects')}"></header>
+
+<th:block th:fragment="content">
+<main class="page-narrow">
+  <a class="back-link" href="/projects"><i data-lucide="ArrowLeft"></i> Projects</a>
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Pull requests</h1>
+      <p class="page-description" th:if="${view.repository != null}">
+        <span th:text="${view.repository.fullName}">owner/repo</span>
+        <span th:if="${view.repository.provider != null}" class="text-ink-500" th:text="|· ${#strings.capitalize(#strings.toLowerCase(view.repository.provider))}|">· GitHub</span>
+      </p>
+    </div>
+    <div class="page-actions" th:if="${view.repository != null and view.repository.webUrl != null}">
+      <a class="btn-secondary" th:href="${view.repository.webUrl}" target="_blank" rel="noopener noreferrer"><i data-lucide="ExternalLink"></i> Open on provider</a>
+    </div>
+  </div>
+
+  <div th:if="${view.unavailable != null}" class="empty-state">
+    <i data-lucide="GitPullRequestArrow"></i>
+    <h2>Pull requests are not available</h2>
+    <p th:text="${view.unavailable}">Reason</p>
+    <a class="btn-primary" href="/git-accounts"><i data-lucide="PlugZap"></i> Git accounts</a>
+  </div>
+
+  <th:block th:if="${view.unavailable == null}">
+    <nav class="subnav" aria-label="Pull request state">
+      <a th:href="@{/projects/{id}/pull-requests(id=${project.id}, state='open')}" th:classappend="${view.state == 'open'} ? 'is-active'" th:attr="aria-current=${view.state == 'open'} ? 'page'"><i data-lucide="GitPullRequestArrow"></i> Open</a>
+      <a th:href="@{/projects/{id}/pull-requests(id=${project.id}, state='closed')}" th:classappend="${view.state == 'closed'} ? 'is-active'" th:attr="aria-current=${view.state == 'closed'} ? 'page'"><i data-lucide="CircleX"></i> Closed</a>
+      <a th:href="@{/projects/{id}/pull-requests(id=${project.id}, state='all')}" th:classappend="${view.state == 'all'} ? 'is-active'" th:attr="aria-current=${view.state == 'all'} ? 'page'"><i data-lucide="List"></i> All</a>
+    </nav>
+
+    <div th:if="${view.error != null}" class="alert alert-error"><i data-lucide="CircleAlert"></i><span th:text="${view.error}">error</span><a class="ml-auto shrink-0 underline" href="/git-accounts">Git accounts</a></div>
+
+    <div th:if="${view.error == null and #lists.isEmpty(view.items)}" class="empty-state">
+      <i data-lucide="GitPullRequestArrow"></i>
+      <h2 th:text="${view.state == 'open'} ? 'No open pull requests' : 'No pull requests here'">No open pull requests</h2>
+      <p th:if="${view.state == 'open'}">Everything is merged or closed. Switch to Closed to see what happened recently.</p>
+      <p th:unless="${view.state == 'open'}">Nothing was merged or closed here recently. The provider lists the 50 most recently updated.</p>
+    </div>
+
+    <ul th:if="${view.error == null and !#lists.isEmpty(view.items)}" class="list">
+      <li th:each="pr : ${view.items}" class="list-row pr-row">
+        <span class="list-icon pr-icon" th:classappend="|is-${#strings.toLowerCase(pr.state)}|">
+          <i th:attr="data-lucide=${pr.state.name() == 'MERGED'} ? 'GitMerge' : (${pr.state.name() == 'CLOSED'} ? 'CircleX' : 'GitPullRequestArrow')"></i>
+        </span>
+        <div class="list-main">
+          <span class="list-title">
+            <a class="hover:text-brand-400" th:href="@{/projects/{id}/pull-requests/{n}(id=${project.id}, n=${pr.number})}" th:title="${pr.title}" th:text="|#${pr.number} ${pr.title}|">#1 Title</a>
+          </span>
+          <span class="list-meta">
+            <span th:if="${pr.authorLogin != null}" th:text="${pr.authorLogin}">author</span>
+            <span class="font-mono"><span th:text="${pr.headRef}">feature</span> → <span th:text="${pr.baseRef}">main</span></span>
+            <span>updated <time data-relative th:attr="datetime=${pr.updatedAt}" th:text="${pr.updatedAt}">time</time></span>
+          </span>
+        </div>
+        <a th:if="${pr.ci != null}" class="ci-chip" th:classappend="|is-${#strings.toLowerCase(pr.ci)}|" th:href="@{/projects/{id}/pipelines(id=${project.id})}"
+           th:title="|Latest pipeline on this branch: ${#strings.toLowerCase(pr.ci)}|">
+          <i th:attr="data-lucide=${pr.ci == 'SUCCESS' ? 'CircleCheck' : (pr.ci == 'FAILED' ? 'CircleX' : (pr.ci == 'RUNNING' ? 'LoaderCircle' : (pr.ci == 'PENDING' ? 'Clock' : 'Ban')))}"></i>
+          <span th:text="${pr.ci == 'SUCCESS' ? 'CI passed' : (pr.ci == 'FAILED' ? 'CI failed' : (pr.ci == 'RUNNING' ? 'CI running' : (pr.ci == 'PENDING' ? 'CI queued' : 'CI ' + #strings.toLowerCase(pr.ci))))}">CI passed</span>
+        </a>
+        <span class="badge badge-neutral" th:if="${pr.draft and pr.state.name() == 'OPEN'}">Draft</span>
+        <span class="badge badge-brand" th:if="${pr.state.name() == 'MERGED'}">Merged</span>
+        <span class="badge badge-neutral" th:if="${pr.state.name() == 'CLOSED'}">Closed</span>
+      </li>
+    </ul>
+    <p th:if="${view.error == null and #lists.size(view.items) >= 50}" class="mt-3 text-xs text-ink-500">Showing the 50 most recently updated. Open the provider for older ones.</p>
+  </th:block>
+</main>
+</th:block>
+</body>
+</html>

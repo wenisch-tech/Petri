@@ -23,9 +23,11 @@
 ## Automations
 
 - Per-project, fixed automations started by a pull request poll or a cron schedule.
-- Code review: a read-only agent run with the bundled `code-review` skill posts a structured review
-  comment on new pull requests of GitHub, GitLab and Forgejo projects, automatically or as an
-  approval-gated draft.
+- Three review automations on new pull requests of GitHub, GitLab and Forgejo projects, sharing the
+  `code-review` method: *Code review* (review only, nothing posted), *Code review and comment*
+  (structured review comment, automatically or as an approval-gated draft) and *Code review and
+  improve* (comment, then a workflow fixes the findings and pushes to the pull request's branch).
+- `get_pull_request` agent tool: description, discussion, changed files and CI runs of a pull request.
 
 ## Repository isolation
 

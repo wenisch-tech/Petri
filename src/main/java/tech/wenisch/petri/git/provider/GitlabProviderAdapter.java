@@ -81,6 +81,107 @@ final class GitlabProviderAdapter extends AbstractHttpGitProviderAdapter {
   }
 
   @Override
+  public List<PullRequestSummary> listPullRequests(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, String state) {
+    if (!repositoryId.matches("[0-9]+")) throw new IllegalArgumentException("Invalid repository id");
+    String query = "open".equals(state) ? "opened" : "all";
+    JsonNode nodes = get(instance, "/projects/" + repositoryId + "/merge_requests?state=" + query
+        + "&order_by=updated_at&sort=desc&per_page=50", token, method);
+    List<PullRequestSummary> result = new ArrayList<>();
+    for (JsonNode node : nodes) {
+      String value = text(node, "state");
+      PullRequestSummary.State mapped = "merged".equals(value) ? PullRequestSummary.State.MERGED
+          : "opened".equals(value) ? PullRequestSummary.State.OPEN : PullRequestSummary.State.CLOSED;
+      if ("closed".equals(state) && mapped == PullRequestSummary.State.OPEN) continue;
+      boolean draft = node.path("draft").asBoolean(false)
+          || node.path("work_in_progress").asBoolean(false) || looksLikeDraft(text(node, "title"));
+      result.add(new PullRequestSummary(
+          node.path("iid").asLong(), text(node, "title"), text(node.path("author"), "username"),
+          text(node, "source_branch"), text(node, "target_branch"), mapped, draft,
+          text(node, "web_url"), instant(text(node, "created_at")), instant(text(node, "updated_at"))));
+    }
+    return result;
+  }
+
+  @Override
+  public PullRequestDetail pullRequestDetail(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, long number) {
+    if (!repositoryId.matches("[0-9]+")) throw new IllegalArgumentException("Invalid repository id");
+    String base = "/projects/" + repositoryId + "/merge_requests/" + number;
+    JsonNode mr = get(instance, base, token, method);
+    String value = text(mr, "state");
+    PullRequestSummary.State state = "merged".equals(value) ? PullRequestSummary.State.MERGED
+        : "opened".equals(value) ? PullRequestSummary.State.OPEN : PullRequestSummary.State.CLOSED;
+    String title = text(mr, "title");
+    PullRequestSummary summary = new PullRequestSummary(
+        number, title, text(mr.path("author"), "username"), text(mr, "source_branch"),
+        text(mr, "target_branch"), state,
+        mr.path("draft").asBoolean(false) || mr.path("work_in_progress").asBoolean(false) || looksLikeDraft(title),
+        text(mr, "web_url"), instant(text(mr, "created_at")), instant(text(mr, "updated_at")));
+    List<PullRequestDetail.ChangedFile> files = new ArrayList<>();
+    int additions = 0;
+    int deletions = 0;
+    try {
+      JsonNode changes = get(instance, base + "/changes", token, method).path("changes");
+      for (JsonNode change : changes) {
+        int added = 0;
+        int removed = 0;
+        String diff = text(change, "diff");
+        if (diff != null) {
+          for (String line : diff.split("\n")) {
+            if (line.startsWith("+") && !line.startsWith("+++")) added++;
+            else if (line.startsWith("-") && !line.startsWith("---")) removed++;
+          }
+        }
+        additions += added;
+        deletions += removed;
+        String status = change.path("new_file").asBoolean(false) ? "added"
+            : change.path("deleted_file").asBoolean(false) ? "removed"
+                : change.path("renamed_file").asBoolean(false) ? "renamed" : "modified";
+        files.add(new PullRequestDetail.ChangedFile(
+            text(change, "new_path"), change.path("renamed_file").asBoolean(false) ? text(change, "old_path") : null,
+            status, added, removed));
+      }
+    } catch (GitProviderException exception) {
+      // The changes endpoint may be unavailable for large merge requests.
+    }
+    List<PullRequestDetail.Comment> comments = new ArrayList<>();
+    try {
+      for (JsonNode note : get(instance, base + "/notes?sort=asc&order_by=created_at&per_page=100", token, method)) {
+        if (note.path("system").asBoolean(false)) continue;
+        comments.add(new PullRequestDetail.Comment(
+            text(note.path("author"), "username"), text(note, "body"), instant(text(note, "created_at")),
+            null, text(mr, "web_url") != null ? text(mr, "web_url") + "#note_" + text(note, "id") : null));
+      }
+    } catch (GitProviderException exception) {
+      // Notes are best effort.
+    }
+    return new PullRequestDetail(
+        summary, text(mr, "description"), text(mr, "sha"), additions, deletions, 0, files, comments);
+  }
+
+  @Override
+  public List<PipelineRun> listPipelines(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName) {
+    if (!repositoryId.matches("[0-9]+")) throw new IllegalArgumentException("Invalid repository id");
+    JsonNode nodes = get(instance, "/projects/" + repositoryId
+        + "/pipelines?per_page=30&order_by=updated_at&sort=desc", token, method);
+    List<PipelineRun> result = new ArrayList<>();
+    for (JsonNode node : nodes) {
+      String status = text(node, "status");
+      String number = node.has("iid") ? text(node, "iid") : text(node, "id");
+      result.add(new PipelineRun(
+          text(node, "id"), "Pipeline #" + number, PipelineStatus.gitlab(status), status,
+          text(node, "ref"), text(node, "sha"), text(node, "source"), text(node, "web_url"),
+          instant(text(node, "created_at")), instant(text(node, "updated_at"))));
+    }
+    return result;
+  }
+
+  @Override
   public String postPullRequestComment(
       GitProviderInstance instance, String token, GitConnectionAuthMethod method,
       String repositoryId, String fullName, long number, String webUrl, String markdown) {
@@ -90,6 +191,37 @@ final class GitlabProviderAdapter extends AbstractHttpGitProviderAdapter {
         token, method, Map.of("body", markdown));
     String id = text(created, "id");
     return webUrl != null && id != null ? webUrl + "#note_" + id : webUrl;
+  }
+
+  @Override
+  public void reviewPullRequest(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, long number, boolean approve, String markdown) {
+    if (!approve) {
+      throw new GitProviderException(
+          "GitLab has no 'request changes' verdict; leave a comment instead");
+    }
+    if (!repositoryId.matches("[0-9]+")) throw new IllegalArgumentException("Invalid repository id");
+    postJson(instance, "/projects/" + repositoryId + "/merge_requests/" + number + "/approve",
+        token, method, Map.of());
+  }
+
+  @Override
+  public void mergePullRequest(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, long number) {
+    if (!repositoryId.matches("[0-9]+")) throw new IllegalArgumentException("Invalid repository id");
+    sendJson("PUT", instance, "/projects/" + repositoryId + "/merge_requests/" + number + "/merge",
+        token, method, Map.of());
+  }
+
+  @Override
+  public void closePullRequest(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, long number) {
+    if (!repositoryId.matches("[0-9]+")) throw new IllegalArgumentException("Invalid repository id");
+    sendJson("PUT", instance, "/projects/" + repositoryId + "/merge_requests/" + number,
+        token, method, Map.of("state_event", "close"));
   }
 
   @Override

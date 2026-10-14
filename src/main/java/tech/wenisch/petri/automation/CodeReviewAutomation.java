@@ -43,7 +43,23 @@ public class CodeReviewAutomation {
   /** Everything a review needs; the settings are snapshotted when the job is queued. */
   public record Job(
       UUID runId, UUID projectId, PullRequestRef pr, AutomationPostMode postMode,
-      UUID providerInstanceId, String model, int maxModelTurns) {}
+      UUID providerInstanceId, String model, int maxModelTurns, AutomationKind kind,
+      boolean manual) {
+    /** A scheduled or polled run. */
+    public Job(
+        UUID runId, UUID projectId, PullRequestRef pr, AutomationPostMode postMode,
+        UUID providerInstanceId, String model, int maxModelTurns, AutomationKind kind) {
+      this(runId, projectId, pr, postMode, providerInstanceId, model, maxModelTurns, kind, false);
+    }
+
+    /** A review that comments, which is what the original automation did. */
+    public Job(
+        UUID runId, UUID projectId, PullRequestRef pr, AutomationPostMode postMode,
+        UUID providerInstanceId, String model, int maxModelTurns) {
+      this(runId, projectId, pr, postMode, providerInstanceId, model, maxModelTurns,
+          AutomationKind.CODE_REVIEW_AND_COMMENT);
+    }
+  }
 
   private final AutomationRunService runs;
   private final AutomationReviewService reviews;
@@ -60,6 +76,7 @@ public class CodeReviewAutomation {
   private final ModelCredentialService models;
   private final OrchestrationProfileService orchestrationProfiles;
   private final AuditLogService audit;
+  private final PullRequestImprovementService improvements;
   private final int maxDiffBytes;
 
   CodeReviewAutomation(
@@ -69,7 +86,7 @@ public class CodeReviewAutomation {
       ProjectMirrorService mirrors, PullRequestDiffService diffs, ProjectWorktreeService worktrees,
       SkillService skills, AgentRunService agentRuns, AgentRunExecutor executor,
       ModelCredentialService models, OrchestrationProfileService orchestrationProfiles,
-      AuditLogService audit,
+      AuditLogService audit, PullRequestImprovementService improvements,
       @Value("${petri.automation.max-diff-bytes:120000}") int maxDiffBytes) {
     this.runs = runs;
     this.reviews = reviews;
@@ -86,6 +103,7 @@ public class CodeReviewAutomation {
     this.models = models;
     this.orchestrationProfiles = orchestrationProfiles;
     this.audit = audit;
+    this.improvements = improvements;
     this.maxDiffBytes = maxDiffBytes;
   }
 
@@ -106,7 +124,7 @@ public class CodeReviewAutomation {
       }
       // The pull request may have changed since it was queued: converted to a draft, closed or
       // pushed to. Look again before spending any work on it.
-      String stale = staleReason(source, job.pr());
+      String stale = staleReason(source, job.pr(), job.manual());
       if (stale != null) {
         runs.skipped(job.runId(), stale);
         return;
@@ -137,8 +155,7 @@ public class CodeReviewAutomation {
       ReviewSubmission.Previous previous = reviews.previous(job.runId()).orElse(null);
       String sinceDiff = previous == null ? null : diffs.sinceCommit(
           job.projectId(), job.pr().number(), previous.headSha(), maxDiffBytes / 2);
-      String instructions = CodeReviewPrompts.instructions(
-          skills.load(AutomationKind.CODE_REVIEW.skill()).content());
+      String instructions = CodeReviewPrompts.instructions(skillText(job.kind()));
       String task = CodeReviewPrompts.task(job.pr(), diff.changedFiles(), diff.diff(),
           diff.truncated(), MAX_LISTED_FILES, previous, sinceDiff);
       AgentRunView created = agentRuns.createAutomationRun(
@@ -166,7 +183,11 @@ public class CodeReviewAutomation {
         audit.record("automation", "AUTOMATION_RUN_FAILED", "PROJECT", job.projectId(), reason);
         return;
       }
-      if (job.postMode() == AutomationPostMode.DRAFT) {
+      if (!job.kind().comments()) {
+        runs.reviewed(job.runId());
+        audit.record("automation", "AUTOMATION_REVIEW_COMPLETED", "PROJECT", job.projectId(),
+            "Reviewed pull request #" + job.pr().number() + " without publishing");
+      } else if (job.postMode() == AutomationPostMode.DRAFT) {
         runs.awaitingApproval(job.runId());
       } else {
         publish(job.runId(), "automation");
@@ -189,6 +210,16 @@ public class CodeReviewAutomation {
     }
   }
 
+  /**
+   * The review method plus what the automation's own skill adds to it: the review automations share
+   * one method (the {@code code-review} skill) and differ in what happens with the result.
+   */
+  private String skillText(AutomationKind kind) {
+    String method = skills.load(AutomationKind.REVIEW_METHOD_SKILL).content();
+    if (AutomationKind.REVIEW_METHOD_SKILL.equals(kind.skill())) return method;
+    return method + "\n\n---\n\n" + skills.load(kind.skill()).content();
+  }
+
   /** Posts a stored review to its pull request. Used for automatic posting and for approvals. */
   public void publish(UUID runId, String actor) {
     AutomationRun run = runs.require(runId);
@@ -196,12 +227,19 @@ public class CodeReviewAutomation {
     ProjectProviderSource source = sources.find(run.getProjectId());
     if (source == null) throw new IllegalStateException("Project is no longer linked to a Git account");
     try {
+      String markdown = run.getReviewMarkdown();
+      PullRequestImprovementService.Intent intent = null;
+      if (run.getKind().improves()) {
+        intent = improvements.intent(run);
+        if (intent.sentence() != null) markdown = markdown + "\n\n---\n\n" + intent.sentence();
+      }
       String url = connections.postPullRequestComment(
           source.getConnectionId(), source.getExternalRepositoryId(), source.getFullName(),
-          Long.parseLong(run.getExternalRef()), run.getWebUrl(), run.getReviewMarkdown());
+          Long.parseLong(run.getExternalRef()), run.getWebUrl(), markdown);
       runs.posted(runId, url);
       audit.record(actor, "AUTOMATION_COMMENT_POSTED", "PROJECT", run.getProjectId(),
           "Posted review on pull request #" + run.getExternalRef());
+      if (intent != null && intent.improve()) improvements.start(runId, intent, actor);
     } catch (RuntimeException exception) {
       String reason = "Could not post the review comment: "
           + (exception.getMessage() == null ? "unknown error" : exception.getMessage())
@@ -214,14 +252,17 @@ public class CodeReviewAutomation {
   }
 
   /** Why the pull request should no longer be reviewed, or null when it still should. */
-  private String staleReason(ProjectProviderSource source, PullRequestRef queued) {
+  private String staleReason(
+      ProjectProviderSource source, PullRequestRef queued, boolean manual) {
     List<PullRequestRef> open = connections.openPullRequests(
         source.getConnectionId(), source.getExternalRepositoryId(), source.getFullName())
         .pullRequests();
     PullRequestRef current = open.stream()
         .filter(candidate -> candidate.number() == queued.number()).findFirst().orElse(null);
     if (current == null) return "The pull request is closed or merged.";
-    if (current.draft()) return "The pull request is a draft; it is reviewed once it is ready.";
+    if (current.draft() && !manual) {
+      return "The pull request is a draft; it is reviewed once it is ready.";
+    }
     if (!current.headSha().equals(queued.headSha())) {
       return "The pull request was updated while this review was queued; the new head is "
           + "reviewed on the next poll.";

@@ -175,6 +175,25 @@ public class GitAccountConnectionService {
             connection.getAuthMethod(), repositoryId, fullName));
   }
 
+  /**
+   * A ready-to-use provider call: the token is refreshed if needed under the row lock, then the
+   * lock is released so the (possibly slow) provider request does not block other users of the
+   * same connection.
+   */
+  public record PreparedCall(
+      GitProviderInstance instance, GitProviderAdapter adapter, String token,
+      GitConnectionAuthMethod method) {}
+
+  @Transactional(noRollbackFor = {GitProviderException.class, IllegalStateException.class})
+  public PreparedCall prepare(UUID id) {
+    GitAccountConnection connection = connections.findLockedById(id)
+        .orElseThrow(() -> new IllegalArgumentException("Git account connection not found"));
+    refreshIfNeeded(connection);
+    ResolvedConnection resolved = resolve(connection);
+    return new PreparedCall(
+        resolved.instance(), resolved.adapter(), resolved.token(), connection.getAuthMethod());
+  }
+
   @Transactional(noRollbackFor = {GitProviderException.class, IllegalStateException.class})
   public String postPullRequestComment(
       UUID id, String repositoryId, String fullName, long number, String webUrl, String markdown) {

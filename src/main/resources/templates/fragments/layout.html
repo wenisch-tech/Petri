@@ -116,8 +116,8 @@
       th:with="value=${status == null ? '' : status.toString()}"
       th:classappend="${ {'FAILED','ERROR','REJECTED'}.contains(value) } ? 'badge-danger'
         : (${ {'PROPOSED','BUDGET_EXHAUSTED','CONFLICT','TIMED_OUT','CANCELLATION_REQUESTED','AWAITING_APPROVAL'}.contains(value) } ? 'badge-warn'
-        : (${ {'PENDING','RUNNING','APPROVED','QUEUED'}.contains(value) } ? 'badge-brand'
-        : (${ {'COMPLETED','APPLIED','PASSED','ACTIVE','POSTED'}.contains(value) } ? '' : 'badge-neutral')))"
+        : (${ {'PENDING','RUNNING','APPROVED','QUEUED','IMPROVING'}.contains(value) } ? 'badge-brand'
+        : (${ {'COMPLETED','APPLIED','PASSED','ACTIVE','POSTED','REVIEWED'}.contains(value) } ? '' : 'badge-neutral')))"
       th:text="${#strings.capitalize(#strings.toLowerCase(#strings.replace(value, '_', ' ')))}">Status</span>
 
 <!-- Flash message. `kind` is success, error, warning or info. -->

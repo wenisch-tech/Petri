@@ -63,6 +63,16 @@ public class AutomationRun {
   @Column(length = 1000)
   private String error;
 
+  /** Plain-language outcome of the part after the review, such as the pushed commit. */
+  @Column(length = 1000)
+  private String note;
+
+  @Column(name = "improve_workflow_id")
+  private UUID improveWorkflowId;
+
+  @Column(name = "improve_worktree_id")
+  private UUID improveWorktreeId;
+
   @Enumerated(EnumType.STRING)
   @Column(name = "post_mode", nullable = false, length = 16)
   private AutomationPostMode postMode;
@@ -98,6 +108,9 @@ public class AutomationRun {
     this.error = null;
     this.reviewMarkdown = null;
     this.commentUrl = null;
+    this.note = null;
+    this.improveWorkflowId = null;
+    this.improveWorktreeId = null;
     this.updatedAt = now;
   }
 
@@ -131,6 +144,19 @@ public class AutomationRun {
     transition(AutomationRunStatus.POSTED, null, now);
   }
 
+  void reviewed(Instant now) { transition(AutomationRunStatus.REVIEWED, null, now); }
+
+  void improving(UUID workflowId, UUID worktreeId, Instant now) {
+    this.improveWorkflowId = workflowId;
+    this.improveWorktreeId = worktreeId;
+    transition(AutomationRunStatus.IMPROVING, null, now);
+  }
+
+  void note(String note, Instant now) {
+    this.note = note == null ? null : truncate(note, 1000);
+    this.updatedAt = now;
+  }
+
   void skipped(String reason, Instant now) { transition(AutomationRunStatus.SKIPPED, reason, now); }
 
   void failed(String reason, Instant now) { transition(AutomationRunStatus.FAILED, reason, now); }
@@ -161,6 +187,9 @@ public class AutomationRun {
   public String getReviewJson() { return reviewJson; }
   public String getCommentUrl() { return commentUrl; }
   public String getError() { return error; }
+  public String getNote() { return note; }
+  public UUID getImproveWorkflowId() { return improveWorkflowId; }
+  public UUID getImproveWorktreeId() { return improveWorktreeId; }
   public AutomationPostMode getPostMode() { return postMode; }
   public Instant getCreatedAt() { return createdAt; }
   public Instant getUpdatedAt() { return updatedAt; }

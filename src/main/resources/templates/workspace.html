@@ -11,8 +11,8 @@
   <link rel="icon" href="/favicon.ico" sizes="any">
   <link rel="icon" type="image/png" sizes="32x32" href="/img/favicon-32.png">
   <link rel="apple-touch-icon" href="/img/apple-touch-icon.png">
-  <link rel="stylesheet" href="/css/petri.css?v=55">
-  <script defer src="/js/petri.js?v=53"></script>
+  <link rel="stylesheet" href="/css/petri.css?v=66">
+  <script defer src="/js/petri.js?v=62"></script>
 </head>
 <body class="workspace-body">
   <header class="topbar workspace-topbar relative z-40">
@@ -37,6 +37,8 @@
   <section class="workspace-gitbar" data-git-bar>
     <nav class="workspace-viewbar" role="tablist" aria-label="Project views">
       <a class="workspace-view-tab is-active" role="tab" th:href="@{/workspace/projects/{id}(id=${project.id})}" data-workspace-view="workspace"><i data-lucide="FileCode2"></i><span>Workspace</span></a>
+      <a class="workspace-view-tab" role="tab" th:href="@{/projects/{id}/pull-requests(id=${project.id})}" data-workspace-view="pullrequests"><i data-lucide="GitPullRequestArrow"></i><span>Pull requests</span></a>
+      <a class="workspace-view-tab" role="tab" th:href="@{/projects/{id}/pipelines(id=${project.id})}" data-workspace-view="pipelines"><i data-lucide="Rocket"></i><span>Pipelines</span></a>
       <a class="workspace-view-tab" role="tab" th:href="@{/projects/{id}/automations(id=${project.id})}" data-workspace-view="automations"><i data-lucide="Bot"></i><span>Automations</span></a>
       <a class="workspace-view-tab" role="tab" th:href="@{/projects/{id}/runs(id=${project.id})}" data-workspace-view="runs"><i data-lucide="Workflow"></i><span>Runs</span></a>
       <a class="workspace-view-tab" role="tab" th:href="@{/projects/{id}/settings(id=${project.id})}" data-workspace-view="settings"><i data-lucide="Settings"></i><span>Settings</span></a>

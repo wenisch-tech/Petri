@@ -30,6 +30,18 @@ public class AutomationRunService {
   public Optional<UUID> register(
       UUID projectId, AutomationKind kind, AutomationTrigger trigger, PullRequestRef pr,
       AutomationPostMode postMode, boolean retryFailed, java.util.Set<UUID> inFlight) {
+    return register(projectId, kind, trigger, pr, postMode, retryFailed, false, inFlight);
+  }
+
+  /**
+   * @param force run again even when this head was already handled successfully, as when a person
+   *     asks for it; a run that is still queued, running or improving is never restarted
+   */
+  @Transactional
+  public Optional<UUID> register(
+      UUID projectId, AutomationKind kind, AutomationTrigger trigger, PullRequestRef pr,
+      AutomationPostMode postMode, boolean retryFailed, boolean force,
+      java.util.Set<UUID> inFlight) {
     String ref = Long.toString(pr.number());
     Instant now = Instant.now();
     Optional<AutomationRun> existing = runs.findByProjectIdAndKindAndExternalRefAndHeadSha(
@@ -39,7 +51,8 @@ public class AutomationRunService {
       boolean stale = run.getStatus().active() && !inFlight.contains(run.getId())
           && run.getUpdatedAt().isBefore(now.minus(STALE_AFTER));
       boolean retry = retryFailed && (run.getStatus() == AutomationRunStatus.FAILED
-          || run.getStatus() == AutomationRunStatus.SKIPPED);
+          || run.getStatus() == AutomationRunStatus.SKIPPED)
+          || force && !run.getStatus().active() && run.getStatus() != AutomationRunStatus.IMPROVING;
       if (!stale && !retry) return Optional.empty();
       run.queued(postMode, now);
       return Optional.of(run.getId());
@@ -114,6 +127,17 @@ public class AutomationRunService {
 
   @Transactional
   public void awaitingApproval(UUID id) { load(id).awaitingApproval(Instant.now()); }
+
+  @Transactional
+  public void reviewed(UUID id) { load(id).reviewed(Instant.now()); }
+
+  @Transactional
+  public void improving(UUID id, UUID workflowId, UUID worktreeId) {
+    load(id).improving(workflowId, worktreeId, Instant.now());
+  }
+
+  @Transactional
+  public void note(UUID id, String note) { load(id).note(note, Instant.now()); }
 
   @Transactional
   public void posted(UUID id, String commentUrl) { load(id).posted(commentUrl, Instant.now()); }

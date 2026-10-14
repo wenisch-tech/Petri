@@ -63,7 +63,7 @@ class CodeReviewAutomationTest {
   private final OrchestrationProfileService orchestration = mock(OrchestrationProfileService.class);
   private final CodeReviewAutomation automation = new CodeReviewAutomation(
       runs, reviews, projects, users, sources, connections, mirrors, diffs, worktrees, skills, agentRuns,
-      executor, models, orchestration, audit, 100_000);
+      executor, models, orchestration, audit, mock(PullRequestImprovementService.class), 100_000);
 
   private final UUID projectId = UUID.randomUUID();
   private final UUID ownerId = UUID.randomUUID();
@@ -93,6 +93,8 @@ class CodeReviewAutomationTest {
     when(worktree.id()).thenReturn(worktreeId);
     when(worktrees.create(eq(projectId), eq("abc123"), anyString())).thenReturn(worktree);
     when(skills.load("code-review")).thenReturn(new SkillDocument("code-review", "d", "SKILL BODY"));
+    when(skills.load("code-review-and-comment")).thenReturn(
+        new SkillDocument("code-review-and-comment", "d", "COMMENT ADDENDUM"));
     ModelCredentialStatus model = mock(ModelCredentialStatus.class);
     when(model.provider()).thenReturn(ModelProvider.OLLAMA);
     when(model.id()).thenReturn(modelId);

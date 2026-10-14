@@ -10,6 +10,8 @@ public interface AutomationRunRepository extends JpaRepository<AutomationRun, UU
       UUID projectId, AutomationKind kind, String externalRef, String headSha);
 
   /** Every run of one pull request, newest first. */
+  List<AutomationRun> findByStatus(AutomationRunStatus status);
+
   List<AutomationRun> findByProjectIdAndKindAndExternalRefOrderByCreatedAtDesc(
       UUID projectId, AutomationKind kind, String externalRef);
 

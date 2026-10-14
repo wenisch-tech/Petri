@@ -9,7 +9,7 @@ const STATES = {
 };
 const RESULTS = {
   COMPLETED: ['Completed', 'good'], FAILED: ['Failed', 'danger'], CANCELLED: ['Cancelled', 'muted'],
-  BUDGET_EXHAUSTED: ['Budget exhausted', 'danger'], POSTED: ['Posted', 'good'], SKIPPED: ['Skipped', 'muted'],
+  BUDGET_EXHAUSTED: ['Budget exhausted', 'danger'], POSTED: ['Posted', 'good'], REVIEWED: ['Reviewed', 'good'], IMPROVING: ['Improving', 'brand'], SKIPPED: ['Skipped', 'muted'],
   RUNNING: ['Running', 'brand'], QUEUED: ['Queued', 'brand'], AWAITING_APPROVAL: ['Awaiting approval', 'warn']
 };
 

@@ -82,6 +82,59 @@ final class ForgejoProviderAdapter extends AbstractHttpGitProviderAdapter {
   }
 
   @Override
+  public List<PullRequestSummary> listPullRequests(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, String state) {
+    String query = "open".equals(state) ? "open" : "closed".equals(state) ? "closed" : "all";
+    JsonNode nodes = get(instance, "/repos/" + repositoryPath(fullName)
+        + "/pulls?state=" + query + "&sort=recentupdate&limit=50", token, method);
+    List<PullRequestSummary> result = new ArrayList<>();
+    for (JsonNode node : nodes) {
+      PullRequestSummary.State value = node.path("merged").asBoolean(false) || text(node, "merged_at") != null
+          ? PullRequestSummary.State.MERGED
+          : "open".equals(text(node, "state")) ? PullRequestSummary.State.OPEN
+              : PullRequestSummary.State.CLOSED;
+      String title = text(node, "title");
+      result.add(new PullRequestSummary(
+          node.path("number").asLong(), title, text(node.path("user"), "login"),
+          text(node.path("head"), "ref"), text(node.path("base"), "ref"), value,
+          node.path("draft").asBoolean(false) || looksLikeDraft(title), text(node, "html_url"),
+          instant(text(node, "created_at")), instant(text(node, "updated_at"))));
+    }
+    return result;
+  }
+
+  @Override
+  public PullRequestDetail pullRequestDetail(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, long number) {
+    return githubStyleDetail(instance, token, method, fullName, number);
+  }
+
+  @Override
+  public List<PipelineRun> listPipelines(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName) {
+    JsonNode body = get(instance,
+        "/repos/" + repositoryPath(fullName) + "/actions/runs?limit=30", token, method);
+    JsonNode runs = body.path("workflow_runs").isArray() ? body.path("workflow_runs") : body;
+    List<PipelineRun> result = new ArrayList<>();
+    for (JsonNode node : runs) {
+      String status = text(node, "status");
+      String conclusion = text(node, "conclusion");
+      String title = text(node, "display_title") != null ? text(node, "display_title") : text(node, "title");
+      String url = text(node, "html_url") != null ? text(node, "html_url") : text(node, "url");
+      result.add(new PipelineRun(
+          text(node, "id"), title != null ? title : "Workflow run",
+          PipelineStatus.github(status, conclusion), conclusion != null ? conclusion : status,
+          text(node, "head_branch"), text(node, "head_sha"), text(node, "event"), url,
+          instant(text(node, "created")), instant(text(node, "updated")) != null
+              ? instant(text(node, "updated")) : instant(text(node, "updated_at"))));
+    }
+    return result;
+  }
+
+  @Override
   public String postPullRequestComment(
       GitProviderInstance instance, String token, GitConnectionAuthMethod method,
       String repositoryId, String fullName, long number, String webUrl, String markdown) {
@@ -90,6 +143,29 @@ final class ForgejoProviderAdapter extends AbstractHttpGitProviderAdapter {
         token, method, Map.of("body", markdown));
     String url = text(created, "html_url");
     return url != null ? url : webUrl;
+  }
+
+  @Override
+  public void reviewPullRequest(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, long number, boolean approve, String markdown) {
+    githubStyleReview(instance, token, method, fullName, number,
+        approve ? "APPROVED" : "REQUEST_CHANGES", markdown);
+  }
+
+  @Override
+  public void mergePullRequest(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, long number) {
+    postJson(instance, "/repos/" + repositoryPath(fullName) + "/pulls/" + number + "/merge",
+        token, method, Map.of("Do", "merge"));
+  }
+
+  @Override
+  public void closePullRequest(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, long number) {
+    githubStyleClose(instance, token, method, fullName, number);
   }
 
   @Override

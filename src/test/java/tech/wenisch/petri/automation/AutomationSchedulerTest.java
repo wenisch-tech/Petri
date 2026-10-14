@@ -30,7 +30,8 @@ class AutomationSchedulerTest {
   private final GitAccountConnectionService connections = mock(GitAccountConnectionService.class);
   private final CodeReviewAutomation review = mock(CodeReviewAutomation.class);
   private final AutomationScheduler scheduler = new AutomationScheduler(
-      automations, settings, runs, sources, connections, review, true, 5, 2);
+      automations, settings, runs, sources, connections, review,
+      mock(PullRequestImprovementService.class), true, 5, 2);
   private final UUID projectId = UUID.randomUUID();
 
   private static PullRequestRef pull(long number, boolean draft) {
@@ -95,6 +96,23 @@ class AutomationSchedulerTest {
 
     verify(review, timeout(2_000)).execute(org.mockito.ArgumentMatchers.argThat(
         job -> job.pr().number() == 8 && job.pr().headSha().equals("sha8")));
+  }
+
+  @Test
+  void aPersonCanStartAnyReviewKindOnADraftPullRequestAndForceANewRun() {
+    listing(pull(4, true));
+    when(runs.register(any(), any(), any(), any(), any(),
+        org.mockito.ArgumentMatchers.anyBoolean(), org.mockito.ArgumentMatchers.eq(true), any()))
+        .thenReturn(Optional.of(UUID.randomUUID()));
+
+    scheduler.runOnDemand(projectId, AutomationKind.CODE_REVIEW_AND_IMPROVE, 4,
+        AutomationPostMode.AUTO);
+
+    verify(runs).register(eq(projectId), eq(AutomationKind.CODE_REVIEW_AND_IMPROVE),
+        eq(AutomationTrigger.MANUAL), org.mockito.ArgumentMatchers.argThat(pr -> pr.number() == 4),
+        eq(AutomationPostMode.AUTO), eq(true), eq(true), any());
+    verify(review, timeout(2_000)).execute(org.mockito.ArgumentMatchers.argThat(
+        job -> job.manual() && job.kind() == AutomationKind.CODE_REVIEW_AND_IMPROVE));
   }
 
   @Test

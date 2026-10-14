@@ -10,7 +10,7 @@ public final class AutomationToolPolicy {
   public static final String SUBMIT_REVIEW = "submit_review";
 
   private static final Set<String> ALLOWED = Set.of(
-      "list_files", "read_file", "search_files", SUBMIT_REVIEW);
+      "list_files", "read_file", "search_files", "get_pull_request", SUBMIT_REVIEW);
 
   private AutomationToolPolicy() {}
 

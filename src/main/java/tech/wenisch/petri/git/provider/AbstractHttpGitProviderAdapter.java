@@ -11,6 +11,7 @@ import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.time.Instant;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import tech.wenisch.petri.config.TlsSettings;
 import tools.jackson.databind.JsonNode;
@@ -54,6 +55,16 @@ abstract class AbstractHttpGitProviderAdapter implements GitProviderAdapter {
       String token,
       GitConnectionAuthMethod method,
       Map<String, ?> body) {
+    return sendJson("POST", instance, resource, token, method, body);
+  }
+
+  protected JsonNode sendJson(
+      String verb,
+      GitProviderInstance instance,
+      String resource,
+      String token,
+      GitConnectionAuthMethod method,
+      Map<String, ?> body) {
     HttpRequest.Builder request = HttpRequest.newBuilder(safeUri(instance.getApiBaseUrl(), resource))
         .timeout(REQUEST_TIMEOUT)
         .header("Accept", "application/json")
@@ -61,7 +72,7 @@ abstract class AbstractHttpGitProviderAdapter implements GitProviderAdapter {
         .header("User-Agent", "Petri/0.1");
     authorize(request, token, method);
     String payload = json.writeValueAsString(body);
-    return send(request.POST(HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8)).build());
+    return send(request.method(verb, HttpRequest.BodyPublishers.ofString(payload, StandardCharsets.UTF_8)).build());
   }
 
   /** {@code owner/name} (or nested groups) as it may appear inside an API path. */
@@ -222,5 +233,82 @@ abstract class AbstractHttpGitProviderAdapter implements GitProviderAdapter {
 
   protected static String encode(String value) {
     return URLEncoder.encode(value, StandardCharsets.UTF_8);
+  }
+
+  /** The pull request detail of the GitHub-style API that GitHub and Forgejo both speak. */
+  protected PullRequestDetail githubStyleDetail(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method, String fullName,
+      long number) {
+    String base = "/repos/" + repositoryPath(fullName);
+    JsonNode pr = get(instance, base + "/pulls/" + number, token, method);
+    PullRequestSummary.State state = text(pr, "merged_at") != null || pr.path("merged").asBoolean(false)
+        ? PullRequestSummary.State.MERGED
+        : "open".equals(text(pr, "state")) ? PullRequestSummary.State.OPEN : PullRequestSummary.State.CLOSED;
+    String title = text(pr, "title");
+    PullRequestSummary summary = new PullRequestSummary(
+        number, title, text(pr.path("user"), "login"), text(pr.path("head"), "ref"),
+        text(pr.path("base"), "ref"), state, pr.path("draft").asBoolean(false) || looksLikeDraft(title),
+        text(pr, "html_url"), instant(text(pr, "created_at")), instant(text(pr, "updated_at")));
+    List<PullRequestDetail.ChangedFile> files = new java.util.ArrayList<>();
+    try {
+      for (JsonNode file : get(instance, base + "/pulls/" + number + "/files?per_page=100&limit=100", token, method)) {
+        files.add(new PullRequestDetail.ChangedFile(
+            text(file, "filename"), text(file, "previous_filename"), text(file, "status"),
+            file.path("additions").asInt(0), file.path("deletions").asInt(0)));
+      }
+    } catch (GitProviderException exception) {
+      // Older servers lack the files endpoint; the rest of the page is still useful.
+    }
+    List<PullRequestDetail.Comment> comments = new java.util.ArrayList<>();
+    try {
+      for (JsonNode comment : get(instance, base + "/issues/" + number + "/comments?per_page=100&limit=100", token, method)) {
+        comments.add(new PullRequestDetail.Comment(
+            text(comment.path("user"), "login"), text(comment, "body"), instant(text(comment, "created_at")),
+            null, text(comment, "html_url")));
+      }
+    } catch (GitProviderException exception) {
+      // Comments are best effort.
+    }
+    try {
+      for (JsonNode review : get(instance, base + "/pulls/" + number + "/reviews?per_page=100&limit=100", token, method)) {
+        String verdict = text(review, "state");
+        String normalized = verdict == null ? "COMMENTED" : switch (verdict.toUpperCase()) {
+          case "APPROVED" -> "APPROVED";
+          case "CHANGES_REQUESTED", "REQUEST_CHANGES" -> "CHANGES_REQUESTED";
+          default -> "COMMENTED";
+        };
+        String body = text(review, "body");
+        // A bare "commented" review without text only carries inline comments; skip the noise.
+        if ("COMMENTED".equals(normalized) && (body == null || body.isBlank())) continue;
+        comments.add(new PullRequestDetail.Comment(
+            text(review.path("user"), "login"), body,
+            instant(text(review, "submitted_at") != null ? text(review, "submitted_at") : text(review, "created_at")),
+            normalized, text(review, "html_url")));
+      }
+    } catch (GitProviderException exception) {
+      // Reviews are best effort.
+    }
+    comments.sort(java.util.Comparator.comparing(
+        PullRequestDetail.Comment::createdAt, java.util.Comparator.nullsLast(java.util.Comparator.naturalOrder())));
+    return new PullRequestDetail(
+        summary, text(pr, "body"), text(pr.path("head"), "sha"), pr.path("additions").asInt(0),
+        pr.path("deletions").asInt(0), pr.path("commits").asInt(0), files, comments);
+  }
+
+  protected void githubStyleReview(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String fullName, long number, String event, String markdown) {
+    Map<String, Object> body = new LinkedHashMap<>();
+    body.put("event", event);
+    if (markdown != null && !markdown.isBlank()) body.put("body", markdown);
+    postJson(instance, "/repos/" + repositoryPath(fullName) + "/pulls/" + number + "/reviews",
+        token, method, body);
+  }
+
+  protected void githubStyleClose(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String fullName, long number) {
+    sendJson("PATCH", instance, "/repos/" + repositoryPath(fullName) + "/pulls/" + number,
+        token, method, Map.of("state", "closed"));
   }
 }

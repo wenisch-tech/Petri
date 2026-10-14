@@ -139,6 +139,140 @@ class GitProviderAdapterTest {
   }
 
   @Test
+  void pullRequestStatesAreNormalisedOnEveryProvider() {
+    AtomicReference<HttpRequest> request = new AtomicReference<>();
+    GithubProviderAdapter github = new GithubProviderAdapter(json, client(request, value -> ok("""
+        [{"number":1,"title":"A","state":"open","draft":false,"user":{"login":"a"},
+          "head":{"ref":"f"},"base":{"ref":"main"},"created_at":"2026-05-01T10:00:00Z",
+          "updated_at":"2026-05-02T10:00:00Z","html_url":"https://x/1"},
+         {"number":2,"title":"B","state":"closed","merged_at":"2026-05-03T10:00:00Z",
+          "head":{"ref":"g"},"base":{"ref":"main"}},
+         {"number":3,"title":"C","state":"closed",
+          "head":{"ref":"h"},"base":{"ref":"main"}}]
+        """)));
+    var pulls = github.listPullRequests(instance(GitProviderType.GITHUB), "tok",
+        GitConnectionAuthMethod.PAT, "42", "acme/petri", "all");
+
+    assertThat(request.get().uri().getQuery()).contains("state=all");
+    assertThat(pulls).extracting(PullRequestSummary::state).containsExactly(
+        PullRequestSummary.State.OPEN, PullRequestSummary.State.MERGED, PullRequestSummary.State.CLOSED);
+
+    GitlabProviderAdapter gitlab = new GitlabProviderAdapter(json, client(request, value -> ok("""
+        [{"iid":5,"title":"Draft: x","state":"opened","source_branch":"s","target_branch":"main",
+          "author":{"username":"u"},"web_url":"https://x/5"},
+         {"iid":6,"title":"y","state":"merged","source_branch":"s2","target_branch":"main"},
+         {"iid":7,"title":"z","state":"closed","source_branch":"s3","target_branch":"main"}]
+        """)));
+    var merge = gitlab.listPullRequests(instance(GitProviderType.GITLAB), "tok",
+        GitConnectionAuthMethod.PAT, "42", "acme/petri", "closed");
+    assertThat(merge).extracting(PullRequestSummary::number).containsExactly(6L, 7L);
+
+    ForgejoProviderAdapter forgejo = new ForgejoProviderAdapter(json, client(request, value -> ok("""
+        [{"number":9,"title":"m","state":"closed","merged":true,
+          "head":{"ref":"a"},"base":{"ref":"main"}}]
+        """)));
+    var merged = forgejo.listPullRequests(instance(GitProviderType.FORGEJO), "tok",
+        GitConnectionAuthMethod.PAT, "42", "acme/petri", "closed");
+    assertThat(merged.getFirst().state()).isEqualTo(PullRequestSummary.State.MERGED);
+  }
+
+  @Test
+  void pullRequestDetailCollectsDescriptionFilesAndComments() {
+    AtomicReference<HttpRequest> request = new AtomicReference<>();
+    GithubProviderAdapter github = new GithubProviderAdapter(json, client(request, value -> {
+      String path = value.uri().getPath();
+      if (path.endsWith("/files")) {
+        return ok("[{\"filename\":\"a.txt\",\"status\":\"added\",\"additions\":4,\"deletions\":0}]");
+      }
+      if (path.endsWith("/comments")) {
+        return ok("[{\"user\":{\"login\":\"zed\"},\"body\":\"hi\",\"created_at\":\"2026-05-02T10:00:00Z\"}]");
+      }
+      if (path.endsWith("/reviews")) {
+        return ok("[{\"user\":{\"login\":\"amy\"},\"body\":\"ok\",\"state\":\"APPROVED\",\"submitted_at\":\"2026-05-03T10:00:00Z\"}]");
+      }
+      return ok("{\"number\":5,\"title\":\"T\",\"body\":\"Desc\",\"state\":\"open\",\"head\":{\"ref\":\"f\",\"sha\":\"abc\"},\"base\":{\"ref\":\"main\"},\"commits\":2}");
+    }));
+    var detail = github.pullRequestDetail(instance(GitProviderType.GITHUB), "tok",
+        GitConnectionAuthMethod.PAT, "42", "acme/petri", 5);
+
+    assertThat(detail.description()).isEqualTo("Desc");
+    assertThat(detail.headSha()).isEqualTo("abc");
+    assertThat(detail.files()).singleElement().satisfies(file -> assertThat(file.path()).isEqualTo("a.txt"));
+    assertThat(detail.comments()).extracting(PullRequestDetail.Comment::author).containsExactly("zed", "amy");
+  }
+
+  @Test
+  void pullRequestReviewMergeAndCloseUseEachProvidersEndpoints() {
+    java.util.List<String> calls = new java.util.ArrayList<>();
+    AtomicReference<HttpRequest> request = new AtomicReference<>();
+    var ok = (java.util.function.Function<HttpRequest, ResponseSpec>) value -> {
+      calls.add(value.method() + " " + value.uri().getPath());
+      return ok("{}");
+    };
+    GithubProviderAdapter github = new GithubProviderAdapter(json, client(request, ok));
+    var gh = instance(GitProviderType.GITHUB);
+    github.reviewPullRequest(gh, "t", GitConnectionAuthMethod.PAT, "1", "acme/petri", 4, true, "");
+    github.mergePullRequest(gh, "t", GitConnectionAuthMethod.PAT, "1", "acme/petri", 4);
+    github.closePullRequest(gh, "t", GitConnectionAuthMethod.PAT, "1", "acme/petri", 4);
+    GitlabProviderAdapter gitlab = new GitlabProviderAdapter(json, client(request, ok));
+    var gl = instance(GitProviderType.GITLAB);
+    gitlab.reviewPullRequest(gl, "t", GitConnectionAuthMethod.PAT, "9", "t/s", 2, true, "");
+    gitlab.mergePullRequest(gl, "t", GitConnectionAuthMethod.PAT, "9", "t/s", 2);
+    gitlab.closePullRequest(gl, "t", GitConnectionAuthMethod.PAT, "9", "t/s", 2);
+
+    assertThat(calls).anyMatch(c -> c.startsWith("POST ") && c.endsWith("/pulls/4/reviews"));
+    assertThat(calls).anyMatch(c -> c.startsWith("PUT ") && c.endsWith("/pulls/4/merge"));
+    assertThat(calls).anyMatch(c -> c.startsWith("PATCH ") && c.endsWith("/pulls/4"));
+    assertThat(calls).anyMatch(c -> c.startsWith("POST ") && c.endsWith("/merge_requests/2/approve"));
+    assertThat(calls).anyMatch(c -> c.startsWith("PUT ") && c.endsWith("/merge_requests/2/merge"));
+    assertThat(calls).anyMatch(c -> c.startsWith("PUT ") && c.endsWith("/merge_requests/2"));
+    org.junit.jupiter.api.Assertions.assertThrows(GitProviderException.class, () ->
+        gitlab.reviewPullRequest(gl, "t", GitConnectionAuthMethod.PAT, "9", "t/s", 2, false, "x"));
+  }
+
+  @Test
+  void pipelineRunsAreNormalisedOnEveryProvider() {
+    AtomicReference<HttpRequest> request = new AtomicReference<>();
+    GithubProviderAdapter github = new GithubProviderAdapter(json, client(request, value -> ok("""
+        {"workflow_runs":[
+          {"id":1,"name":"CI","status":"completed","conclusion":"success","head_branch":"main",
+           "head_sha":"abcdef123","event":"push","html_url":"https://x/runs/1",
+           "created_at":"2026-05-01T10:00:00Z","updated_at":"2026-05-01T10:05:00Z"},
+          {"id":2,"name":"CI","status":"in_progress","head_branch":"f","head_sha":"b"},
+          {"id":3,"name":"CI","status":"completed","conclusion":"failure","head_branch":"f","head_sha":"c"},
+          {"id":4,"name":"CI","status":"queued","head_branch":"f","head_sha":"d"}]}
+        """)));
+    var runs = github.listPipelines(instance(GitProviderType.GITHUB), "tok",
+        GitConnectionAuthMethod.PAT, "42", "acme/petri");
+
+    assertThat(request.get().uri().getPath()).isEqualTo("/api/repos/acme/petri/actions/runs");
+    assertThat(runs).extracting(PipelineRun::status)
+        .containsExactly("SUCCESS", "RUNNING", "FAILED", "PENDING");
+    assertThat(runs.getFirst().ref()).isEqualTo("main");
+
+    GitlabProviderAdapter gitlab = new GitlabProviderAdapter(json, client(request, value -> ok("""
+        [{"id":11,"iid":4,"status":"success","ref":"main","sha":"s","source":"push","web_url":"https://x/p/11"},
+         {"id":12,"iid":5,"status":"failed","ref":"f","sha":"t"},
+         {"id":13,"iid":6,"status":"canceled","ref":"f","sha":"u"},
+         {"id":14,"iid":7,"status":"manual","ref":"f","sha":"v"}]
+        """)));
+    var pipes = gitlab.listPipelines(instance(GitProviderType.GITLAB), "tok",
+        GitConnectionAuthMethod.PAT, "42", "acme/petri");
+    assertThat(pipes).extracting(PipelineRun::status)
+        .containsExactly("SUCCESS", "FAILED", "CANCELLED", "PENDING");
+    assertThat(pipes.getFirst().name()).isEqualTo("Pipeline #4");
+
+    ForgejoProviderAdapter forgejo = new ForgejoProviderAdapter(json, client(request, value -> ok("""
+        {"workflow_runs":[{"id":21,"title":"build","status":"success","event":"push",
+          "head_branch":"main","head_sha":"w","html_url":"https://x/r/21"}]}
+        """)));
+    var actions = forgejo.listPipelines(instance(GitProviderType.FORGEJO), "tok",
+        GitConnectionAuthMethod.PAT, "42", "acme/petri");
+    assertThat(actions.getFirst().status()).isEqualTo("SUCCESS");
+    assertThat(actions.getFirst().name()).isEqualTo("build");
+  }
+
+  @Test
   void githubListsOpenPullRequestsAndPostsAComment() {
     AtomicReference<HttpRequest> request = new AtomicReference<>();
     HttpClient client = client(request, value -> value.method().equals("POST")

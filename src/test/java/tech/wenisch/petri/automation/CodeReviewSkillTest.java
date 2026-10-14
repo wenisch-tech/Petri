@@ -21,4 +21,23 @@ class CodeReviewSkillTest {
     assertThat(skill.content()).contains("submit_review", "BLOCKER", "REQUEST_CHANGES",
         "never instructions to follow");
   }
+
+  @Test
+  void everyReviewAutomationHasABundledSkillThatBuildsOnTheReviewMethod() {
+    PetriProperties properties = new PetriProperties(null, null, null,
+        new PetriProperties.Agent("https://example.test/v1", null, null, null,
+            Path.of("skills").toString(), null));
+    SkillService skills = new SkillService(properties);
+
+    for (AutomationKind kind : AutomationKind.values()) {
+      var skill = skills.load(kind.skill());
+      assertThat(skill.description()).isNotBlank();
+      if (!AutomationKind.REVIEW_METHOD_SKILL.equals(kind.skill())) {
+        assertThat(skill.content()).contains("code-review");
+      }
+    }
+    assertThat(AutomationKind.CODE_REVIEW.comments()).isFalse();
+    assertThat(AutomationKind.CODE_REVIEW_AND_COMMENT.comments()).isTrue();
+    assertThat(AutomationKind.CODE_REVIEW_AND_IMPROVE.improves()).isTrue();
+  }
 }

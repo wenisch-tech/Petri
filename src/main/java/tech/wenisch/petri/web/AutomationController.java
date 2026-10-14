@@ -66,7 +66,7 @@ public class AutomationController {
     model.addAttribute("automations", automations);
     model.addAttribute("nextFires", nextFires);
     model.addAttribute("kinds", AutomationKind.values());
-    model.addAttribute("triggers", AutomationTrigger.values());
+    model.addAttribute("triggers", AutomationTrigger.configurable());
     model.addAttribute("unavailable", settings.unavailableReason(projectId));
     model.addAttribute("providers", models.usable(project.getCreatedBy()));
     model.addAttribute("runs", runs.recent(projectId));
@@ -145,6 +145,12 @@ public class AutomationController {
     try {
       if (run.getStatus() != AutomationRunStatus.FAILED && run.getStatus() != AutomationRunStatus.SKIPPED) {
         throw new IllegalStateException("Only failed or skipped reviews can be retried");
+      }
+      if (run.getTrigger() == AutomationTrigger.MANUAL) {
+        scheduler.runOnDemand(projectId, run.getKind(), Long.parseLong(run.getExternalRef()),
+            run.getPostMode());
+        redirect.addFlashAttribute("notice", "Review of #" + run.getExternalRef() + " queued again");
+        return "redirect:/projects/" + projectId + "/automations";
       }
       List<ProjectAutomation> all = settings.list(projectId, principal.getName());
       ProjectAutomation automation = all.stream().filter(value -> value.getKind() == run.getKind())

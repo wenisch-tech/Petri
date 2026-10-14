@@ -9,7 +9,7 @@ the workspace and project settings. Users cannot define their own skills yet.
 
 1. **Starts**: either *When a pull request is opened or updated* or *On a schedule* (cron). It is one
    or the other; the cron field only appears for the schedule. To use both, add two automations.
-2. **Skill**: what runs. Currently *Code review* (`skills/code-review/SKILL.md`).
+2. **Skill**: what runs, one of the three review automations below.
 3. **Complete without approval**: when ticked (the default) the result is acted on right away; when
    unticked it is held until a project owner approves it. This applies to every skill, so future
    actions use the same switch. For code review it controls whether the comment is posted
@@ -21,7 +21,43 @@ removing one keeps its past runs.
 
 | Automation | Goal | Skill |
 | --- | --- | --- |
-| **Code review** | A proper review comment on a pull request. | `skills/code-review/SKILL.md` |
+| **Code review** | Review a pull request and say whether it is good to merge. Nothing is posted. | `skills/code-review/SKILL.md` |
+| **Code review and comment** | The same review, posted as a comment on the pull request. | `skills/code-review-and-comment/SKILL.md` |
+| **Code review and improve** | Review, post the comment, then fix the findings on the pull request's own branch. | `skills/code-review-and-improve/SKILL.md` |
+
+All three share the review method of the `code-review` skill; the other two skills only add to it.
+Every kind finds pull requests, reviews new commits and handles re-reviews the same way; they differ
+in what happens with the result.
+
+### Code review (review only)
+
+The review is stored on the run and shown in *Recent runs* (**Review**) and on the run page, with the
+status *Reviewed*. It is never posted and never changes anything, which makes it a safe way to try
+an automation or to collect reviews for a team that wants to read them in Petri.
+
+### Code review and improve
+
+1. The review is posted as for *Code review and comment*, with one sentence appended: either that
+   Petri will now try to fix the findings, or why it will not (nothing to fix, fork without
+   maintainer edits, no write access, the branch moved, or the limit of two automatic rounds per pull
+   request was reached).
+2. When there are `BLOCKER`, `MAJOR` or `MINOR` findings, Petri opens the pull request's head branch
+   in a worktree and starts the normal **Orchestrator → Planner → Implementer → Reviewer workflow**
+   there, with the findings as its task. `NIT` findings are not acted on.
+3. With **Complete without approval** ticked the whole run is unattended: Petri approves the plan and
+   the final gate itself, commits the result (`fix: address code review findings`) and pushes it to
+   the pull request's branch, then comments with the commit. The pushed commit is reviewed again
+   like any new commit. If the planner has questions, the workflow is held, is cancelled or takes
+   more than three hours, the run ends as *Failed* with the reason, nothing is pushed and the work
+   so far stays in the workspace.
+4. With it unticked the review is a draft first. After a person approves it the comment is posted
+   and the workflow starts, then waits for its normal approvals in the workspace chat. Petri does
+   not commit or push by itself in this mode.
+
+Pull requests from forks can be fixed on **GitHub** when the author allowed edits by maintainers
+(Petri then pushes to the fork's branch with the project's Git credential). On other providers, and
+for forks without that permission, the review comment explains that the fix has to be made by the
+author. The branch must not be open in a workspace; close it first so edits do not collide.
 
 ## Triggers
 
@@ -66,17 +102,18 @@ produces a log message, the review continues.
 Automations need a project that was imported from a connected GitHub, GitLab or Forgejo account.
 Projects that use plain repository credentials have no provider API to poll.
 
-## Code review
+## How a review runs
 
 For each pull request Petri:
 
 1. synchronizes the mirror and fetches the pull request head (also for forks),
 2. checks the head out in a throw-away worktree and computes the diff against the base branch,
-3. starts one agent run with the `code-review` skill and the diff,
+3. starts one agent run with the review skill of the automation and the diff,
 4. renders the structured result into a Markdown comment and posts it (or keeps it as a draft),
 5. removes the worktree.
 
-The agent can only read: `list_files`, `read_file`, `search_files` and `submit_review`. It cannot
+The agent can only read: `list_files`, `read_file`, `search_files`, `get_pull_request` (the pull
+request's description, discussion, changed files and CI runs, read-only) and `submit_review`. It cannot
 patch files, run commands or tests, install packages or reach the network. `submit_review` takes a
 summary, a verdict (`APPROVE`, `COMMENT`, `REQUEST_CHANGES`) and up to 20 findings with path, line,
 severity (`BLOCKER`, `MAJOR`, `MINOR`, `NIT`), body and optional suggested code. Petri validates
@@ -155,5 +192,10 @@ itself.
   input.
 - Review content leaves Petri to the configured model provider and the Git provider. Use a local
   model provider for repositories whose code must not leave your network.
+- *Code review and improve* is the only automation that changes a repository. It acts on the
+  pull request that triggered it, on that pull request's own branch, never on the default branch,
+  and only through the normal workflow and Git push of the project's credential. The review agent
+  itself still has no write tools: the findings it wrote reach the workflow as data.
 - Audit events: `PROJECT_AUTOMATION_SAVED`, `AUTOMATION_RUN_STARTED`, `AUTOMATION_COMMENT_POSTED`,
-  `AUTOMATION_RUN_FAILED`.
+  `AUTOMATION_REVIEW_COMPLETED`, `AUTOMATION_IMPROVEMENT_STARTED`, `AUTOMATION_IMPROVEMENT_PUSHED`,
+  `AUTOMATION_IMPROVEMENT_FAILED`, `AUTOMATION_RUN_FAILED`.

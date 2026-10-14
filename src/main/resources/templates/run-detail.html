@@ -45,6 +45,8 @@
       </div>
       <div th:if="${automationRun.error != null}" th:replace="~{fragments/layout :: alert('error', ${automationRun.error})}"></div>
       <p th:if="${automationRun.status.name() == 'POSTED' and automationRun.commentUrl == null}" class="text-xs text-ink-500">The provider did not return a link to the comment.</p>
+      <p th:if="${automationRun.note != null}" class="text-xs text-ink-500" th:text="${automationRun.note}">note</p>
+      <div th:if="${automationRun.status.name() == 'REVIEWED' and automationRun.reviewMarkdown != null}" class="petri-md text-sm leading-6 text-ink-300" data-markdown th:text="${automationRun.reviewMarkdown}">review</div>
       <p th:if="${automationRun.status.name() == 'AWAITING_APPROVAL'}" class="text-xs text-ink-500">The review is waiting for approval on the project's Automations tab.</p>
     </div>
   </section>

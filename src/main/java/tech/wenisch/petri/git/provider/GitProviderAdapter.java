@@ -41,6 +41,41 @@ public interface GitProviderAdapter {
     throw new GitProviderException("This provider does not support pull request automation");
   }
 
+  /**
+   * Pull requests of any state for the pull request view. {@code state} is {@code open},
+   * {@code closed} (merged or declined) or {@code all}; most recently updated first.
+   */
+  default List<PullRequestSummary> listPullRequests(
+      GitProviderInstance instance,
+      String token,
+      GitConnectionAuthMethod method,
+      String repositoryId,
+      String fullName,
+      String state) {
+    throw new GitProviderException("This provider does not support listing pull requests");
+  }
+
+  /** One pull request with description, comments and changed files. */
+  default PullRequestDetail pullRequestDetail(
+      GitProviderInstance instance,
+      String token,
+      GitConnectionAuthMethod method,
+      String repositoryId,
+      String fullName,
+      long number) {
+    throw new GitProviderException("This provider does not support pull request details");
+  }
+
+  /** The repository's most recent CI/CD runs, newest first. */
+  default List<PipelineRun> listPipelines(
+      GitProviderInstance instance,
+      String token,
+      GitConnectionAuthMethod method,
+      String repositoryId,
+      String fullName) {
+    throw new GitProviderException("This provider does not support listing pipelines");
+  }
+
   /** Adds a comment to a pull request and returns a link to it when the provider gives one. */
   default String postPullRequestComment(
       GitProviderInstance instance,
@@ -52,6 +87,27 @@ public interface GitProviderAdapter {
       String webUrl,
       String markdown) {
     throw new GitProviderException("This provider does not support pull request automation");
+  }
+
+  /** Approves a pull request, or asks for changes ({@code approve} false, a body is required). */
+  default void reviewPullRequest(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, long number, boolean approve, String markdown) {
+    throw new GitProviderException("This provider does not support reviewing pull requests");
+  }
+
+  /** Merges a pull request with the repository's default merge method. */
+  default void mergePullRequest(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, long number) {
+    throw new GitProviderException("This provider does not support merging pull requests");
+  }
+
+  /** Closes a pull request without merging it. */
+  default void closePullRequest(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, long number) {
+    throw new GitProviderException("This provider does not support closing pull requests");
   }
 
   /** Opens a pull request. {@code me} is the connected account, used for "assign to me". */

@@ -87,11 +87,12 @@ function initializeEmbeddedViews(state) {
   const content = panel?.querySelector('[data-workspace-embedded-content]');
   if (!panel || !content) return;
   const base = `/projects/${state.projectId}`;
-  const urls = { automations: `${base}/automations`, runs: `${base}/runs`, settings: `${base}/settings`, roles: `${base}/settings/roles`, environment: `${base}/settings/environment`, mcp: `${base}/settings/mcp` };
-  const titles = { automations: 'Automations', runs: 'Runs', settings: 'Settings', roles: 'Model settings', environment: 'Environment', mcp: 'MCP' };
+  const urls = { pullrequests: `${base}/pull-requests`, pipelines: `${base}/pipelines`, automations: `${base}/automations`, runs: `${base}/runs`, settings: `${base}/settings`, roles: `${base}/settings/roles`, environment: `${base}/settings/environment`, mcp: `${base}/settings/mcp` };
+  const titles = { pullrequests: 'Pull requests', pipelines: 'Pipelines', automations: 'Automations', runs: 'Runs', settings: 'Settings', roles: 'Model settings', environment: 'Environment', mcp: 'MCP' };
   // Pages that belong under a tab of the view bar.
   const parentView = { roles: 'settings', environment: 'settings', mcp: 'settings' };
   const runPath = /^\/runs\/([0-9a-fA-F-]{36})$/;
+  const prPath = /^\/projects\/[0-9a-fA-F-]{36}\/pull-requests\/(\d+)$/;
   const buttons = [...document.querySelectorAll('.workspace-view-tab[data-workspace-view]')];
   const gitBar = document.querySelector('[data-git-bar]');
   const trail = document.querySelector('[data-breadcrumb-trail]');
@@ -108,7 +109,7 @@ function initializeEmbeddedViews(state) {
     if (!current) items.push({ label: 'Workspace' });
     else if (detail) {
       items.push({ label: titles[current], view: current });
-      items.push({ label: `Run ${detail.slice(0, 8)}` });
+      items.push({ label: current === 'pullrequests' ? `#${detail}` : `Run ${detail.slice(0, 8)}` });
     } else if (parentView[current]) {
       items.push({ label: titles[parentView[current]], view: parentView[current] });
       items.push({ label: titles[current] });
@@ -137,11 +138,13 @@ function initializeEmbeddedViews(state) {
     try {
       const url = new URL(location.href);
       if (current) url.searchParams.set('view', current); else url.searchParams.delete('view');
-      if (current && detail) url.searchParams.set('run', detail); else url.searchParams.delete('run');
+      url.searchParams.delete('run');
+      url.searchParams.delete('pr');
+      if (current && detail) url.searchParams.set(current === 'pullrequests' ? 'pr' : 'run', detail);
       history.replaceState(null, '', url);
     } catch { /* the address bar is cosmetic */ }
   };
-  const pagePath = () => (detail ? `/runs/${detail}` : urls[current]);
+  const pagePath = () => (!detail ? urls[current] : current === 'pullrequests' ? `${urls.pullrequests}/${detail}` : `/runs/${detail}`);
   const close = () => {
     clearTimeout(liveTimer);
     current = null;
@@ -161,6 +164,9 @@ function initializeEmbeddedViews(state) {
       .filter(node => !node.parentElement?.closest('dialog'));
     content.replaceChildren(...nodes.map(node => document.importNode(node, true)));
     hydrateIcons(content);
+    const follow = content.querySelector('[data-follow-run]');
+    if (follow) followAutomation(state, follow.dataset.followProject, follow.dataset.followRun);
+    window.dispatchEvent(new CustomEvent('petri-content', { detail: content }));
     // Server-side validation re-renders with the failing dialog; reopen it.
     content.querySelectorAll('dialog.dialog').forEach(dialog => {
       if (dialog.querySelector('.field-error, .alert-error')) dialog.showModal();
@@ -246,9 +252,13 @@ function initializeEmbeddedViews(state) {
     if (url.origin !== location.origin) return;
     const name = Object.keys(urls).find(key => urls[key] === url.pathname);
     const run = runPath.exec(url.pathname);
+    const pull = prPath.exec(url.pathname);
     if (name) {
       event.preventDefault();
       show(name, null, url.search);
+    } else if (pull) {
+      event.preventDefault();
+      show('pullrequests', pull[1]);
     } else if (run) {
       event.preventDefault();
       show('runs', run[1]);
@@ -267,16 +277,17 @@ function initializeEmbeddedViews(state) {
     if (!(form instanceof HTMLFormElement) || !current) return;
     if ((form.getAttribute('method') || 'get').toLowerCase() !== 'post') return;
     if (event.submitter?.getAttribute('formmethod') === 'dialog') return;
-    const message = form.dataset.confirm;
+    const message = event.submitter?.dataset.confirm || form.dataset.confirm;
     event.preventDefault();
     event.stopPropagation();
     if (message && !window.confirm(message)) return;
     const token = `${current}|${detail}`;
     const submitter = event.submitter;
+    const body = new URLSearchParams(new FormData(form, submitter || undefined));
     if (submitter) submitter.disabled = true;
     try {
       const response = await fetch(form.action, {
-        method: 'POST', body: new URLSearchParams(new FormData(form)), redirect: 'manual', credentials: 'same-origin',
+        method: 'POST', body, redirect: 'manual', credentials: 'same-origin',
         headers: { Accept: 'text/html' }
       });
       if (token !== `${current}|${detail}`) return;
@@ -291,7 +302,9 @@ function initializeEmbeddedViews(state) {
   const params = new URLSearchParams(location.search);
   const requested = params.get('view');
   const requestedRun = params.get('run');
-  if (requested && urls[requested]) show(requested, runPath.test(`/runs/${requestedRun}`) ? requestedRun : null);
+  const requestedPr = params.get('pr');
+  if (requested === 'pullrequests' && /^\d+$/.test(requestedPr || '')) show('pullrequests', requestedPr);
+  else if (requested && urls[requested]) show(requested, runPath.test(`/runs/${requestedRun}`) ? requestedRun : null);
   else renderCrumbs();
 }
 
@@ -307,6 +320,63 @@ const resizeLimits = {
 };
 
 /** Folds the explorer and the chat into rails; the choice is remembered, narrow screens start folded. */
+// Shows the chat of an automation run (and later its fix workflow) in the chat panel on the right,
+// so the output can be followed live while it works.
+function followAutomation(state, projectId, runId) {
+  if (!projectId || !runId || state.followRun === runId) return;
+  state.followRun = runId;
+  state.followChat = null;
+  state.root.classList.remove('chat-collapsed');
+  state.root.querySelectorAll('[data-toggle-panel="chat"]').forEach(button => button.setAttribute('aria-expanded', 'true'));
+  const chat = state.chat;
+  const selector = chat?.querySelector('[data-chat-selector]');
+  const status = chat?.querySelector('[data-chat-status]');
+  if (!selector) return;
+  const input = chat.querySelector('[data-chat-input]');
+  const send = chat.querySelector('[data-chat-send]');
+  const placeholder = input.placeholder;
+  const lockComposer = locked => {
+    input.disabled = locked;
+    send.disabled = locked;
+    input.placeholder = locked ? 'Following a Petri automation run (read only)' : placeholder;
+  };
+  if (!state.followBound) {
+    state.followBound = true;
+    selector.addEventListener('change', () => {
+      if (selector.value !== state.followLockedChat) lockComposer(false);
+    });
+  }
+  const show = info => {
+    let option = [...selector.options].find(value => value.value === info.chatId);
+    if (!option) {
+      option = new Option(info.label, info.chatId);
+      option.dataset.mode = info.mode;
+      selector.append(option);
+    }
+    selector.value = info.chatId;
+    selector.dispatchEvent(new Event('change'));
+    state.followLockedChat = info.mode === 'DIRECT' ? info.chatId : null;
+    lockComposer(info.mode === 'DIRECT');
+    if (status) status.textContent = `Following ${info.label}`;
+  };
+  const tick = async () => {
+    if (state.followRun !== runId) return;
+    try {
+      const info = await request(`/projects/${projectId}/automations/runs/${runId}/follow`);
+      if (info.chatId && info.chatId !== state.followChat) {
+        state.followChat = info.chatId;
+        show(info);
+      }
+      if (info.active || !info.chatId) setTimeout(tick, 2000);
+      else if (status) status.textContent = `${info.label}: ${info.status.toLowerCase().replaceAll('_', ' ')}`;
+    } catch {
+      setTimeout(tick, 4000);
+    }
+  };
+  if (status) status.textContent = 'Waiting for Petri to start…';
+  tick();
+}
+
 function initializePanelToggles(state) {
   const narrow = window.matchMedia('(max-width: 900px)').matches;
   const key = panel => `petri:workspace:${panel}:collapsed`;

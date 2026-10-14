@@ -5,7 +5,7 @@
 <header th:replace="~{fragments/layout :: topbar('projects')}"></header>
 
 <th:block th:fragment="content">
-<main class="page-narrow" th:attr="data-live-refresh=${#lists.size(runs.?[status.active()]) > 0 ? 'true' : null}">
+<main class="page-narrow" th:attr="data-live-refresh=${#lists.size(runs.?[status.active() or status.name() == 'IMPROVING']) > 0 ? 'true' : null}">
   <a class="back-link" th:href="@{/projects/{id}/settings(id=${project.id})}"><i data-lucide="ArrowLeft"></i> Project settings</a>
   <div class="page-header">
     <div>
@@ -73,6 +73,9 @@
             <span th:text="${#temporals.format(run.createdAt, 'yyyy-MM-dd HH:mm')}">date</span>
             <a th:if="${run.commentUrl != null}" th:href="${run.commentUrl}" target="_blank" rel="noopener noreferrer">Comment</a>
             <span th:if="${run.error != null}" th:text="${run.error}">error</span>
+            <span th:if="${run.note != null}" th:text="${run.note}">note</span>
+            <a th:if="${run.improveWorktreeId != null and run.status.name() != 'POSTED'}"
+               th:href="@{/workspace/projects/{id}(id=${project.id}, worktree=${run.improveWorktreeId})}">Open the fix in the workspace</a>
           </span>
         </div>
         <span class="badge" th:classappend="${run.status.name() == 'FAILED'} ? 'badge-neutral' : ''" th:text="${run.status}">POSTED</span>
@@ -86,6 +89,18 @@
             <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <button class="btn-secondary" type="submit" title="Review this pull request again"><i data-lucide="RefreshCw"></i> Retry</button>
           </form>
+        </div>
+        <div class="list-actions" th:if="${run.status.name() == 'REVIEWED' and run.reviewMarkdown != null}">
+          <button class="btn-ghost" type="button" th:attr="data-dialog-open=|review-${run.id}|"><i data-lucide="Eye"></i> Review</button>
+          <dialog class="dialog dialog-wide" th:id="|review-${run.id}|">
+            <div class="dialog-panel">
+              <div class="dialog-header">
+                <div><h2>Review</h2><p>Not posted anywhere: this automation only reviews.</p></div>
+                <form method="dialog"><button class="icon-button" aria-label="Close"><i data-lucide="X"></i></button></form>
+              </div>
+              <div class="dialog-body"><div class="petri-md text-sm leading-6" data-markdown th:text="${run.reviewMarkdown}">markdown</div></div>
+            </div>
+          </dialog>
         </div>
         <div class="list-actions" th:if="${run.status.name() == 'AWAITING_APPROVAL'}">
           <button class="btn-ghost" type="button" th:attr="data-dialog-open=|review-${run.id}|"><i data-lucide="Eye"></i> Review</button>

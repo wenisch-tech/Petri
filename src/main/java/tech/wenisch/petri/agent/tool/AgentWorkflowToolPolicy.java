@@ -6,10 +6,11 @@ import tech.wenisch.petri.agent.orchestration.AgentWorkflowRole;
 public final class AgentWorkflowToolPolicy {
   private static final Set<String> READ_ONLY = Set.of(
       "list_files", "read_file", "search_files", "show_diff", "list_skills", "load_skill",
-      "install_packages");
+      "get_pull_request", "install_packages");
   private static final Set<String> IMPLEMENT = Set.of(
       "list_files", "read_file", "search_files", "show_diff", "list_skills", "load_skill",
-      "create_patch", "create_file", "run_tests", "install_packages", "run_command");
+      "get_pull_request", "create_patch", "create_file", "run_tests", "install_packages",
+      "run_command");
 
   private AgentWorkflowToolPolicy() {}
 

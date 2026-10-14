@@ -55,7 +55,7 @@ class AutomationToolPolicyTest {
   @Test
   void automationPolicyHasNoMutatingTool() {
     assertThat(AutomationToolPolicy.allowed()).containsExactlyInAnyOrder(
-        "list_files", "read_file", "search_files", "submit_review");
+        "list_files", "read_file", "search_files", "get_pull_request", "submit_review");
   }
 
   @Test
