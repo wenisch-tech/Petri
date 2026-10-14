@@ -34,6 +34,11 @@ class Confinement {
 
   /** Builds {@code petri-confine ... -- argv}; {@code writable} are the only writable paths. */
   List<String> wrap(List<Path> writable, List<String> argv) {
+    return wrap(List.of(), writable, argv);
+  }
+
+  /** As above, with additional paths the command may only read, such as a scanned worktree. */
+  List<String> wrap(List<Path> readOnly, List<Path> writable, List<String> argv) {
     if (!available()) throw new IllegalStateException("Command confinement is not available");
     List<String> result = new ArrayList<>();
     result.add(command.toString());
@@ -41,6 +46,7 @@ class Confinement {
     result.addAll(List.of("--ro", System.getProperty("java.home", "/opt/java/openjdk")));
     result.addAll(List.of("--ro", toolchain.root().toString()));
     result.addAll(List.of("--rw", "/dev"));
+    for (Path path : readOnly) result.addAll(List.of("--ro", path.toString()));
     for (Path path : writable) result.addAll(List.of("--rw", path.toString()));
     result.add("--");
     result.addAll(argv);

@@ -95,6 +95,13 @@ class ProjectRepositoryViewsFlowTest {
         .andExpect(content().string(org.hamcrest.Matchers.containsString("A.java")))
         .andExpect(content().string(org.hamcrest.Matchers.containsString("Looks good")))
         .andExpect(content().string(org.hamcrest.Matchers.containsString("Open on provider")));
+    mockMvc.perform(get("/projects/{id}/skills", project.getId())
+            .with(user("alice@petri.local").roles("USER")).param("embedded", "true"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Run in the workspace")));
+    mockMvc.perform(get("/projects/{id}/skills", project.getId())
+            .with(user("bob@petri.local").roles("USER")))
+        .andExpect(status().isNotFound());
     mockMvc.perform(get("/projects/{id}/automations/runs/{run}/follow", project.getId(), UUID.randomUUID())
             .with(user("alice@petri.local").roles("USER")))
         .andExpect(status().isNotFound());

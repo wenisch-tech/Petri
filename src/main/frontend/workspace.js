@@ -87,8 +87,8 @@ function initializeEmbeddedViews(state) {
   const content = panel?.querySelector('[data-workspace-embedded-content]');
   if (!panel || !content) return;
   const base = `/projects/${state.projectId}`;
-  const urls = { pullrequests: `${base}/pull-requests`, pipelines: `${base}/pipelines`, automations: `${base}/automations`, runs: `${base}/runs`, settings: `${base}/settings`, roles: `${base}/settings/roles`, environment: `${base}/settings/environment`, mcp: `${base}/settings/mcp` };
-  const titles = { pullrequests: 'Pull requests', pipelines: 'Pipelines', automations: 'Automations', runs: 'Runs', settings: 'Settings', roles: 'Model settings', environment: 'Environment', mcp: 'MCP' };
+  const urls = { pullrequests: `${base}/pull-requests`, pipelines: `${base}/pipelines`, automations: `${base}/automations`, skills: `${base}/skills`, runs: `${base}/runs`, settings: `${base}/settings`, roles: `${base}/settings/roles`, environment: `${base}/settings/environment`, mcp: `${base}/settings/mcp` };
+  const titles = { pullrequests: 'Pull requests', pipelines: 'Pipelines', automations: 'Automations', skills: 'Skills', runs: 'Runs', settings: 'Settings', roles: 'Model settings', environment: 'Environment', mcp: 'MCP' };
   // Pages that belong under a tab of the view bar.
   const parentView = { roles: 'settings', environment: 'settings', mcp: 'settings' };
   const runPath = /^\/runs\/([0-9a-fA-F-]{36})$/;
@@ -244,6 +244,16 @@ function initializeEmbeddedViews(state) {
     show(link.dataset.crumbView);
   });
 
+  // The skills page runs a skill as a new direct chat in the chat panel.
+  content.addEventListener('click', event => {
+    const button = event.target.closest?.('[data-run-skill]');
+    if (!button) return;
+    button.disabled = true;
+    runSkill(state, button.dataset.runSkill)
+      .catch(error => content.prepend(el('div', 'alert alert-error', error.message)))
+      .finally(() => { if (button.isConnected) button.disabled = false; });
+  });
+
   // Links of the embedded pages switch the view (or open a run) instead of leaving the workspace.
   content.addEventListener('click', event => {
     const link = event.target.closest?.('a[href]');
@@ -375,6 +385,39 @@ function followAutomation(state, projectId, runId) {
   };
   if (status) status.textContent = 'Waiting for Petri to start…';
   tick();
+}
+
+// Starts a skill as a new direct chat in the chat panel on the right, using the selected model.
+async function runSkill(state, name) {
+  if (!state.worktreeId) {
+    // The chat belongs to a worktree. Open the default branch first and run the skill there.
+    const branch = state.root.dataset.defaultBranch;
+    if (!branch) throw new Error('Open a branch first: the chat works on a branch of this project.');
+    try { sessionStorage.setItem(`petri:run-skill:${state.projectId}`, name); } catch { /* optional */ }
+    const worktree = await request(`/workspace/api/projects/${state.projectId}/branches/open`, {
+      method: 'POST', headers: { 'Content-Type': 'application/json', ...csrfHeaders() },
+      body: JSON.stringify({ name: branch, kind: 'REMOTE' })
+    });
+    navigateToWorktree(state, worktree.id);
+    return;
+  }
+  const chat = state.chat;
+  if (!chat) throw new Error('The chat could not start. Reload the workspace and try again.');
+  state.root.classList.remove('chat-collapsed');
+  state.root.querySelectorAll('[data-toggle-panel="chat"]').forEach(button => button.setAttribute('aria-expanded', 'true'));
+  const selector = chat.querySelector('[data-chat-selector]');
+  const mode = chat.querySelector('[data-chat-mode]');
+  const input = chat.querySelector('[data-chat-input]');
+  const send = chat.querySelector('[data-chat-send]');
+  input.disabled = false;
+  send.disabled = false;
+  selector.value = '';
+  selector.dispatchEvent(new Event('change'));
+  mode.value = 'DIRECT';
+  mode.dispatchEvent(new Event('change'));
+  input.value = `Use the load_skill tool to load the skill "${name}" and follow it for this project.`;
+  input.dispatchEvent(new Event('input'));
+  send.click();
 }
 
 function initializePanelToggles(state) {
@@ -1792,6 +1835,14 @@ function initializeChat(state) {
   const sendButton = chat.querySelector('[data-chat-send]');
   state.chat = chat;
   state.scroller = scroller;
+  // A skill started from a project without an open branch resumes here, after the branch opened.
+  try {
+    const pending = sessionStorage.getItem(`petri:run-skill:${state.projectId}`);
+    if (pending) {
+      sessionStorage.removeItem(`petri:run-skill:${state.projectId}`);
+      setTimeout(() => runSkill(state, pending).catch(() => {}), 800);
+    }
+  } catch { /* optional */ }
   state.chatMode = selector.selectedOptions[0]?.dataset.mode || 'ORCHESTRATED';
   mode.value = state.chatMode;
   mode.disabled = Boolean(state.chatId);

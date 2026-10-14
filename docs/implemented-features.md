@@ -27,6 +27,9 @@
   `code-review` method: *Code review* (review only, nothing posted), *Code review and comment*
   (structured review comment, automatically or as an approval-gated draft) and *Code review and
   improve* (comment, then a workflow fixes the findings and pushes to the pull request's branch).
+- Skills tab per project: lists skills and runs them as a direct chat in the workspace.
+- `vulnerability-scan` skill and `scan_vulnerabilities` tool: Trivy scan of dependencies, secrets and
+  misconfigurations, confined to the worktree; Trivy ships in the image.
 - `get_pull_request` agent tool: description, discussion, changed files and CI runs of a pull request.
 
 ## Repository isolation

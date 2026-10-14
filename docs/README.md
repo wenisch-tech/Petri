@@ -13,6 +13,7 @@ Petri is a self-hosted agentic coding harness, multi-agent orchestrator and deve
 - [Git provider accounts](git-provider-accounts.md) — personal GitHub, GitLab and Forgejo connections and bulk import.
 - [Rootless Podman test sandboxes](test-sandboxes.md) — isolated test execution and administrator profiles.
 - [Agent workflow](agent-workflow.md) — model loop, tools, approvals, persistence and recovery.
+- [Skills](skills.md) — the Skills tab, running skills in the workspace and the Trivy vulnerability scan.
 - [Automations](automations.md) — per-project triggers (pull request, cron) and the automatic code review.
 - [Gated multi-agent orchestration](gated-orchestration.md) — planner questions, plan gates, role profiles, review and recovery.
 - [HTTP API](http-api.md) — API-key authentication, worktrees, runs, events and tools.

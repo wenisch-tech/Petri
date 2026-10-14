@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(|${project.name} skills|)}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('projects')}"></header>
+
+<th:block th:fragment="content">
+<main class="page-narrow">
+  <a class="back-link" href="/projects"><i data-lucide="ArrowLeft"></i> Projects</a>
+  <div class="page-header">
+    <div>
+      <h1 class="page-title">Skills</h1>
+      <p class="page-description">Playbooks the agents of this project follow. Run one directly in the workspace chat.</p>
+    </div>
+  </div>
+
+  <section class="mb-8">
+    <h2 class="section-title mb-3">Run in the workspace</h2>
+    <p th:if="${#lists.isEmpty(runnable)}" class="text-sm text-ink-500">No skills are installed.</p>
+    <ul th:unless="${#lists.isEmpty(runnable)}" class="list">
+      <li th:each="skill : ${runnable}" class="list-row">
+        <span class="list-icon"><i data-lucide="Sparkles"></i></span>
+        <div class="list-main">
+          <span class="list-title" th:text="${skill.name}">skill-name</span>
+          <span class="mt-0.5 block text-sm text-ink-500" th:text="${skill.description}">What it does</span>
+          <span th:if="${skill.requirement != null}" class="mt-1 block text-xs"
+                th:classappend="${skill.ready} ? 'text-ink-500' : 'text-danger-400'" th:text="${skill.requirement}">Requirement</span>
+        </div>
+        <div class="list-actions">
+          <button type="button" class="btn-secondary" th:attr="data-run-skill=${skill.name}" th:disabled="${!skill.ready}">
+            <i data-lucide="Play"></i> Run
+          </button>
+        </div>
+      </li>
+    </ul>
+  </section>
+
+  <section th:unless="${#lists.isEmpty(pullRequestSkills)}">
+    <h2 class="section-title mb-1">Pull request skills</h2>
+    <p class="mb-3 text-sm text-ink-500">These work on one pull request. Start them from the pull request with <strong>Let Petri work on this</strong>, or let an automation run them.</p>
+    <ul class="list">
+      <li th:each="skill : ${pullRequestSkills}" class="list-row">
+        <span class="list-icon"><i data-lucide="GitPullRequestArrow"></i></span>
+        <div class="list-main">
+          <span class="list-title" th:text="${skill.name}">code-review</span>
+          <span class="mt-0.5 block text-sm text-ink-500" th:text="${skill.description}">What it does</span>
+        </div>
+      </li>
+    </ul>
+    <div class="mt-3 flex gap-2">
+      <a class="btn-secondary" th:href="@{/projects/{id}/pull-requests(id=${project.id})}"><i data-lucide="GitPullRequestArrow"></i> Pull requests</a>
+      <a class="btn-secondary" th:href="@{/projects/{id}/automations(id=${project.id})}"><i data-lucide="Bot"></i> Automations</a>
+    </div>
+  </section>
+</main>
+</th:block>
+</body>
+</html>

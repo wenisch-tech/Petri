@@ -7,10 +7,17 @@ RUN apk add --no-cache gcc musl-dev
 COPY docker/petri-confine.c /src/petri-confine.c
 RUN gcc -O2 -static -o /petri-confine /src/petri-confine.c
 
+# Trivy: the vulnerability scanner behind the vulnerability-scan skill. It is a single static Go
+# binary taken from the official image, pinned by digest; Renovate keeps the pin current. The binary
+# was scanned with Trivy itself (HIGH and CRITICAL: none) before it was added. The vulnerability
+# database is downloaded at scan time into Petri's data volume, so the image never ships a stale one.
+FROM aquasec/trivy:0.76.0@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222 AS trivy
+
 # Alpine JDK: Petri runs approved tests in this container (PETRI_TESTS_EXECUTOR=local) and lets
 # agents install further Alpine packages into an unprivileged toolchain prefix on /app/data.
 FROM eclipse-temurin:25-jdk-alpine
 COPY --from=confine /petri-confine /usr/local/bin/petri-confine
+COPY --from=trivy /usr/local/bin/trivy /usr/local/bin/trivy
 
 COPY scripts/alpine-runtime.sh /tmp/alpine-runtime.sh
 RUN sh /tmp/alpine-runtime.sh && rm -f /tmp/alpine-runtime.sh
