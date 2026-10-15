@@ -102,7 +102,7 @@ class DependencyResolver {
           && !ancestorHas(root, directory, "build.gradle", "build.gradle.kts", "settings.gradle",
               "settings.gradle.kts")) {
         steps.add(run("gradle", label, directory, root, cache, home, deadline,
-            gradle(directory, home)));
+            gradle(directory, home, cache)));
       }
       if (has(directory, "package.json")) {
         if (hasAny(directory, "package-lock.json", "npm-shrinkwrap.json", "yarn.lock",
@@ -154,7 +154,7 @@ class DependencyResolver {
         "no mvnw in the project and no mvn installed; install Maven with install_packages");
   }
 
-  private Prepared gradle(Path directory, Path home) {
+  private Prepared gradle(Path directory, Path home, Path cache) {
     // Gradle only writes a lockfile for configurations that opt in; an init script opts every
     // project of the build in, and the lockfile is what the scanner reads.
     Path script = home.resolve("petri-lock.init.gradle");
@@ -166,7 +166,8 @@ class DependencyResolver {
     List<String> tail = List.of("--no-daemon", "--quiet", "--init-script", script.toString(),
         "dependencies", "--write-locks");
     List<String> command = withWrapper(directory, "gradlew", "gradle", tail);
-    return new Prepared("gradle", command, Map.of(),
+    // One Gradle home per project cache, shared with test runs; configured remotes are placed in it.
+    return new Prepared("gradle", command, Map.of("GRADLE_USER_HOME", cache.resolve("gradle").toString()),
         "no gradlew in the project and no gradle installed; install Gradle with install_packages");
   }
 

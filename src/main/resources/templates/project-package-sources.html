@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(|${project.name} package sources|)}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('projects')}"></header>
+
+<th:block th:fragment="content">
+<main class="page-narrow">
+  <a class="back-link" href="/projects"><i data-lucide="ArrowLeft"></i> Projects</a>
+  <div class="page-header">
+    <div>
+      <h1 class="page-title" th:text="${project.name}">Project</h1>
+      <p class="page-description">Where this project's tests, builds, dependency resolution and package installs fetch packages from. A remote added here replaces the instance's remotes of the same package manager for this project.</p>
+    </div>
+  </div>
+
+  <nav th:replace="~{fragments/layout :: projectSettingsTabs(${project.id}, 'packages')}"></nav>
+
+  <div th:replace="~{fragments/layout :: alert('success', ${notice})}"></div>
+  <div th:replace="~{fragments/layout :: alert('error', ${error})}"></div>
+
+  <section class="mb-8">
+    <div class="section-header"><div><h2 class="section-title">This project's remotes</h2></div></div>
+    <th:block th:replace="~{fragments/package-remotes :: remoteList(${remotes}, ${'/projects/' + project.id + '/settings/package-sources'}, ${modes}, 'None: the instance remotes below (or the public defaults) apply.')}"></th:block>
+  </section>
+
+  <section class="mb-8">
+    <div class="section-header"><div><h2 class="section-title">Add a remote</h2></div></div>
+    <th:block th:replace="~{fragments/package-remotes :: remoteAddForm(${'/projects/' + project.id + '/settings/package-sources'}, ${ecosystems}, ${modes})}"></th:block>
+  </section>
+
+  <section>
+    <div class="section-header"><div><h2 class="section-title">Inherited from the instance</h2></div></div>
+    <div class="card divide-y divide-ink-700/70">
+      <p th:if="${#lists.isEmpty(inherited)}" class="p-4 text-sm text-ink-300">The administrator has not configured any remotes.</p>
+      <div th:each="remote : ${inherited}" class="p-4">
+        <p class="font-medium text-ink-100">
+          <span th:text="${remote.name}">Nexus</span>
+          <span class="badge" th:text="${remote.ecosystem.label}">Maven</span>
+          <span class="badge" th:text="${remote.mode.label}">Replace</span>
+        </p>
+        <p class="break-all font-mono text-xs text-ink-500" th:text="${remote.url}">https://nexus.example.com</p>
+      </div>
+    </div>
+  </section>
+</main>
+</th:block>
+</body>
+</html>

@@ -20,19 +20,32 @@ public class LocalToolchain {
   private final Path root;
   private final String apkExecutable;
   private final CommandEnvironment commandEnvironment;
+  private final tech.wenisch.petri.packages.PackageEnvironment packages;
 
   @Autowired
   LocalToolchain(
       @Value("${petri.tests.toolchain-root:./data/toolchain}") String root,
       @Value("${petri.tests.apk-executable:apk}") String apkExecutable,
-      CommandEnvironment commandEnvironment) {
+      CommandEnvironment commandEnvironment,
+      org.springframework.beans.factory.ObjectProvider<tech.wenisch.petri.packages.PackageEnvironment>
+          packages) {
+    this(root, apkExecutable, commandEnvironment, packages.getIfAvailable());
+  }
+
+  LocalToolchain(String root, String apkExecutable, CommandEnvironment commandEnvironment,
+      tech.wenisch.petri.packages.PackageEnvironment packages) {
+    this.packages = packages;
     this.root = Path.of(root).toAbsolutePath().normalize();
     this.apkExecutable = apkExecutable;
     this.commandEnvironment = commandEnvironment;
   }
 
+  LocalToolchain(String root, String apkExecutable, CommandEnvironment commandEnvironment) {
+    this(root, apkExecutable, commandEnvironment, (tech.wenisch.petri.packages.PackageEnvironment) null);
+  }
+
   LocalToolchain(String root, String apkExecutable) {
-    this(root, apkExecutable, CommandEnvironment.none());
+    this(root, apkExecutable, CommandEnvironment.none(), (tech.wenisch.petri.packages.PackageEnvironment) null);
   }
 
   Path root() { return root; }
@@ -105,6 +118,16 @@ public class LocalToolchain {
    */
   Map<String, String> environment(
       Path home, Map<String, String> extra, Map<String, String> profileVariables) {
+    return environment(home, extra, profileVariables, null);
+  }
+
+  /**
+   * As above, with the package remotes that apply to the project (the instance's when null): the
+   * generated tool configuration wins over variables a user could set.
+   */
+  Map<String, String> environment(
+      Path home, Map<String, String> extra, Map<String, String> profileVariables,
+      java.util.UUID projectId) {
     String javaHome = System.getProperty("java.home", "");
     Map<String, String> env = new LinkedHashMap<>();
     env.put("PATH", String.join(":",
@@ -118,7 +141,9 @@ public class LocalToolchain {
     env.put("CI", "true");
     env.put("LC_ALL", "C");
     env.putAll(commandEnvironment.extra(profileVariables));
+    if (packages != null) env.putAll(packages.environment(projectId, home));
     env.putAll(extra);
+    if (packages != null) packages.placeToolFiles(home, env);
     return env;
   }
 }

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<body>
+<th:block th:fragment="remoteList(remotes, base, modes, emptyText)">
+      <div class="card divide-y divide-ink-700/70">
+        <p th:if="${#lists.isEmpty(remotes)}" class="p-4 text-sm text-ink-300" th:text="${emptyText}">None.</p>
+        <div th:each="remote : ${remotes}" class="p-4">
+          <div class="flex items-start justify-between gap-4">
+            <div class="min-w-0">
+              <p class="font-medium text-ink-100">
+                <span th:text="${remote.name}">Nexus</span>
+                <span class="badge" th:text="${remote.ecosystem.label}">Maven</span>
+                <span class="badge" th:text="${remote.mode.label}">Replace</span>
+                <span class="badge" th:unless="${remote.enabled}">Disabled</span>
+                <span class="badge" th:if="${remote.insecure}">TLS not verified</span>
+              </p>
+              <p class="break-all font-mono text-xs text-ink-500" th:text="${remote.url}">https://nexus.example.com</p>
+              <p class="text-xs text-ink-500" th:if="${remote.username != null}"
+                 th:text="|User ${remote.username}${remote.passwordSet ? ', password set' : ''}|">User</p>
+            </div>
+            <div class="flex shrink-0 items-center gap-1">
+              <form method="post" th:action="|${base}/remotes/${remote.id}/test|">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button class="btn-ghost" type="submit"><i data-lucide="Play"></i> Test</button>
+              </form>
+              <form method="post" th:action="|${base}/remotes/${remote.id}/delete|">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <button class="icon-button" type="submit" aria-label="Remove remote"><i data-lucide="Trash2"></i></button>
+              </form>
+            </div>
+          </div>
+          <details class="mt-3">
+            <summary class="cursor-pointer text-sm text-ink-300">Edit</summary>
+            <form method="post" th:action="|${base}/remotes|" class="mt-3 space-y-3">
+              <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+              <input type="hidden" name="id" th:value="${remote.id}">
+              <input type="hidden" name="ecosystem" th:value="${remote.ecosystem}">
+              <input type="hidden" name="position" th:value="${remote.position}">
+              <div class="form-grid">
+                <div><label class="label">Name</label><input class="field" name="name" th:value="${remote.name}" required></div>
+                <div><label class="label">URL</label><input class="field font-mono text-sm" name="url" th:value="${remote.url}" required></div>
+                <div><label class="label">User name</label><input class="field" name="username" th:value="${remote.username}" autocomplete="off"></div>
+                <div><label class="label">Password</label><input class="field" type="password" name="password" th:value="${remote.passwordSet} ? '********' : ''" autocomplete="new-password"></div>
+                <div><label class="label">Use</label>
+                  <select class="field" name="mode"><option th:each="mode : ${modes}" th:value="${mode}" th:text="${mode.label}" th:selected="${mode == remote.mode}">Replace</option></select></div>
+                <div th:if="${remote.ecosystem.name() == 'MAVEN'}"><label class="label">Mirror of</label><input class="field" name="mirrorOf" th:value="${remote.mirrorOf}" placeholder="*"></div>
+              </div>
+              <label class="check"><input type="checkbox" name="enabled" value="true" th:checked="${remote.enabled}"><span>Enabled</span></label>
+              <label class="check"><input type="checkbox" name="insecure" value="true" th:checked="${remote.insecure}"><span>Do not verify this remote's TLS certificate</span></label>
+              <label class="check" th:if="${remote.passwordSet}"><input type="checkbox" name="clearPassword" value="true"><span>Remove the stored password</span></label>
+              <button class="btn-primary" type="submit"><i data-lucide="Save"></i> Save</button>
+            </form>
+          </details>
+        </div>
+      </div>
+</th:block>
+
+<th:block th:fragment="remoteAddForm(base, ecosystems, modes)">
+      <form class="card card-body space-y-4" method="post" th:action="|${base}/remotes|" x-data="{ ecosystem: 'MAVEN' }">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        <div class="form-grid">
+          <div>
+            <label class="label" for="remote-ecosystem">Package manager</label>
+            <select id="remote-ecosystem" class="field" name="ecosystem" x-model="ecosystem">
+              <option th:each="value : ${ecosystems}" th:value="${value}" th:text="${value.label}">Maven</option>
+            </select>
+          </div>
+          <div><label class="label" for="remote-name">Name</label><input id="remote-name" class="field" name="name" required autocomplete="off"></div>
+          <div class="sm:col-span-2">
+            <label class="label" for="remote-url">URL</label>
+            <input id="remote-url" class="field font-mono text-sm" name="url" required autocomplete="off" spellcheck="false" placeholder="https://nexus.example.com/repository/maven-public">
+            <p class="hint">The base URL of the mirror for that package manager, without credentials. Apk: the repository (e.g. <code>.../alpine/v3.24/main</code>); pip: the simple index; Go: a module proxy; Cargo: a sparse index URL; container registries: the mirror host with an optional path (e.g. <code>registry.example.com/dockerhub</code>).</p>
+          </div>
+          <div><label class="label" for="remote-user">User name <span class="label-optional">(optional)</span></label><input id="remote-user" class="field" name="username" autocomplete="off"></div>
+          <div><label class="label" for="remote-password">Password or token</label><input id="remote-password" class="field" type="password" name="password" autocomplete="new-password"></div>
+          <div>
+            <label class="label" for="remote-mode">Use</label>
+            <select id="remote-mode" class="field" name="mode"><option th:each="mode : ${modes}" th:value="${mode}" th:text="${mode.label}">Replace</option></select>
+          </div>
+          <div x-show="ecosystem === 'MAVEN'" x-cloak>
+            <label class="label" for="remote-mirror">Mirror of <span class="label-optional">(optional)</span></label>
+            <input id="remote-mirror" class="field" name="mirrorOf" placeholder="*" autocomplete="off">
+          </div>
+        </div>
+        <label class="check"><input type="checkbox" name="enabled" value="true" checked><span>Enabled</span></label>
+        <label class="check"><input type="checkbox" name="insecure" value="true"><span>Do not verify this remote's TLS certificate</span></label>
+        <div><button class="btn-primary" type="submit"><i data-lucide="Plus"></i> Add remote</button></div>
+      </form>
+</th:block>
+</body>
+</html>

@@ -59,7 +59,7 @@ class LocalContainerTestExecutor implements TestExecutor {
           ? confinement.wrap(List.of(safeWorktree, cache, home, scratch), command.arguments())
           : command.arguments();
       return BoundedProcess.run(argv, safeWorktree,
-          toolchain.environment(home, extra, profile.environment()), profile.timeout(), profile.outputLimitBytes(),
+          toolchain.environment(home, extra, profile.environment(), projectId), profile.timeout(), profile.outputLimitBytes(),
           confinement.available() ? "local-container-landlock" : "local-container", progress);
     } finally {
       deleteQuietly(home);

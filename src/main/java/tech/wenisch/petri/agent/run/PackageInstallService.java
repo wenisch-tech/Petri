@@ -35,6 +35,7 @@ public class PackageInstallService {
   private final TestSandboxProfileService profiles;
   private final Duration timeout;
   private final boolean enabled;
+  private final tech.wenisch.petri.packages.PackageEnvironment packages;
   private final ReentrantLock installLock = new ReentrantLock();
 
   PackageInstallService(
@@ -42,7 +43,9 @@ public class PackageInstallService {
       ProjectWorktreeService worktrees, ProjectSandboxSettingRepository settings,
       TestSandboxProfileService profiles,
       @Value("${petri.tests.install-timeout:10m}") Duration timeout,
-      @Value("${petri.tests.executor:podman}") String executor) {
+      @Value("${petri.tests.executor:podman}") String executor,
+      tech.wenisch.petri.packages.PackageEnvironment packages) {
+    this.packages = packages;
     this.state = state;
     this.toolchain = toolchain;
     this.paths = paths;
@@ -92,9 +95,10 @@ public class PackageInstallService {
   public PackageInstallView execute(UUID id) {
     PackageInstallView started = state.start(id);
     try {
-      Map<String, String> variables = profiles.environmentFor(
-          worktrees.get(started.worktreeId()).projectId());
-      TestCommandResult result = runApk(started.packages(), text -> state.progress(id, text), variables);
+      UUID projectId = worktrees.get(started.worktreeId()).projectId();
+      Map<String, String> variables = profiles.environmentFor(projectId);
+      TestCommandResult result = runApk(
+          started.packages(), text -> state.progress(id, text), variables, projectId);
       return state.complete(id, result);
     } catch (IOException | RuntimeException exception) {
       log.warn("Approved package install {} could not run", id, exception);
@@ -123,7 +127,7 @@ public class PackageInstallService {
         return;
       }
       log.info("Restoring {} previously approved packages into the toolchain", recorded.size());
-      TestCommandResult result = runApk(new ArrayList<>(recorded), null, Map.of());
+      TestCommandResult result = runApk(new ArrayList<>(recorded), null, Map.of(), null);
       if (result.exitCode() != 0 || result.timedOut()) {
         log.warn("Toolchain restore failed: {}", result.output());
       }
@@ -134,7 +138,7 @@ public class PackageInstallService {
 
   private TestCommandResult runApk(
       List<String> requested, java.util.function.Consumer<String> progress,
-      Map<String, String> variables) throws IOException {
+      Map<String, String> variables, UUID projectId) throws IOException {
     toolchain.ensureRoot();
     List<String> packages = new ArrayList<>(requested);
     if (resetLegacyToolchain()) {
@@ -147,6 +151,25 @@ public class PackageInstallService {
         "--no-cache", "--no-progress", "--no-scripts", "add", "--"));
     command.addAll(PackageNamePolicy.validate(packages));
     java.nio.file.Path home = java.nio.file.Files.createTempDirectory(paths.temporaryDirectory(), "petri-apk-");
+    if (this.packages != null && this.packages.apkInsecure(projectId)) {
+      command.add(command.indexOf("add"), "--no-check-certificate");
+    }
+    List<String> remotes = packages_(projectId);
+    if (remotes != null) {
+      // A repositories file of the configured remotes replaces the image's own.
+      java.nio.file.Path file = home.resolve("repositories");
+      List<String> lines = new ArrayList<>();
+      for (String line : remotes) {
+        if ("@default".equals(line)) {
+          java.nio.file.Path image = java.nio.file.Path.of("/etc/apk/repositories");
+          if (java.nio.file.Files.isRegularFile(image)) lines.addAll(java.nio.file.Files.readAllLines(image));
+        } else {
+          lines.add(line);
+        }
+      }
+      java.nio.file.Files.write(file, lines);
+      command.set(command.indexOf("/etc/apk/repositories"), file.toString());
+    }
     installLock.lock();
     try {
       TestCommandResult result = BoundedProcess.run(command, toolchain.root(),
@@ -158,8 +181,16 @@ public class PackageInstallService {
       return result;
     } finally {
       installLock.unlock();
-      home.toFile().delete();
+      try (var walk = java.nio.file.Files.walk(home)) {
+        walk.sorted(java.util.Comparator.reverseOrder()).forEach(path -> path.toFile().delete());
+      } catch (IOException ignored) {
+        // best effort; the directory only holds generated configuration
+      }
     }
+  }
+
+  private List<String> packages_(UUID projectId) {
+    return packages == null ? null : packages.apkRepositories(projectId);
   }
 
   /** Wipes a toolchain that was created without the marker, returning whether it did. */

@@ -3,7 +3,9 @@
 # petri-confine: a tiny static Landlock helper that confines terminal and test commands to the
 # worktree for any UID, without root or setuid.
 FROM alpine:3.24 AS confine
-RUN apk add --no-cache gcc musl-dev
+ARG APK_MIRROR
+RUN if [ -n "$APK_MIRROR" ]; then sed -i "s#https\?://[^/]*/alpine#${APK_MIRROR%/}#" /etc/apk/repositories; fi \
+ && apk add --no-cache gcc musl-dev
 COPY docker/petri-confine.c /src/petri-confine.c
 RUN gcc -O2 -static -o /petri-confine /src/petri-confine.c
 
@@ -41,6 +43,7 @@ COPY --from=confine /petri-confine /usr/local/bin/petri-confine
 COPY --from=trivy /usr/local/bin/trivy /usr/local/bin/trivy
 COPY --from=trivy-db /seed/ /opt/trivy-db/
 
+ARG APK_MIRROR
 COPY scripts/alpine-runtime.sh /tmp/alpine-runtime.sh
 RUN sh /tmp/alpine-runtime.sh && rm -f /tmp/alpine-runtime.sh
 

@@ -4,6 +4,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
@@ -28,18 +29,36 @@ class TestCommandRunner implements TestExecutor {
   private final String podmanExecutable;
   private final CommandEnvironment commandEnvironment;
 
+  private final tech.wenisch.petri.packages.PackageEnvironment packages;
+
   @Autowired
   TestCommandRunner(
       WorkspacePaths paths,
       @Value("${petri.tests.podman-executable:podman}") String podmanExecutable,
-      CommandEnvironment commandEnvironment) {
+      CommandEnvironment commandEnvironment,
+      org.springframework.beans.factory.ObjectProvider<tech.wenisch.petri.packages.PackageEnvironment>
+          packages) {
+    this(paths, podmanExecutable, commandEnvironment, packages.getIfAvailable());
+  }
+
+  TestCommandRunner(
+      WorkspacePaths paths, String podmanExecutable, CommandEnvironment commandEnvironment,
+      tech.wenisch.petri.packages.PackageEnvironment packages) {
+    this.packages = packages;
     this.paths = paths;
     this.podmanExecutable = podmanExecutable;
     this.commandEnvironment = commandEnvironment;
   }
 
+  TestCommandRunner(
+      WorkspacePaths paths, String podmanExecutable, CommandEnvironment commandEnvironment) {
+    this(paths, podmanExecutable, commandEnvironment,
+        (tech.wenisch.petri.packages.PackageEnvironment) null);
+  }
+
   TestCommandRunner(WorkspacePaths paths, String podmanExecutable) {
-    this(paths, podmanExecutable, CommandEnvironment.none());
+    this(paths, podmanExecutable, CommandEnvironment.none(),
+        (tech.wenisch.petri.packages.PackageEnvironment) null);
   }
 
   @Override
@@ -49,9 +68,29 @@ class TestCommandRunner implements TestExecutor {
     Path safeWorktree = paths.requireExistingPath(worktree);
     Path cache = paths.directory("test-caches", projectId.toString());
     String containerName = "petri-test-" + UUID.randomUUID();
-    List<String> arguments = containerArguments(containerName, safeWorktree, cache, command, profile);
+    Path packageHome = Files.createTempDirectory(paths.temporaryDirectory(), "petri-pkg-");
+    try {
+      return runContainer(projectId, safeWorktree, cache, containerName, command, profile, packageHome);
+    } finally {
+      try (var walk = Files.walk(packageHome)) {
+        walk.sorted(java.util.Comparator.reverseOrder()).forEach(path -> path.toFile().delete());
+      } catch (IOException ignored) {
+        // best effort; only generated configuration
+      }
+    }
+  }
+
+  private TestCommandResult runContainer(
+      UUID projectId, Path safeWorktree, Path cache, String containerName, TestCommand command,
+      TestSandboxProfileView profile, Path packageHome) throws IOException {
+    var packageSettings = packages == null
+        ? tech.wenisch.petri.packages.PackageEnvironment.Container.NONE
+        : packages.container(projectId, packageHome, cache);
+    List<String> arguments = containerArguments(
+        containerName, safeWorktree, cache, command, profile, packageSettings);
     ProcessBuilder builder = new ProcessBuilder(arguments).redirectErrorStream(true);
     sanitizeEnvironment(builder.environment());
+    builder.environment().putAll(packageSettings.hostEnv());
 
     Process process;
     try {
@@ -80,6 +119,13 @@ class TestCommandRunner implements TestExecutor {
 
   List<String> containerArguments(
       String name, Path worktree, Path cache, TestCommand command, TestSandboxProfileView profile) {
+    return containerArguments(name, worktree, cache, command, profile,
+        tech.wenisch.petri.packages.PackageEnvironment.Container.NONE);
+  }
+
+  List<String> containerArguments(
+      String name, Path worktree, Path cache, TestCommand command, TestSandboxProfileView profile,
+      tech.wenisch.petri.packages.PackageEnvironment.Container packageSettings) {
     if (!profile.buildSystems().contains(command.buildSystem())) {
       throw new IllegalArgumentException("Build system is not allowed by the sandbox profile");
     }
@@ -102,6 +148,8 @@ class TestCommandRunner implements TestExecutor {
     // Reserved names (HOME, MAVEN_OPTS, ...) are rejected by CommandEnvironment, so these cannot
     // override the settings above.
     result.addAll(commandEnvironment.containerEnvArguments(profile.environment()));
+    result.addAll(packageSettings.volumes());
+    packageSettings.containerEnv().forEach((name1, value) -> result.addAll(List.of("--env", name1 + "=" + value)));
     result.add(profile.image());
     result.addAll(command.arguments());
     return List.copyOf(result);

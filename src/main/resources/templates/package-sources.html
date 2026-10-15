@@ -1,0 +1,52 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Package sources')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('admin')}"></header>
+<div th:replace="~{fragments/layout :: adminBanner}"></div>
+
+<div class="area-layout">
+  <nav th:replace="~{fragments/layout :: adminNav('packages')}"></nav>
+
+  <main class="min-w-0">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Package sources</h1>
+        <p class="page-description">Where tests, builds, dependency resolution and package installs fetch packages from. Without a remote of its own an ecosystem uses its public default. Remotes added here apply to every project.</p>
+      </div>
+    </div>
+
+    <div th:replace="~{fragments/layout :: alert('success', ${notice})}"></div>
+    <div th:replace="~{fragments/layout :: alert('error', ${error})}"></div>
+
+    <section class="mb-8">
+      <div class="section-header"><div><h2 class="section-title">Remotes</h2></div></div>
+      <th:block th:replace="~{fragments/package-remotes :: remoteList(${remotes}, '/admin/package-sources', ${modes}, 'No remotes configured: every package manager uses its public default.')}"></th:block>
+    </section>
+
+    <section class="mb-8">
+      <div class="section-header"><div><h2 class="section-title">Add a remote</h2></div></div>
+      <th:block th:replace="~{fragments/package-remotes :: remoteAddForm('/admin/package-sources', ${ecosystems}, ${modes})}"></th:block>
+    </section>
+
+    <section>
+      <div class="section-header"><div><h2 class="section-title">TLS</h2></div></div>
+      <form class="card card-body space-y-4" method="post" action="/admin/package-sources/tls">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        <div>
+          <label class="label" for="tls-ca">Extra CA certificates <span class="label-optional">(PEM)</span></label>
+          <textarea id="tls-ca" class="field font-mono text-xs" name="caPem" rows="8" spellcheck="false" th:text="${caPem}" placeholder="-----BEGIN CERTIFICATE-----"></textarea>
+          <p class="hint">Trusted in addition to the system's CAs by apk, Maven, npm, pip, Go, git and Trivy. Use this for a registry with a private or self-signed certificate.</p>
+        </div>
+        <label class="check">
+          <input type="checkbox" name="ignoreTlsErrors" value="true" th:checked="${ignoreTlsErrors}">
+          <span>Ignore TLS certificate errors for package tools
+            <span class="hint !mt-0">Turns certificate verification off for git, npm, pip, Go, Maven and Trivy. Anyone on the network path can then tamper with packages; prefer the CA bundle above.</span></span>
+        </label>
+        <div><button class="btn-primary" type="submit"><i data-lucide="Save"></i> Save</button></div>
+      </form>
+    </section>
+  </main>
+</div>
+</body>
+</html>

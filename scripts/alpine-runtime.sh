@@ -7,6 +7,14 @@
 # equal to the owner's, and HOME points at a writable directory.
 set -eu
 
+# A mirror of the Alpine repositories (APK_MIRROR, e.g. https://nexus.example.com/alpine, without
+# credentials) replaces dl-cdn.alpinelinux.org for the whole build, so it works without internet.
+ALPINE_BASE="${APK_MIRROR:-https://dl-cdn.alpinelinux.org/alpine}"
+ALPINE_BASE="${ALPINE_BASE%/}"
+if [ -n "${APK_MIRROR:-}" ]; then
+  sed -i "s#https\?://[^/]*/alpine#${ALPINE_BASE}#" /etc/apk/repositories
+fi
+
 # git is required: Petri drives it as a subprocess.
 apk add --no-cache git bash curl ca-certificates
 
@@ -19,7 +27,7 @@ apk add --no-cache --upgrade 'libpng>=1.6.59-r0' 'zlib>=1.3.2-r1'
 # up. libexpat depends on musl only and keeps its soname (libexpat.so.1), so it is a drop-in
 # replacement for the packages that link against it (git, curl). The constraint makes the
 # step a no-op once the base image already carries a fixed version.
-apk add --no-cache --repository https://dl-cdn.alpinelinux.org/alpine/edge/main 'libexpat>=2.9.0-r0'
+apk add --no-cache --repository "${ALPINE_BASE}/edge/main" 'libexpat>=2.9.0-r0'
 
 PETRI_UID="${PETRI_UID:-65532}"
 addgroup -g "$PETRI_UID" -S petri

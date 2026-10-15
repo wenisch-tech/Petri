@@ -132,3 +132,53 @@ outbound HTTPS connections made by Petri: OIDC providers, Git provider APIs, mod
 `git` subprocesses (`GIT_SSL_NO_VERIFY`). It is meant for self-hosted environments behind a private
 CA or self-signed certificates. It does not affect inbound TLS, test containers or package
 installs. Petri logs a warning at startup when it is on.
+
+## Package sources
+
+By default every package manager uses its public default (Alpine CDN, Maven Central, npmjs, PyPI,
+the Go proxy). **Administration → Package sources** adds remotes per package manager (apk, Maven,
+npm, pip, Go), each with an optional user name and password (stored encrypted), whether it
+replaces the default or is used in addition, and whether its TLS certificate is verified.
+Petri writes the tool configuration for each run into the run's private home directory
+(`settings.xml`, `.npmrc`, `.netrc`, a repositories file) and sets `PIP_INDEX_URL`, `GOPROXY` and
+friends; credentials never appear on command lines. The same remotes are used for package
+installs, tests, the terminal, dependency resolution and vulnerability scans. Users cannot
+override these generated entries through the environment page.
+
+The **TLS** section takes extra CA certificates (PEM). They are trusted in addition to the
+system's by apk, git, curl, Node (`NODE_EXTRA_CA_CERTS`), Python, Go and, through a generated
+PKCS12 trust store, Maven. *Ignore TLS certificate errors* turns verification off for these tools
+instead; prefer the CA bundle. Generated files live under `petri.packages.pki-dir`
+(`PETRI_PACKAGES_PKI_DIR`, default `./data/pki`).
+
+To build the image without internet access, pass `--build-arg APK_MIRROR=https://mirror/alpine`
+(no credentials in the URL: build arguments are visible in the image history).
+
+Each remote has a **Test** button: one bounded request to a well-known path (the APK index, the
+Go module list, the npm ping, the repository root) with the remote's credentials and the
+configured trust. It reports whether the remote answers, rejects the credentials, or the URL is
+wrong; it never shows a response body.
+
+Projects can add their own remotes under **Project settings → Package sources**. For a package
+manager the project configures, its remotes replace the instance's for that project; for the
+others the instance's remotes still apply. With *Ignore TLS certificate errors* (or a remote
+marked "do not verify") apk is run with `--no-check-certificate`.
+
+Limits: Gradle plugin repositories and Cargo are not covered yet, the Podman executor does not
+receive the generated configuration yet, and vulnerability scans use the instance's remotes only.
+
+### More package managers and container registries
+
+Besides apk, Maven, npm, pip and Go, remotes can be set for **Gradle** (an init script placed in
+the project's Gradle home), **Cargo** (`config.toml` source replacement), **Composer**, **RubyGems
+(gem and bundler)** and **NuGet**.
+
+**docker.io and ghcr.io** have their own entries. A remote of type *Container images from
+docker.io* / *ghcr.io* is a registry mirror for Podman: with *Replace the default* every pull of
+`docker.io/...` goes to the mirror (`registry.example.com/dockerhub`), with *Add to the default*
+the mirror is tried first and the original registry is the fallback. Credentials are written to a
+Podman auth file, and *do not verify* marks the registry as insecure for Podman. The same remote
+sets Trivy's database repositories (`<mirror>/aquasecurity/trivy-db`, `trivy-java-db`,
+`trivy-checks`) when they are not named explicitly under Vulnerability scanning. For the Podman
+executor the generated tool configuration is mounted read-only into the container at
+`/petri-pkg` (and the CA bundle at `/petri-pki`).

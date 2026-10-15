@@ -34,6 +34,7 @@ class TerminalRunner {
   private final String podman;
   private final Duration timeout;
   private final int outputLimit;
+  private final tech.wenisch.petri.packages.PackageEnvironment packages;
 
   TerminalRunner(
       WorkspacePaths paths, LocalToolchain toolchain, Confinement confinement,
@@ -41,7 +42,10 @@ class TerminalRunner {
       @Value("${petri.tests.executor:podman}") String executor,
       @Value("${petri.tests.podman-executable:podman}") String podman,
       @Value("${petri.terminal.timeout:2m}") Duration timeout,
-      @Value("${petri.terminal.max-output-bytes:200000}") int outputLimit) {
+      @Value("${petri.terminal.max-output-bytes:200000}") int outputLimit,
+      org.springframework.beans.factory.ObjectProvider<tech.wenisch.petri.packages.PackageEnvironment>
+          packages) {
+    this.packages = packages.getIfAvailable();
     this.paths = paths;
     this.toolchain = toolchain;
     this.confinement = confinement;
@@ -87,7 +91,7 @@ class TerminalRunner {
       extra.put("MAVEN_OPTS", "-Dmaven.repo.local=" + cache.resolve("maven"));
       extra.put("GRADLE_USER_HOME", cache.resolve("gradle").toString());
       extra.putAll(LocalToolchain.temporaryDirectoryEnvironment(scratch));
-      Map<String, String> env = toolchain.environment(home, extra, profiles.environmentFor(projectId));
+      Map<String, String> env = toolchain.environment(home, extra, profiles.environmentFor(projectId), projectId);
       List<String> argv = confinement.wrap(
           List.of(worktree, home, cache, scratch), List.of("/bin/sh", "-c", command));
       return BoundedProcess.run(argv, worktree, env, timeout, outputLimit, "terminal-landlock", progress);
@@ -124,12 +128,25 @@ class TerminalRunner {
         "--workdir", "/workspace", "--env", "CI=true", "--env", "LC_ALL=C",
         "--env", "HOME=/tmp/petri-home"));
     argv.addAll(commandEnvironment.containerEnvArguments(profile.environment()));
+    Path packageHome = Files.createTempDirectory(paths.temporaryDirectory(), "petri-pkg-");
+    var packageSettings = packages == null
+        ? tech.wenisch.petri.packages.PackageEnvironment.Container.NONE
+        : packages.container(projectId, packageHome, cache);
+    // Volumes and variables go before the image name.
+    argv.addAll(packageSettings.volumes());
+    packageSettings.containerEnv().forEach((key, value) -> argv.addAll(List.of("--env", key + "=" + value)));
     argv.addAll(List.of(profile.image(), "sh", "-c", command));
-    TestCommandResult result = BoundedProcess.run(argv, worktree,
-        Map.of("PATH", System.getenv().getOrDefault("PATH", "/usr/bin:/bin"),
-            "HOME", System.getenv().getOrDefault("HOME", "/tmp"),
-            "XDG_RUNTIME_DIR", System.getenv().getOrDefault("XDG_RUNTIME_DIR", "/tmp")),
-        timeout, outputLimit, "podman", progress);
+    Map<String, String> hostEnv = new java.util.LinkedHashMap<>(Map.of(
+        "PATH", System.getenv().getOrDefault("PATH", "/usr/bin:/bin"),
+        "HOME", System.getenv().getOrDefault("HOME", "/tmp"),
+        "XDG_RUNTIME_DIR", System.getenv().getOrDefault("XDG_RUNTIME_DIR", "/tmp")));
+    hostEnv.putAll(packageSettings.hostEnv());
+    TestCommandResult result;
+    try {
+      result = BoundedProcess.run(argv, worktree, hostEnv, timeout, outputLimit, "podman", progress);
+    } finally {
+      deleteQuietly(packageHome);
+    }
     if (result.timedOut()) {
       try {
         new ProcessBuilder(podman, "rm", "--force", name).start().waitFor();

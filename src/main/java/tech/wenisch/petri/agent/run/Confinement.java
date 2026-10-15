@@ -21,9 +21,12 @@ class Confinement {
 
   private final Path command;
   private final LocalToolchain toolchain;
+  private final Path pkiDirectory;
 
   Confinement(
-      @Value("${petri.terminal.confine-command:}") String command, LocalToolchain toolchain) {
+      @Value("${petri.terminal.confine-command:}") String command, LocalToolchain toolchain,
+      @Value("${petri.packages.pki-dir:./data/pki}") String pkiDirectory) {
+    this.pkiDirectory = Path.of(pkiDirectory).toAbsolutePath().normalize();
     this.command = command == null || command.isBlank() ? null : Path.of(command.strip());
     this.toolchain = toolchain;
   }
@@ -45,6 +48,8 @@ class Confinement {
     for (String path : SYSTEM_READ_ONLY) result.addAll(List.of("--ro", path));
     result.addAll(List.of("--ro", System.getProperty("java.home", "/opt/java/openjdk")));
     result.addAll(List.of("--ro", toolchain.root().toString()));
+    // The CA bundle package tools trust, once an administrator has configured one.
+    if (Files.isDirectory(pkiDirectory)) result.addAll(List.of("--ro", pkiDirectory.toString()));
     result.addAll(List.of("--rw", "/dev"));
     for (Path path : readOnly) result.addAll(List.of("--ro", path.toString()));
     for (Path path : writable) result.addAll(List.of("--rw", path.toString()));
