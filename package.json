@@ -17,7 +17,7 @@
     "monaco-editor": "^0.55.1"
   },
   "devDependencies": {
-    "@tailwindcss/cli": "4.3.0",
+    "@tailwindcss/cli": "4.3.3",
     "esbuild": "0.28.2",
     "tailwindcss": "4.3.3"
   },
