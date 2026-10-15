@@ -1,5 +1,14 @@
 # Changelog
 
+## v0.16.1 - 2026-10-15
+
+### [0.16.1](https://github.com/wenisch-tech/Petri/compare/v0.16.0...v0.16.1) (2026-10-15)
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.16.1
+
+
 ## v0.16.0 - 2026-10-15
 
 ## [0.16.0](https://github.com/wenisch-tech/Petri/compare/v0.15.0...v0.16.0) (2026-10-15)
