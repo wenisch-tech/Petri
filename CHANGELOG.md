@@ -1,5 +1,24 @@
 # Changelog
 
+## v0.17.0 - 2026-10-15
+
+## [0.17.0](https://github.com/wenisch-tech/Petri/compare/v0.16.1...v0.17.0) (2026-10-15)
+
+
+### Features
+
+* addes offline-mode support for trivy ([bd4a651](https://github.com/wenisch-tech/Petri/commit/bd4a6514d68f4f42b22946824bfae5aa89a86be9))
+
+
+### Bug Fixes
+
+* fixed problem connecting to gitlab not working when user is not allowed to order by namespace ([16ee188](https://github.com/wenisch-tech/Petri/commit/16ee188f8bfb8ce4ac8789c6d482afb9c54c4c3c))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.17.0
+
+
 ## v0.16.1 - 2026-10-15
 
 ### [0.16.1](https://github.com/wenisch-tech/Petri/compare/v0.16.0...v0.16.1) (2026-10-15)
