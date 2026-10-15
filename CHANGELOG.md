@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.19.0 - 2026-10-15
+
+## [0.19.0](https://github.com/wenisch-tech/Petri/compare/v0.18.0...v0.19.0) (2026-10-15)
+
+
+### Features
+
+* custom package management ([2a20e6c](https://github.com/wenisch-tech/Petri/commit/2a20e6c8fe7f24c88c3749a87f6ed3e93a05f04a))
+* improvement skill running ([3d6b073](https://github.com/wenisch-tech/Petri/commit/3d6b073e93b16000717a211bbc8f1f69785ad5eb))
+* vulnerability automations ([676bda6](https://github.com/wenisch-tech/Petri/commit/676bda6f3e0c47c721de19db056e588b4fbb5c2a))
+
+
+### Documentation
+
+* updated docs ([99b7a07](https://github.com/wenisch-tech/Petri/commit/99b7a072821656e92290fe78b0bb41d88583e8ad))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.19.0
+
+
 ## v0.18.0 - 2026-10-15
 
 ## [0.18.0](https://github.com/wenisch-tech/Petri/compare/v0.17.0...v0.18.0) (2026-10-15)
