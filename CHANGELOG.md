@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.16.0 - 2026-10-15
+
+## [0.16.0](https://github.com/wenisch-tech/Petri/compare/v0.15.0...v0.16.0) (2026-10-15)
+
+
+### Features
+
+* initial vulnerability kills ([98989c6](https://github.com/wenisch-tech/Petri/commit/98989c65160abe9c4ffe3c6a8e1f97ca1c72494f))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.16.0
+
+
 ## v0.15.0 - 2026-10-14
 
 ## [0.15.0](https://github.com/wenisch-tech/Petri/compare/v0.14.0...v0.15.0) (2026-10-14)
