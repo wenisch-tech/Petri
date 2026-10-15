@@ -4,6 +4,7 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.LinkedHashMap;
@@ -13,6 +14,7 @@ import java.util.Map;
 import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
+import tech.wenisch.petri.vulnerability.TrivySettingsService;
 import tech.wenisch.petri.workspace.WorkspacePaths;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -50,6 +52,7 @@ public class TrivyScanService {
   public record Resolution(String ecosystem, String directory, String status, String note) {}
 
   private final WorkspacePaths paths;
+  private final TrivySettingsService settings;
   private final DependencyResolver resolver;
   private final LocalToolchain toolchain;
   private final Confinement confinement;
@@ -57,10 +60,12 @@ public class TrivyScanService {
   private final String command;
 
   TrivyScanService(
-      WorkspacePaths paths, DependencyResolver resolver, LocalToolchain toolchain,
+      WorkspacePaths paths, TrivySettingsService settings, DependencyResolver resolver,
+      LocalToolchain toolchain,
       Confinement confinement, ObjectMapper json,
       @Value("${petri.trivy.command:trivy}") String command) {
     this.paths = paths;
+    this.settings = settings;
     this.resolver = resolver;
     this.toolchain = toolchain;
     this.confinement = confinement;
@@ -160,6 +165,9 @@ public class TrivyScanService {
       Map<String, String> extra = new LinkedHashMap<>();
       extra.put("TRIVY_DISABLE_TELEMETRY", "true");
       extra.put("TRIVY_CACHE_DIR", cache.toString());
+      // Where the database comes from is an instance setting (a registry of the administrator's
+      // own, or a database that ships with the image for air-gapped use).
+      argv.addAll(argv.size() - 1, databaseFlags(settings.current(), cache, extra));
       List<String> wrapped = confinement.available()
           ? confinement.wrap(List.of(scanRoot, trivy.getParent()), List.of(cache, home), argv)
           : argv;
@@ -208,6 +216,174 @@ public class TrivyScanService {
     } finally {
       deleteQuietly(home);
     }
+  }
+
+  // --- the vulnerability database ---------------------------------------------------------------
+
+  /** What is known about one copy of the database. */
+  public record DatabaseInfo(
+      boolean present, String location, Instant updatedAt, Instant nextUpdate, Instant downloadedAt,
+      long sizeBytes) {}
+
+  /** The database Trivy has downloaded (or been seeded with) in Petri's cache. */
+  public DatabaseInfo cachedDatabase() {
+    try {
+      return info(paths.directory("trivy-cache").resolve("db"));
+    } catch (IOException exception) {
+      return new DatabaseInfo(false, "", null, null, null, 0);
+    }
+  }
+
+  /** The database that was supplied with the image (or mounted) for air-gapped use. */
+  public DatabaseInfo suppliedDatabase(String offlineDbPath) {
+    return info(Path.of(offlineDbPath).resolve("db"));
+  }
+
+  private DatabaseInfo info(Path directory) {
+    Path database = directory.resolve("trivy.db");
+    if (!Files.isRegularFile(database)) {
+      return new DatabaseInfo(false, directory.toString(), null, null, null, 0);
+    }
+    Instant updated = null;
+    Instant next = null;
+    Instant downloaded = null;
+    try {
+      JsonNode meta = json.readTree(Files.readAllBytes(directory.resolve("metadata.json")));
+      updated = instant(meta, "UpdatedAt");
+      next = instant(meta, "NextUpdate");
+      downloaded = instant(meta, "DownloadedAt");
+    } catch (IOException | RuntimeException ignored) {
+      // The database is usable without its metadata file; the dates are only informational.
+    }
+    long size = 0;
+    try {
+      size = Files.size(database);
+    } catch (IOException ignored) {
+      // informational
+    }
+    return new DatabaseInfo(true, directory.toString(), updated, next, downloaded, size);
+  }
+
+  private static Instant instant(JsonNode node, String field) {
+    String text = text(node, field);
+    if (text == null) return null;
+    try {
+      return Instant.parse(text);
+    } catch (RuntimeException exception) {
+      return null;
+    }
+  }
+
+  /**
+   * The Trivy flags for the configured database source, and the environment (registry
+   * credentials) it needs. In offline mode the supplied database is copied into the cache first.
+   */
+  private List<String> databaseFlags(
+      TrivySettingsService.Config config, Path cache, Map<String, String> environment)
+      throws IOException {
+    List<String> flags = new ArrayList<>();
+    if (config.mode() == TrivySettingsService.Mode.OFFLINE) {
+      seedFromImage(config.offlineDbPath(), cache);
+      flags.addAll(List.of("--skip-db-update", "--skip-java-db-update", "--skip-check-update",
+          "--offline-scan"));
+      return flags;
+    }
+    if (config.dbRepository() != null) flags.addAll(List.of("--db-repository", config.dbRepository()));
+    if (config.javaDbRepository() != null) {
+      flags.addAll(List.of("--java-db-repository", config.javaDbRepository()));
+    }
+    if (config.checksRepository() != null) {
+      flags.addAll(List.of("--checks-bundle-repository", config.checksRepository()));
+    }
+    // Credentials travel in the environment, never on the command line.
+    if (config.username() != null && config.password() != null) {
+      environment.put("TRIVY_USERNAME", config.username());
+      environment.put("TRIVY_PASSWORD", config.password());
+    }
+    if (config.insecure()) {
+      environment.put("TRIVY_INSECURE", "true");
+      environment.put("TRIVY_NON_SSL", "true");
+    }
+    return flags;
+  }
+
+  /** Copies the database supplied with the image into the cache when the cache has another one. */
+  private void seedFromImage(String offlineDbPath, Path cache) throws IOException {
+    Path supplied = Path.of(offlineDbPath).resolve("db");
+    Path suppliedDb = supplied.resolve("trivy.db");
+    if (!Files.isRegularFile(suppliedDb)) {
+      throw new IllegalStateException("The scanner is set to offline mode, but there is no "
+          + "database at " + supplied + ". Build the image with BAKE_TRIVY_DB=true or place the "
+          + "Trivy database (db/trivy.db and db/metadata.json) there.");
+    }
+    Path target = cache.resolve("db");
+    Path metaSupplied = supplied.resolve("metadata.json");
+    Path metaTarget = target.resolve("metadata.json");
+    boolean current = Files.isRegularFile(target.resolve("trivy.db"))
+        && Files.isRegularFile(metaSupplied) && Files.isRegularFile(metaTarget)
+        && Files.readString(metaSupplied).equals(Files.readString(metaTarget))
+        && Files.size(suppliedDb) == Files.size(target.resolve("trivy.db"));
+    if (current) return;
+    Files.createDirectories(target);
+    for (String name : List.of("trivy.db", "metadata.json")) {
+      Path from = supplied.resolve(name);
+      if (!Files.isRegularFile(from)) continue;
+      Path temporary = target.resolve(name + ".seed");
+      Files.copy(from, temporary, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+      Files.move(temporary, target.resolve(name), java.nio.file.StandardCopyOption.REPLACE_EXISTING,
+          java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+    }
+  }
+
+  /**
+   * Makes the database ready the way a scan would and says what it found: in offline mode the
+   * supplied database is installed, otherwise it is downloaded from the configured registry (with
+   * its credentials), which also proves that the registry, path and credentials work.
+   */
+  public String checkDatabase() throws IOException {
+    TrivySettingsService.Config config = settings.current();
+    Path cache = paths.directory("trivy-cache");
+    if (config.mode() == TrivySettingsService.Mode.OFFLINE) {
+      seedFromImage(config.offlineDbPath(), cache);
+      DatabaseInfo ready = cachedDatabase();
+      return "Offline database installed from " + config.offlineDbPath()
+          + (ready.updatedAt() == null ? "" : " (built " + ready.updatedAt() + ")") + ".";
+    }
+    Path trivy = executable();
+    if (trivy == null) throw new IllegalStateException("Trivy is not installed in this Petri instance.");
+    Path home = Files.createTempDirectory(paths.temporaryDirectory(), "petri-trivy-");
+    try {
+      List<String> argv = new ArrayList<>(List.of(trivy.toString(), "image", "--download-db-only",
+          "--quiet", "--no-progress", "--skip-version-check", "--cache-dir", cache.toString()));
+      Map<String, String> extra = new LinkedHashMap<>();
+      extra.put("TRIVY_DISABLE_TELEMETRY", "true");
+      List<String> flags = databaseFlags(config, cache, extra);
+      argv.addAll(flags);
+      List<String> wrapped = confinement.available()
+          ? confinement.wrap(List.of(trivy.getParent()), List.of(cache, home), argv) : argv;
+      TestCommandResult run = BoundedProcess.run(wrapped, home, toolchain.environment(home, extra),
+          Duration.ofMinutes(5), 16 * 1024, "trivy-db");
+      if (run.timedOut()) throw new IllegalStateException("The download did not finish within 5 minutes.");
+      if (run.exitCode() != 0) {
+        throw new IllegalStateException("Trivy could not get the database: "
+            + scrub(tail(run.output(), 800), config));
+      }
+      DatabaseInfo ready = cachedDatabase();
+      return "Database ready" + (ready.updatedAt() == null ? "" : ", built " + ready.updatedAt())
+          + (config.dbRepository() == null ? " (default registry)" : " from " + config.dbRepository())
+          + ".";
+    } finally {
+      deleteQuietly(home);
+    }
+  }
+
+  /** Trivy's error text never needs the registry password; make sure it cannot show up. */
+  private static String scrub(String text, TrivySettingsService.Config config) {
+    String result = text;
+    if (config.password() != null && !config.password().isBlank()) {
+      result = result.replace(config.password(), "********");
+    }
+    return result;
   }
 
   private static boolean remoteResolutionFailed(String output) {

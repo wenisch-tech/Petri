@@ -32,6 +32,8 @@
   (a workflow fixes the findings and pushes to the branch), mirroring the code review ones.
 - `vulnerability-scan` skill and `scan_vulnerabilities` tool: Trivy scan of dependencies, secrets and
   misconfigurations, confined to the worktree; Trivy ships in the image.
+- Administration > Vulnerability scanning: choose the scanner's database source (a registry of your
+  own with credentials, or offline with a database supplied in the image) and check it.
 - `get_pull_request` agent tool: description, discussion, changed files and CI runs of a pull request.
 
 ## Repository isolation

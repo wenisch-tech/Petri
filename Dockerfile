@@ -13,11 +13,32 @@ RUN gcc -O2 -static -o /petri-confine /src/petri-confine.c
 # database is downloaded at scan time into Petri's data volume, so the image never ships a stale one.
 FROM aquasec/trivy:0.76.0@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222 AS trivy
 
+# Vulnerability database for air-gapped use. Off by default (the image then downloads and refreshes
+# the database at scan time); build with --build-arg BAKE_TRIVY_DB=true to supply the database in
+# the image at /opt/trivy-db, and switch the scanner to "offline" under Administration >
+# Vulnerability scanning. The database is only as current as the build, so rebuild to refresh it.
+#   --build-arg TRIVY_DB_REPOSITORY=registry.example.com/security/trivy-db:2   a registry of your own
+#   --secret id=trivy_username,env=USER --secret id=trivy_password,env=PASS     its credentials
+FROM trivy AS trivy-db
+ARG BAKE_TRIVY_DB=false
+ARG TRIVY_DB_REPOSITORY=
+RUN --mount=type=secret,id=trivy_username,required=false \
+    --mount=type=secret,id=trivy_password,required=false \
+    mkdir -p /seed && \
+    if [ "$BAKE_TRIVY_DB" = "true" ]; then \
+      if [ -f /run/secrets/trivy_username ]; then export TRIVY_USERNAME="$(cat /run/secrets/trivy_username)"; fi; \
+      if [ -f /run/secrets/trivy_password ]; then export TRIVY_PASSWORD="$(cat /run/secrets/trivy_password)"; fi; \
+      trivy image --download-db-only --quiet --no-progress --cache-dir /seed \
+        ${TRIVY_DB_REPOSITORY:+--db-repository "$TRIVY_DB_REPOSITORY"}; \
+      test -s /seed/db/trivy.db; \
+    fi
+
 # Alpine JDK: Petri runs approved tests in this container (PETRI_TESTS_EXECUTOR=local) and lets
 # agents install further Alpine packages into an unprivileged toolchain prefix on /app/data.
 FROM eclipse-temurin:25-jdk-alpine
 COPY --from=confine /petri-confine /usr/local/bin/petri-confine
 COPY --from=trivy /usr/local/bin/trivy /usr/local/bin/trivy
+COPY --from=trivy-db /seed/ /opt/trivy-db/
 
 COPY scripts/alpine-runtime.sh /tmp/alpine-runtime.sh
 RUN sh /tmp/alpine-runtime.sh && rm -f /tmp/alpine-runtime.sh

@@ -84,6 +84,50 @@ are configured under Automations or started on one pull request with **Let Petri
 [automations](automations.md#vulnerability-scans). The first of them is also what the Skills tab
 runs, on the open branch.
 
+### Where the database comes from
+
+Under **Administration > Vulnerability scanning** an administrator chooses the source of the
+vulnerability database:
+
+- **Online** (default): Trivy downloads and refreshes it. Leave the repository empty for Trivy's
+  default (`mirror.gcr.io/aquasec/trivy-db:2`, then `ghcr.io/aquasecurity/trivy-db:2`), or enter a
+  registry of your own, with its path and tag, for example
+  `registry.internal:5000/security/trivy-db:2`. The Java database and the checks bundle (the rules
+  behind Dockerfile, Kubernetes and Terraform findings) can be redirected the same way. A user and
+  password or token can be stored for the registry; they are encrypted at rest, are only passed to
+  Trivy in its environment and are never shown again. *Allow an insecure registry connection*
+  permits plain HTTP or a certificate Petri does not trust.
+- **Offline** (air-gapped): Trivy never reaches out. It uses the database that was supplied with
+  the image, installed into the scan cache before each scan, and runs with `--skip-db-update`,
+  `--skip-java-db-update`, `--skip-check-update` and `--offline-scan`. Dependency resolution still
+  needs your package repositories (use your own mirrors, via the proxy settings of the test
+  environment).
+
+**Check database** gets the database the way a scan would. With a registry of your own it proves
+that the address, path and credentials work; offline it installs the supplied database.
+
+The registry has to hold the database as an OCI artifact, which is what `trivy-db` is. Mirror it
+with `crane copy mirror.gcr.io/aquasec/trivy-db:2 registry.internal:5000/security/trivy-db:2` (or
+`oras cp`, `skopeo copy`) and repeat that on a schedule, since the upstream database is rebuilt
+every few hours.
+
+#### Supplying the database in the image
+
+The `Dockerfile` can put the database into the image at `/opt/trivy-db`:
+
+```bash
+docker build --build-arg BAKE_TRIVY_DB=true \
+  [--build-arg TRIVY_DB_REPOSITORY=registry.internal:5000/security/trivy-db:2] \
+  [--secret id=trivy_username,env=REGISTRY_USER --secret id=trivy_password,env=REGISTRY_PASSWORD] \
+  -t petri:airgapped .
+```
+
+then set the mode to *Offline*. The database is large (about 1.6 GB uncompressed, several hundred
+MB compressed), and it is only as current as the build, so rebuild the image to refresh it. The
+directory can also be mounted or copied in by other means: it needs `db/trivy.db` and
+`db/metadata.json`, and its path is configurable (`PETRI_TRIVY_OFFLINE_DB_PATH`, default
+`/opt/trivy-db`). `PETRI_TRIVY_MODE` sets the mode that applies until an administrator saves one.
+
 ### Trivy in the image
 
 The release image contains Trivy 0.76.0, copied as a single static binary from the official

@@ -82,7 +82,8 @@ public class SecurityConfiguration {
                 "/actuator/health/**")
             .permitAll()
             .requestMatchers(apiRequests).hasRole("API_CLIENT")
-            .requestMatchers("/admin", "/audit", "/audit/**", "/admin/users", "/admin/users/**")
+            .requestMatchers("/admin", "/audit", "/audit/**", "/admin/users", "/admin/users/**",
+                "/admin/vulnerability-scanning", "/admin/vulnerability-scanning/**")
             .hasRole("INSTANCE_ADMIN")
             .requestMatchers("/model-settings", "/model-settings/**").hasRole("INSTANCE_ADMIN")
             .requestMatchers("/sandbox-profiles", "/sandbox-profiles/**").hasRole("INSTANCE_ADMIN")
