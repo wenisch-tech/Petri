@@ -75,6 +75,15 @@ incomplete, and the skill then installs the tool with the approval-gated `instal
 scans again. A project too large to copy (500 MB or 80,000 files) is scanned from its committed
 lockfiles only, and the result says so.
 
+### As an automation
+
+The scan also runs on pull requests, in three variants that mirror the code review ones:
+`vulnerability-scan` (keep the table, post nothing), `vulnerability-scan-and-comment` (post it) and
+`vulnerability-scan-and-improve` (post it and let a workflow fix the findings on the branch). They
+are configured under Automations or started on one pull request with **Let Petri work on this**; see
+[automations](automations.md#vulnerability-scans). The first of them is also what the Skills tab
+runs, on the open branch.
+
 ### Trivy in the image
 
 The release image contains Trivy 0.76.0, copied as a single static binary from the official

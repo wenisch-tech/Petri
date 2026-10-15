@@ -30,6 +30,7 @@ import tech.wenisch.petri.project.Project;
 import tech.wenisch.petri.project.ProjectRepository;
 import tech.wenisch.petri.security.AppUser;
 import tech.wenisch.petri.security.AppUserRepository;
+import tech.wenisch.petri.vulnerability.VulnerabilityReportService;
 
 /**
  * Runs one code review: fetches the pull request head, checks it out in a throw-away worktree,
@@ -77,6 +78,7 @@ public class CodeReviewAutomation {
   private final OrchestrationProfileService orchestrationProfiles;
   private final AuditLogService audit;
   private final PullRequestImprovementService improvements;
+  private final VulnerabilityReportService vulnerabilityReports;
   private final int maxDiffBytes;
 
   CodeReviewAutomation(
@@ -87,6 +89,7 @@ public class CodeReviewAutomation {
       SkillService skills, AgentRunService agentRuns, AgentRunExecutor executor,
       ModelCredentialService models, OrchestrationProfileService orchestrationProfiles,
       AuditLogService audit, PullRequestImprovementService improvements,
+      VulnerabilityReportService vulnerabilityReports,
       @Value("${petri.automation.max-diff-bytes:120000}") int maxDiffBytes) {
     this.runs = runs;
     this.reviews = reviews;
@@ -104,6 +107,7 @@ public class CodeReviewAutomation {
     this.orchestrationProfiles = orchestrationProfiles;
     this.audit = audit;
     this.improvements = improvements;
+    this.vulnerabilityReports = vulnerabilityReports;
     this.maxDiffBytes = maxDiffBytes;
   }
 
@@ -152,12 +156,18 @@ public class CodeReviewAutomation {
       worktreeId = worktree.id();
       runs.workspace(job.runId(), worktreeId, diff.changedFiles());
 
-      ReviewSubmission.Previous previous = reviews.previous(job.runId()).orElse(null);
+      boolean scan = job.kind().vulnerability();
+      // A scan has no earlier result to compare with: each head is scanned as it is.
+      ReviewSubmission.Previous previous = scan ? null : reviews.previous(job.runId()).orElse(null);
       String sinceDiff = previous == null ? null : diffs.sinceCommit(
           job.projectId(), job.pr().number(), previous.headSha(), maxDiffBytes / 2);
-      String instructions = CodeReviewPrompts.instructions(skillText(job.kind()));
-      String task = CodeReviewPrompts.task(job.pr(), diff.changedFiles(), diff.diff(),
-          diff.truncated(), MAX_LISTED_FILES, previous, sinceDiff);
+      String instructions = scan
+          ? VulnerabilityPrompts.instructions(skillText(job.kind()))
+          : CodeReviewPrompts.instructions(skillText(job.kind()));
+      String task = scan
+          ? VulnerabilityPrompts.task(job.pr(), diff.changedFiles(), MAX_LISTED_FILES)
+          : CodeReviewPrompts.task(job.pr(), diff.changedFiles(), diff.diff(),
+              diff.truncated(), MAX_LISTED_FILES, previous, sinceDiff);
       AgentRunView created = agentRuns.createAutomationRun(
           worktreeId,
           command(job, owner.getId(), task),
@@ -167,6 +177,19 @@ public class CodeReviewAutomation {
           created.id(), worktreeId, owner.getId(), "automation:" + job.runId());
 
       AutomationRun result = runs.require(job.runId());
+      if (scan && result.getReviewMarkdown() == null) {
+        // The scan saved its table under this run; keep it for the branch (the Vulnerabilities
+        // tab) and turn it into the comment and the findings an improvement works on.
+        var report = vulnerabilityReports.find(job.projectId(), null, job.runId().toString())
+            .orElse(null);
+        if (report != null) {
+          vulnerabilityReports.save(job.projectId(), job.pr().headRef(), job.pr().headSha(),
+              report.scanner(), report.summary(), report.complete(), report.completenessNote(),
+              report.findings(), owner.getId());
+          reviews.submitVulnerabilityReport(job.runId(), report);
+          result = runs.require(job.runId());
+        }
+      }
       if (result.getReviewMarkdown() == null && finished.status() == AgentRunStatus.COMPLETED
           && finished.finalOutput() != null && !finished.finalOutput().isBlank()) {
         // The agent answered in text without calling submit_review (typically after the loop
@@ -215,8 +238,8 @@ public class CodeReviewAutomation {
    * one method (the {@code code-review} skill) and differ in what happens with the result.
    */
   private String skillText(AutomationKind kind) {
-    String method = skills.load(AutomationKind.REVIEW_METHOD_SKILL).content();
-    if (AutomationKind.REVIEW_METHOD_SKILL.equals(kind.skill())) return method;
+    String method = skills.load(kind.baseSkill()).content();
+    if (kind.baseSkill().equals(kind.skill())) return method;
     return method + "\n\n---\n\n" + skills.load(kind.skill()).content();
   }
 

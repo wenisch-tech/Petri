@@ -62,6 +62,46 @@ public class AutomationReviewService {
   }
 
   /**
+   * Turns a saved vulnerability report into the review of this run: the comment to post and the
+   * findings an improvement acts on (CRITICAL maps to blocker, HIGH to major, MEDIUM to minor, the
+   * rest to nit, which no improvement touches).
+   */
+  public String submitVulnerabilityReport(
+      UUID automationRunId, tech.wenisch.petri.vulnerability.VulnerabilityReportService.Report report) {
+    AutomationRun run = runs.require(automationRunId);
+    if (run.getReviewMarkdown() != null) {
+      throw new IllegalStateException("A result was already submitted for this pull request");
+    }
+    List<ReviewSubmission.Finding> findings = report.findings().stream().map(finding -> {
+      ReviewSubmission.Severity severity = switch (finding.severity()) {
+        case "CRITICAL" -> ReviewSubmission.Severity.BLOCKER;
+        case "HIGH" -> ReviewSubmission.Severity.MAJOR;
+        case "MEDIUM" -> ReviewSubmission.Severity.MINOR;
+        default -> ReviewSubmission.Severity.NIT;
+      };
+      String ids = finding.identifiers().isEmpty() ? "" : " (" + String.join(", ", finding.identifiers()) + ")";
+      String body = finding.description() + "\n\nWhere: " + finding.where()
+          + "\nToday: " + finding.stateToday() + "\nTarget state: " + finding.targetState();
+      return new ReviewSubmission.Finding(null, null, severity, finding.title() + ids, body, null, null);
+    }).limit(ReviewRenderer.MAX_FINDINGS).toList();
+    boolean serious = report.findings().stream().anyMatch(
+        finding -> finding.severity().equals("CRITICAL") || finding.severity().equals("HIGH"));
+    ReviewSubmission review = new ReviewSubmission(report.summary(),
+        serious ? ReviewSubmission.Verdict.REQUEST_CHANGES
+            : report.findings().isEmpty() ? ReviewSubmission.Verdict.APPROVE
+                : ReviewSubmission.Verdict.COMMENT, findings, null);
+    String markdown = VulnerabilityCommentRenderer.render(run.getHeadSha(), report);
+    String stored;
+    try {
+      stored = json.writeValueAsString(review);
+    } catch (JacksonException exception) {
+      throw new IllegalStateException("The result could not be stored", exception);
+    }
+    runs.review(automationRunId, markdown, stored);
+    return markdown;
+  }
+
+  /**
    * Stores the agent's final text as the review when it answered without calling
    * {@code submit_review} (for example after the loop guard withdrew its tools). It is rendered
    * through the same escaping as a structured review, as a comment without findings.

@@ -25,7 +25,14 @@ removing one keeps its past runs.
 | **Code review and comment** | The same review, posted as a comment on the pull request. | `skills/code-review-and-comment/SKILL.md` |
 | **Code review and improve** | Review, post the comment, then fix the findings on the pull request's own branch. | `skills/code-review-and-improve/SKILL.md` |
 
-All three share the review method of the `code-review` skill; the other two skills only add to it.
+| **Vulnerability scan** | Scan a pull request's head with Trivy and keep the findings for its branch. Nothing is posted. | `skills/vulnerability-scan/SKILL.md` |
+| **Vulnerability scan and comment** | The same scan, posted as a comment (table and details) on the pull request. | `skills/vulnerability-scan-and-comment/SKILL.md` |
+| **Vulnerability scan and improve** | Scan, post the comment, then fix the findings (for example upgrade dependencies) on the pull request's own branch. | `skills/vulnerability-scan-and-improve/SKILL.md` |
+
+The three code review automations share the review method of the `code-review` skill, the three
+vulnerability scans the method of the `vulnerability-scan` skill; the other skills of each family
+only add to it. Every kind is configured like any other (trigger, approval, model) and can be
+started on one pull request with **Let Petri work on this**.
 Every kind finds pull requests, reviews new commits and handles re-reviews the same way; they differ
 in what happens with the result.
 
@@ -34,6 +41,26 @@ in what happens with the result.
 The review is stored on the run and shown in *Recent runs* (**Review**) and on the run page, with the
 status *Reviewed*. It is never posted and never changes anything, which makes it a safe way to try
 an automation or to collect reviews for a team that wants to read them in Petri.
+
+### Vulnerability scans
+
+A scan automation checks out the head of the pull request like a review, then runs the
+`vulnerability-scan` method unattended with the read-only tools plus `scan_vulnerabilities` and
+`submit_vulnerability_report`: Trivy resolves the project's dependencies, the agent triages and
+groups the findings and saves them as the table of finding, identifier, severity, where, state
+today and target state. Petri then
+
+1. keeps the table for the pull request's branch, so it appears on the project's **Vulnerabilities**
+   tab and in the dashboard counts,
+2. renders it as the comment (a summary, the table and one collapsible block per finding; HTML is
+   escaped and `@mentions` are defused as for reviews) and posts it, or keeps it as a draft, as the
+   approval setting says.
+
+*Vulnerability scan* stops after step 1 (status *Reviewed*). *Vulnerability scan and improve*
+continues exactly as *Code review and improve* below: the `CRITICAL`, `HIGH` and `MEDIUM` findings
+are the task of a workflow on the pull request's branch, `LOW` and `INFO` are left alone, there are
+at most two automatic rounds, and a pushed fix is scanned again as a new commit. The target state of
+each finding is what the workflow is asked to reach. A scan is never compared with an earlier one.
 
 ### Code review and improve
 

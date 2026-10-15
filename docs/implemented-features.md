@@ -28,6 +28,8 @@
   (structured review comment, automatically or as an approval-gated draft) and *Code review and
   improve* (comment, then a workflow fixes the findings and pushes to the pull request's branch).
 - Skills tab per project: lists skills and runs them as a direct chat in the workspace.
+- Vulnerability scan automations on pull requests: scan only, scan and comment, scan and improve
+  (a workflow fixes the findings and pushes to the branch), mirroring the code review ones.
 - `vulnerability-scan` skill and `scan_vulnerabilities` tool: Trivy scan of dependencies, secrets and
   misconfigurations, confined to the worktree; Trivy ships in the image.
 - `get_pull_request` agent tool: description, discussion, changed files and CI runs of a pull request.

@@ -60,10 +60,13 @@ class CodeReviewAutomationTest {
   private final AgentRunExecutor executor = mock(AgentRunExecutor.class);
   private final ModelCredentialService models = mock(ModelCredentialService.class);
   private final AuditLogService audit = mock(AuditLogService.class);
+  private final tech.wenisch.petri.vulnerability.VulnerabilityReportService vulnerabilityReports =
+      mock(tech.wenisch.petri.vulnerability.VulnerabilityReportService.class);
   private final OrchestrationProfileService orchestration = mock(OrchestrationProfileService.class);
   private final CodeReviewAutomation automation = new CodeReviewAutomation(
       runs, reviews, projects, users, sources, connections, mirrors, diffs, worktrees, skills, agentRuns,
-      executor, models, orchestration, audit, mock(PullRequestImprovementService.class), 100_000);
+      executor, models, orchestration, audit, mock(PullRequestImprovementService.class),
+      vulnerabilityReports, 100_000);
 
   private final UUID projectId = UUID.randomUUID();
   private final UUID ownerId = UUID.randomUUID();
@@ -379,5 +382,45 @@ class CodeReviewAutomationTest {
     verify(runs).posted(runId, "https://git.test/pull/7#c9");
     verify(runs, never()).failed(any(), anyString());
   }
-}
 
+  @Test
+  void aVulnerabilityScanKeepsItsTableForTheBranchAndPostsItAsTheComment() {
+    when(skills.load("vulnerability-scan")).thenReturn(
+        new SkillDocument("vulnerability-scan", "d", "SCAN BODY"));
+    when(skills.load("vulnerability-scan-and-comment")).thenReturn(
+        new SkillDocument("vulnerability-scan-and-comment", "d", "COMMENT ADDENDUM"));
+    AgentRunView finished = mock(AgentRunView.class);
+    when(finished.status()).thenReturn(AgentRunStatus.COMPLETED);
+    when(executor.execute(eq(agentRunId), eq(worktreeId), eq(ownerId), anyString()))
+        .thenReturn(finished);
+    AutomationRun run = new AutomationRun(runId, projectId,
+        AutomationKind.VULNERABILITY_SCAN_AND_COMMENT, AutomationTrigger.PULL_REQUEST, "7",
+        "abc123", "Add cache", pr.webUrl(), AutomationPostMode.AUTO, Instant.now());
+    when(runs.require(runId)).thenReturn(run);
+    var report = new tech.wenisch.petri.vulnerability.VulnerabilityReportService.Report(
+        projectId, "detached:" + runId, null, runId.toString(), "Trivy 0.76.0", "One issue", true,
+        null, List.of(new tech.wenisch.petri.vulnerability.VulnerabilityReportService.Finding(
+            "CVE-2026-1 in lib", "HIGH", "pom.xml", "lib 1.0", "lib 1.1", "Upgrade", List.of(),
+            List.of("CVE-2026-1"))), Instant.now());
+    when(vulnerabilityReports.find(projectId, null, runId.toString()))
+        .thenReturn(java.util.Optional.of(report));
+    org.mockito.Mockito.doAnswer(call -> {
+      run.review("SCAN COMMENT", Instant.now());
+      return "SCAN COMMENT";
+    }).when(reviews).submitVulnerabilityReport(eq(runId), any());
+    when(connections.postPullRequestComment(any(), eq("42"), eq("acme/demo"), eq(7L), anyString(),
+        eq("SCAN COMMENT"))).thenReturn("https://git.test/pull/7#c9");
+
+    automation.execute(new CodeReviewAutomation.Job(runId, projectId, pr, AutomationPostMode.AUTO,
+        null, null, 20, AutomationKind.VULNERABILITY_SCAN_AND_COMMENT));
+
+    // The table is kept for the pull request's branch, shown on its Vulnerabilities tab.
+    verify(vulnerabilityReports).save(eq(projectId), eq("feature"), eq("abc123"),
+        eq("Trivy 0.76.0"), eq("One issue"), eq(true), any(), any(), any());
+    verify(runs).posted(runId, "https://git.test/pull/7#c9");
+    var command = org.mockito.ArgumentCaptor.forClass(CreateAgentRunCommand.class);
+    verify(agentRuns).createAutomationRun(eq(worktreeId), command.capture(), eq(ownerId),
+        anyString(), eq(runId), org.mockito.ArgumentMatchers.contains("SCAN BODY"));
+    assertThat(command.getValue().prompt()).contains("Scan this pull request", "src/A.java");
+  }
+}

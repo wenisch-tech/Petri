@@ -32,12 +32,18 @@ class CodeReviewSkillTest {
     for (AutomationKind kind : AutomationKind.values()) {
       var skill = skills.load(kind.skill());
       assertThat(skill.description()).isNotBlank();
-      if (!AutomationKind.REVIEW_METHOD_SKILL.equals(kind.skill())) {
-        assertThat(skill.content()).contains("code-review");
+      if (!kind.baseSkill().equals(kind.skill())) {
+        assertThat(skill.content()).contains(kind.baseSkill());
+        assertThat(skills.load(kind.baseSkill()).description()).isNotBlank();
       }
     }
     assertThat(AutomationKind.CODE_REVIEW.comments()).isFalse();
     assertThat(AutomationKind.CODE_REVIEW_AND_COMMENT.comments()).isTrue();
     assertThat(AutomationKind.CODE_REVIEW_AND_IMPROVE.improves()).isTrue();
+    assertThat(AutomationKind.VULNERABILITY_SCAN.vulnerability()).isTrue();
+    assertThat(AutomationKind.VULNERABILITY_SCAN.comments()).isFalse();
+    assertThat(AutomationKind.VULNERABILITY_SCAN_AND_COMMENT.comments()).isTrue();
+    assertThat(AutomationKind.VULNERABILITY_SCAN_AND_IMPROVE.improves()).isTrue();
+    assertThat(AutomationKind.CODE_REVIEW.vulnerability()).isFalse();
   }
 }
