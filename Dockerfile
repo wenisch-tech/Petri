@@ -13,14 +13,15 @@ RUN gcc -O2 -static -o /petri-confine /src/petri-confine.c
 # database is downloaded at scan time into Petri's data volume, so the image never ships a stale one.
 FROM aquasec/trivy:0.76.0@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222 AS trivy
 
-# Vulnerability database for air-gapped use. Off by default (the image then downloads and refreshes
-# the database at scan time); build with --build-arg BAKE_TRIVY_DB=true to supply the database in
-# the image at /opt/trivy-db, and switch the scanner to "offline" under Administration >
-# Vulnerability scanning. The database is only as current as the build, so rebuild to refresh it.
+# Vulnerability database, supplied in the image at /opt/trivy-db so that scans work without any
+# registry access (air-gapped installations switch the scanner to "offline" under Administration >
+# Vulnerability scanning). It is only as current as the build; an online instance refreshes it at
+# scan time. The image grows by the database (about 1.6 GB uncompressed); build with
+# --build-arg BAKE_TRIVY_DB=false for a slim image that downloads it on first use instead.
 #   --build-arg TRIVY_DB_REPOSITORY=registry.example.com/security/trivy-db:2   a registry of your own
 #   --secret id=trivy_username,env=USER --secret id=trivy_password,env=PASS     its credentials
 FROM trivy AS trivy-db
-ARG BAKE_TRIVY_DB=false
+ARG BAKE_TRIVY_DB=true
 ARG TRIVY_DB_REPOSITORY=
 RUN --mount=type=secret,id=trivy_username,required=false \
     --mount=type=secret,id=trivy_password,required=false \

@@ -174,6 +174,23 @@ public class TrivyScanService {
       TestCommandResult run = BoundedProcess.run(wrapped, scanRoot,
           toolchain.environment(home, extra), TIMEOUT, OUTPUT_LIMIT, "trivy");
       String note = null;
+      if (!run.timedOut() && run.exitCode() != 0 && !argv.contains("--skip-db-update")
+          && cachedDatabase().present() && databaseUpdateFailed(run.output())) {
+        // The registry could not be reached, but there is a database (the one from the image or
+        // an earlier download). Scan with it rather than not at all, and say how old it is.
+        List<String> stale = new ArrayList<>(argv);
+        stale.addAll(stale.size() - 1, List.of("--skip-db-update", "--skip-java-db-update",
+            "--skip-check-update", "--offline-scan"));
+        run = BoundedProcess.run(
+            confinement.available()
+                ? confinement.wrap(List.of(scanRoot, trivy.getParent()), List.of(cache, home), stale)
+                : stale,
+            scanRoot, toolchain.environment(home, extra), TIMEOUT, OUTPUT_LIMIT, "trivy");
+        DatabaseInfo used = cachedDatabase();
+        note = "The vulnerability database could not be refreshed, so the scan used the one that "
+            + "is available" + (used.updatedAt() == null ? "" : " (built " + used.updatedAt() + ")")
+            + ". Newer advisories may be missing.";
+      }
       if (!run.timedOut() && run.exitCode() != 0 && !argv.contains("--offline-scan")
           && remoteResolutionFailed(run.output())) {
         // Maven Central rate-limits (HTTP 429) the transitive resolution of pom.xml files. Scan
@@ -288,6 +305,11 @@ public class TrivyScanService {
           "--offline-scan"));
       return flags;
     }
+    // An image that ships a database starts every installation with a working one: the cache is
+    // seeded from it when it has none yet, and Trivy then refreshes it when it is due.
+    if (!cachedDatabase().present() && suppliedDatabase(config.offlineDbPath()).present()) {
+      seedFromImage(config.offlineDbPath(), cache);
+    }
     if (config.dbRepository() != null) flags.addAll(List.of("--db-repository", config.dbRepository()));
     if (config.javaDbRepository() != null) {
       flags.addAll(List.of("--java-db-repository", config.javaDbRepository()));
@@ -308,7 +330,7 @@ public class TrivyScanService {
   }
 
   /** Copies the database supplied with the image into the cache when the cache has another one. */
-  private void seedFromImage(String offlineDbPath, Path cache) throws IOException {
+  static void seedFromImage(String offlineDbPath, Path cache) throws IOException {
     Path supplied = Path.of(offlineDbPath).resolve("db");
     Path suppliedDb = supplied.resolve("trivy.db");
     if (!Files.isRegularFile(suppliedDb)) {
@@ -384,6 +406,15 @@ public class TrivyScanService {
       result = result.replace(config.password(), "********");
     }
     return result;
+  }
+
+  private static boolean databaseUpdateFailed(String output) {
+    if (output == null) return false;
+    String text = output.toLowerCase(Locale.ROOT);
+    return text.contains("failed to download vulnerability db")
+        || text.contains("db download") || text.contains("failed to download")
+        || text.contains("vulnerability db") && (text.contains("dial tcp") || text.contains("no such host")
+            || text.contains("timeout") || text.contains("unauthorized") || text.contains("denied"));
   }
 
   private static boolean remoteResolutionFailed(String output) {

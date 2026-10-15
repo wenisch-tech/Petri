@@ -111,9 +111,21 @@ with `crane copy mirror.gcr.io/aquasec/trivy-db:2 registry.internal:5000/securit
 `oras cp`, `skopeo copy`) and repeat that on a schedule, since the upstream database is rebuilt
 every few hours.
 
-#### Supplying the database in the image
+#### The database in the image
 
-The `Dockerfile` can put the database into the image at `/opt/trivy-db`:
+The image build includes the vulnerability database at `/opt/trivy-db` (the `Dockerfile` argument
+`BAKE_TRIVY_DB` is `true` by default, and the release workflow sets it explicitly). Consequences:
+
+- A fresh installation scans immediately, without any registry access: the first scan installs the
+  supplied database into the scan cache.
+- An *online* instance then refreshes it when it is due. When that refresh fails (no route to the
+  registry, bad credentials) the scan still runs with the database that is there, and the result
+  says how old it is.
+- An *offline* instance (see above) never refreshes; it is exactly as current as the image.
+- The image is larger by the database (about 1.6 GB uncompressed). Build with `--build-arg BAKE_TRIVY_DB=false` for a slim
+  image that downloads it on first use.
+
+To build with a database from your own registry, or to rebuild an air-gapped image:
 
 ```bash
 docker build --build-arg BAKE_TRIVY_DB=true \
@@ -122,7 +134,7 @@ docker build --build-arg BAKE_TRIVY_DB=true \
   -t petri:airgapped .
 ```
 
-then set the mode to *Offline*. The database is large (about 1.6 GB uncompressed, several hundred
+and set the mode to *Offline* for an air-gapped installation. The database is large (about 1.6 GB uncompressed, several hundred
 MB compressed), and it is only as current as the build, so rebuild the image to refresh it. The
 directory can also be mounted or copied in by other means: it needs `db/trivy.db` and
 `db/metadata.json`, and its path is configurable (`PETRI_TRIVY_OFFLINE_DB_PATH`, default

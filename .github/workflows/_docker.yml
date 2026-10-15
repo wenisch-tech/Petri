@@ -64,6 +64,7 @@ jobs:
             BUILD_DATE=${{ steps.build_meta.outputs.date }}
             BUILD_VERSION=${{ inputs.version }}
             BUILD_REVISION=${{ github.sha }}
+            BAKE_TRIVY_DB=true
 
       - name: Make container check script executable
         run: chmod +x scripts/check-container-endpoints.sh
@@ -115,6 +116,7 @@ jobs:
               --scanners vuln \
               --vuln-type os,library \
               --severity CRITICAL,HIGH,MEDIUM \
+              --skip-dirs /opt/trivy-db \
               "$image"
             status=$?
             if [ "$status" -eq 0 ]; then
