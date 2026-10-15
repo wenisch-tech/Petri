@@ -1,6 +1,9 @@
 ---
 name: code-review
 description: Review a pull request for correctness, security, reliability and test coverage and say whether it is good to merge. Produces a structured review; nothing is published.
+context: pull_request
+produces: review
+requires: [read_repo]
 ---
 
 # Pull request code review

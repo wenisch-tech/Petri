@@ -22,6 +22,11 @@
 
 ## Automations
 
+- Actions are database rows (`automation_action`): built-ins are seeded, instance admins add custom
+  ones under Administration → Actions, and any action can be run once on a pull request or a branch
+  from the project's Automations tab.
+- Skills have a manifest (`extends`, `context`, `requires`, `produces`); `requires` decides the
+  tools an automation run gets. Admins can install prompt-only skills and export any skill.
 - Per-project, fixed automations started by a pull request poll or a cron schedule.
 - Three review automations on new pull requests of GitHub, GitLab and Forgejo projects, sharing the
   `code-review` method: *Code review* (review only, nothing posted), *Code review and comment*

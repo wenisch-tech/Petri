@@ -108,7 +108,7 @@ class CodeReviewAutomationTest {
         profile(AgentWorkflowRole.ORCHESTRATOR, ModelProvider.OLLAMA, modelId, "orchestrator-model")));
     AgentRunView created = mock(AgentRunView.class);
     when(created.id()).thenReturn(agentRunId);
-    when(agentRuns.createAutomationRun(any(), any(), any(), anyString(), any(), anyString()))
+    when(agentRuns.createAutomationRun(any(), any(), any(), anyString(), any(), anyString(), any()))
         .thenReturn(created);
   }
 
@@ -151,7 +151,7 @@ class CodeReviewAutomationTest {
     verify(worktrees).remove(worktreeId, projectId, "owner@petri.local");
     var command = org.mockito.ArgumentCaptor.forClass(CreateAgentRunCommand.class);
     verify(agentRuns).createAutomationRun(eq(worktreeId), command.capture(), eq(ownerId),
-        anyString(), eq(runId), org.mockito.ArgumentMatchers.contains("SKILL BODY"));
+        anyString(), eq(runId), org.mockito.ArgumentMatchers.contains("SKILL BODY"), any());
     assertThat(command.getValue().prompt()).contains("Add cache", "src/A.java", "diff");
   }
 
@@ -247,7 +247,7 @@ class CodeReviewAutomationTest {
     verify(runs).failed(eq(runId), org.mockito.ArgumentMatchers.contains("not allowed to write"));
     verify(runs).failed(eq(runId), org.mockito.ArgumentMatchers.contains("write:issue"));
     verify(mirrors, never()).synchronize(any(), anyString());
-    verify(agentRuns, never()).createAutomationRun(any(), any(), any(), anyString(), any(), anyString());
+    verify(agentRuns, never()).createAutomationRun(any(), any(), any(), anyString(), any(), anyString(), any());
   }
 
   @Test
@@ -288,7 +288,7 @@ class CodeReviewAutomationTest {
 
     var command = org.mockito.ArgumentCaptor.forClass(CreateAgentRunCommand.class);
     verify(agentRuns).createAutomationRun(eq(worktreeId), command.capture(), eq(ownerId),
-        anyString(), eq(runId), anyString());
+        anyString(), eq(runId), anyString(), any());
     assertThat(command.getValue().prompt()).contains("New commits were pushed",
         "[1] MAJOR src/A.java:4 - Race condition", "comparison.resolved", "+fixed line", "old11111");
   }
@@ -307,7 +307,7 @@ class CodeReviewAutomationTest {
     automation.execute(job);
     var command = org.mockito.ArgumentCaptor.forClass(CreateAgentRunCommand.class);
     verify(agentRuns).createAutomationRun(eq(worktreeId), command.capture(), eq(ownerId),
-        anyString(), eq(runId), anyString());
+        anyString(), eq(runId), anyString(), any());
     return command.getValue();
   }
 
@@ -420,7 +420,7 @@ class CodeReviewAutomationTest {
     verify(runs).posted(runId, "https://git.test/pull/7#c9");
     var command = org.mockito.ArgumentCaptor.forClass(CreateAgentRunCommand.class);
     verify(agentRuns).createAutomationRun(eq(worktreeId), command.capture(), eq(ownerId),
-        anyString(), eq(runId), org.mockito.ArgumentMatchers.contains("SCAN BODY"));
+        anyString(), eq(runId), org.mockito.ArgumentMatchers.contains("SCAN BODY"), any());
     assertThat(command.getValue().prompt()).contains("Scan this pull request", "src/A.java");
   }
 }

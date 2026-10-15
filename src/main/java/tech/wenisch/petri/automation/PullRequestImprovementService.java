@@ -61,6 +61,7 @@ public class PullRequestImprovementService {
   private final ProjectWorktreeService worktrees;
   private final WorkspaceGitService git;
   private final AgentWorkflowService workflows;
+  private final FixWorkflowDriver driver;
   private final AuditLogService audit;
   private final ObjectMapper json;
 
@@ -69,7 +70,7 @@ public class PullRequestImprovementService {
       AppUserRepository users, ProjectProviderSourceService sources,
       GitAccountConnectionService connections, ProjectMirrorService mirrors,
       ProjectWorktreeService worktrees, WorkspaceGitService git, AgentWorkflowService workflows,
-      AuditLogService audit, ObjectMapper json) {
+      AuditLogService audit, ObjectMapper json, FixWorkflowDriver driver) {
     this.runs = runs;
     this.runRepository = runRepository;
     this.projects = projects;
@@ -82,6 +83,7 @@ public class PullRequestImprovementService {
     this.workflows = workflows;
     this.audit = audit;
     this.json = json;
+    this.driver = driver;
   }
 
   /** Decides, before the review is posted, whether a fix will follow, and what to tell the author. */
@@ -219,31 +221,12 @@ public class PullRequestImprovementService {
       runs.failed(run.getId(), "The project or its owner no longer exists");
       return;
     }
-    if (run.getImproveWorkflowId() == null) {
-      runs.failed(run.getId(), "The improvement has no workflow");
-      return;
-    }
-    if (run.getUpdatedAt().isBefore(java.time.Instant.now().minus(MAX_DURATION))) {
-      workflows.cancel(run.getImproveWorkflowId(), owner.getId(), "automation");
-      attention(run, "The automatic fix took longer than " + MAX_DURATION.toHours() + " hours and was stopped.");
-      return;
-    }
-    AgentWorkflowView view = workflows.get(run.getImproveWorkflowId(), owner.getId());
-    AgentWorkflowStage stage = view.currentStage();
-    if (stage == AgentWorkflowStage.COMPLETED) {
-      finish(run, owner, project);
-    } else if (stage == AgentWorkflowStage.CANCELLED) {
-      attention(run, "The fix workflow was cancelled.");
-    } else if (stage == AgentWorkflowStage.HUMAN_HOLD || view.status() == AgentWorkflowStatus.HUMAN_HOLD) {
-      attention(run, "The fix workflow needs a person: "
-          + (view.holdReason() == null ? "it is on hold." : view.holdReason()));
-    } else if (stage == AgentWorkflowStage.WAITING_FOR_CLARIFICATION) {
-      attention(run, "The planner has questions that only a person can answer.");
-    } else if (stage == AgentWorkflowStage.WAITING_FOR_PLAN_APPROVAL && view.currentPlanRevision() != null) {
-      workflows.approvePlan(view.id(), view.currentPlanRevision(), owner.getId(), "automation");
-    } else if (stage == AgentWorkflowStage.ORCHESTRATOR_FINAL_REVIEW
-        && view.status() == AgentWorkflowStatus.WAITING_FOR_USER) {
-      workflows.approveFinal(view.id(), owner.getId(), "automation");
+    FixWorkflowDriver.Step step = driver.advance(
+        run.getImproveWorkflowId(), owner.getId(), run.getUpdatedAt(), MAX_DURATION);
+    switch (step.state()) {
+      case COMPLETED -> finish(run, owner, project);
+      case STOPPED -> attention(run, step.reason());
+      case WORKING -> { }
     }
   }
 

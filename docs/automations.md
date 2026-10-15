@@ -260,3 +260,13 @@ itself.
 - Audit events: `PROJECT_AUTOMATION_SAVED`, `AUTOMATION_RUN_STARTED`, `AUTOMATION_COMMENT_POSTED`,
   `AUTOMATION_REVIEW_COMPLETED`, `AUTOMATION_IMPROVEMENT_STARTED`, `AUTOMATION_IMPROVEMENT_PUSHED`,
   `AUTOMATION_IMPROVEMENT_FAILED`, `AUTOMATION_RUN_FAILED`.
+
+## Actions
+
+What an automation runs is an *action*, stored in the database (`automation_action`). The built-in
+actions are written at startup; instance admins add custom ones under **Administration → Actions**:
+a title, a skill, whether it works on a pull request or on a branch, and what it does with the
+result (post a comment, fix on the pull request's branch, or approve and merge a fix). A custom
+action is only a row: no code changes. Projects then bind an action to a trigger (pull request,
+schedule, manual) in their Automations tab. An action that an automation uses cannot be removed,
+and built-in actions cannot be changed.

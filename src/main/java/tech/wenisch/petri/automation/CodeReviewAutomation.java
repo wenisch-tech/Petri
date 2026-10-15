@@ -171,7 +171,10 @@ public class CodeReviewAutomation {
       AgentRunView created = agentRuns.createAutomationRun(
           worktreeId,
           command(job, owner.getId(), task),
-          owner.getId(), "automation:" + job.runId(), job.runId(), instructions);
+          owner.getId(), "automation:" + job.runId(), job.runId(), instructions,
+          tech.wenisch.petri.agent.tool.AutomationToolPolicy.forCapabilities(
+              tech.wenisch.petri.agent.skill.SkillComposer.requires(
+                  skills, job.kind().skill(), job.kind().baseSkill()), scan));
       runs.agentRun(job.runId(), created.id());
       AgentRunView finished = executor.execute(
           created.id(), worktreeId, owner.getId(), "automation:" + job.runId());
@@ -238,9 +241,8 @@ public class CodeReviewAutomation {
    * one method (the {@code code-review} skill) and differ in what happens with the result.
    */
   private String skillText(AutomationKind kind) {
-    String method = skills.load(kind.baseSkill()).content();
-    if (kind.baseSkill().equals(kind.skill())) return method;
-    return method + "\n\n---\n\n" + skills.load(kind.skill()).content();
+    return tech.wenisch.petri.agent.skill.SkillComposer.compose(
+        skills, kind.skill(), kind.baseSkill());
   }
 
   /** Posts a stored review to its pull request. Used for automatic posting and for approvals. */

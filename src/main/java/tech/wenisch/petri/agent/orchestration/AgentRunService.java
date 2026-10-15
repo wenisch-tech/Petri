@@ -135,10 +135,23 @@ public class AgentRunService {
       String auditActor,
       UUID automationRunId,
       String instructions) {
+    return createAutomationRun(
+        worktreeId, command, actorId, auditActor, automationRunId, instructions, null);
+  }
+
+  @Transactional
+  public AgentRunView createAutomationRun(
+      UUID worktreeId,
+      CreateAgentRunCommand command,
+      UUID actorId,
+      String auditActor,
+      UUID automationRunId,
+      String instructions,
+      java.util.Set<String> tools) {
     AgentRunView created = create(worktreeId, command, actorId, auditActor);
     AgentRun run = runs.findById(created.id())
         .orElseThrow(() -> new IllegalStateException("Created agent run disappeared"));
-    run.useAutomation(automationRunId, instructions);
+    run.useAutomation(automationRunId, instructions, tools);
     return created;
   }
 

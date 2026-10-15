@@ -17,8 +17,8 @@ public class ProjectAutomation {
   @Column(name = "project_id", nullable = false)
   private UUID projectId;
 
-  @Enumerated(EnumType.STRING)
-  @Column(nullable = false, length = 32)
+  @jakarta.persistence.Convert(converter = AutomationKindConverter.class)
+  @Column(nullable = false, length = 64)
   private AutomationKind kind;
 
   @Column(nullable = false)

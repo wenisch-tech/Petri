@@ -32,7 +32,8 @@ record AgentExecutionState(
     AgentWorkflowStage workflowPhase,
     String instructionsSnapshot,
     UUID automationRunId,
-    int repetitionStrikes) {
+    int repetitionStrikes,
+    java.util.Set<String> automationTools) {
 
   boolean terminal() {
     return switch (status) {

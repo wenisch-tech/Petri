@@ -1,6 +1,9 @@
 ---
 name: code-review-and-comment
 description: Review a pull request with the code-review method and publish the review as a comment on it.
+extends: code-review
+context: pull_request
+produces: review
 ---
 
 # Code review and comment

@@ -123,6 +123,9 @@ public class AutomationScheduler {
    */
   public UUID runOnDemand(
       UUID projectId, AutomationKind kind, long number, AutomationPostMode postMode) {
+    if (kind.branchBased()) {
+      throw new IllegalStateException(kind.title() + " works on a branch, not on a pull request");
+    }
     ProjectProviderSource source = sources.find(projectId);
     if (source == null) {
       throw new IllegalStateException(
@@ -148,6 +151,15 @@ public class AutomationScheduler {
     submit(new CodeReviewAutomation.Job(
         runId.get(), projectId, pr, postMode, provider, model, turns, kind, true));
     return runId.get();
+  }
+
+  /** Runs a branch-based action on a branch because a person asked for it. */
+  public UUID runOnBranch(
+      UUID projectId, AutomationKind kind, String branch, AutomationPostMode postMode) {
+    if (!kind.branchBased()) {
+      throw new IllegalStateException(kind.title() + " works on a pull request, not on a branch");
+    }
+    return fixes.start(projectId, kind, AutomationTrigger.MANUAL, branch, postMode);
   }
 
   /** Manual trigger from the UI; returns how many reviews were queued. */

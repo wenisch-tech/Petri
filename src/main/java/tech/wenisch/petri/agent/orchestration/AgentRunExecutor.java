@@ -275,7 +275,8 @@ public class AgentRunExecutor {
           : WorkflowPrompts.instructions(role, null);
     }
     var definitions = automation
-        ? tools.definitions(AutomationToolPolicy.allowed())
+        ? tools.definitions(state.automationTools() == null
+            ? AutomationToolPolicy.allowed() : state.automationTools())
         : role == null
             ? tools.definitions() : tools.definitions(AgentWorkflowToolPolicy.allowed(role));
     var extra = mcp.definitions(state);

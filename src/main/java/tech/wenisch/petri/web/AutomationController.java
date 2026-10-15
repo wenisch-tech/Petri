@@ -100,6 +100,39 @@ public class AutomationController {
     return "redirect:/projects/" + projectId + "/automations";
   }
 
+  /** Runs any action once on a pull request or on a branch, without a saved automation. */
+  @PostMapping("/projects/{projectId}/automations/run")
+  String run(
+      @PathVariable UUID projectId,
+      @RequestParam AutomationKind kind,
+      @RequestParam(required = false) Long pullRequest,
+      @RequestParam(required = false) String branch,
+      @RequestParam(defaultValue = "false") boolean completeWithoutApproval,
+      Principal principal,
+      RedirectAttributes redirect) {
+    access.requireProject(projectId, principal.getName());
+    try {
+      if (settings.unavailableReason(projectId) != null) {
+        throw new IllegalStateException(settings.unavailableReason(projectId));
+      }
+      var mode = completeWithoutApproval
+          ? tech.wenisch.petri.automation.AutomationPostMode.AUTO
+          : tech.wenisch.petri.automation.AutomationPostMode.DRAFT;
+      if (kind.branchBased()) {
+        scheduler.runOnBranch(projectId, kind, branch, mode);
+        redirect.addFlashAttribute("notice", kind.title() + " started");
+      } else {
+        if (pullRequest == null) throw new IllegalArgumentException("Enter a pull request number");
+        scheduler.runOnDemand(projectId, kind, pullRequest, mode);
+        redirect.addFlashAttribute("notice",
+            kind.title() + " of #" + pullRequest + " queued");
+      }
+    } catch (RuntimeException exception) {
+      redirect.addFlashAttribute("error", exception.getMessage());
+    }
+    return "redirect:/projects/" + projectId + "/automations";
+  }
+
   @PostMapping("/projects/{projectId}/automations/{automationId}/delete")
   String delete(
       @PathVariable UUID projectId, @PathVariable UUID automationId, Principal principal,

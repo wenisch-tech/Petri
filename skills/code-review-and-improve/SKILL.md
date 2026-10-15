@@ -1,6 +1,9 @@
 ---
 name: code-review-and-improve
 description: Review a pull request with the code-review method, publish the review as a comment and hand its findings to an implementation workflow that fixes them on the pull request's branch.
+extends: code-review
+context: pull_request
+produces: review
 ---
 
 # Code review and improve

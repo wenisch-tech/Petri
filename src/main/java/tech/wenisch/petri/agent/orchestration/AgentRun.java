@@ -41,6 +41,10 @@ class AgentRun {
   @Column(name = "instructions_snapshot", columnDefinition = "TEXT")
   private String instructionsSnapshot;
 
+  /** Comma-separated tools an automation run may use; empty means the policy's default set. */
+  @Column(name = "automation_tools", length = 500)
+  private String automationTools;
+
   /** Set for unattended automation runs; they get a restricted, read-only tool set. */
   @Column(name = "automation_run_id")
   private UUID automationRunId;
@@ -323,9 +327,16 @@ class AgentRun {
     this.providerInstanceId = instanceId;
   }
 
-  void useAutomation(UUID automationRunId, String instructions) {
+  void useAutomation(UUID automationRunId, String instructions, java.util.Set<String> tools) {
     this.automationRunId = automationRunId;
     this.instructionsSnapshot = instructions;
+    this.automationTools = tools == null || tools.isEmpty() ? null
+        : tools.stream().sorted().collect(java.util.stream.Collectors.joining(","));
+  }
+
+  java.util.Set<String> automationTools() {
+    return automationTools == null || automationTools.isBlank() ? null
+        : java.util.Set.of(automationTools.split(","));
   }
 
   UUID automationRunId() { return automationRunId; }

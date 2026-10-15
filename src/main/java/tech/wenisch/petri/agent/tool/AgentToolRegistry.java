@@ -39,7 +39,9 @@ public class AgentToolRegistry {
     AgentTool tool = tools.get(toolName);
     if (tool == null) throw new IllegalArgumentException("Unknown agent tool: " + toolName);
     if (context.automationRunId() != null) {
-      if (!AutomationToolPolicy.allowed().contains(toolName)) {
+      java.util.Set<String> granted = context.automationTools() == null
+          ? AutomationToolPolicy.allowed() : context.automationTools();
+      if (!AutomationToolPolicy.allowed().contains(toolName) || !granted.contains(toolName)) {
         throw new IllegalArgumentException("Tool is not permitted for automation runs");
       }
     } else if (AutomationToolPolicy.isAutomationOnly(toolName)) {

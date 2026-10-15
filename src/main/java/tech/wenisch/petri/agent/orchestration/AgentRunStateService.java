@@ -185,7 +185,7 @@ class AgentRunStateService {
     }
     ToolExecutionResult result = tools.execute(
         call.name(), new ToolExecutionContext(run.worktreeId(), run.id(), run.workflowRole(),
-            run.automationRunId()), arguments);
+            run.automationRunId(), run.automationTools()), arguments);
     String output;
     try {
       output = objectMapper.writeValueAsString(result.output());
@@ -381,7 +381,7 @@ class AgentRunStateService {
         run.modelTurnCount(), latestResponseId,
         List.copyOf(pending), List.copyOf(outputs), conversationForChat(run, history),
         run.workflowId(), run.workflowRole(), run.workflowPhase(), run.instructionsSnapshot(),
-        run.automationRunId(), LoopGuard.strikes(history));
+        run.automationRunId(), LoopGuard.strikes(history), run.automationTools());
   }
 
   private List<ModelConversationMessage> conversationForChat(AgentRun run, List<AgentTurn> current) {

@@ -34,6 +34,13 @@ class CodeReviewSkillTest {
       assertThat(skill.description()).isNotBlank();
       if (!kind.baseSkill().equals(kind.skill())) {
         assertThat(skill.content()).contains(kind.baseSkill());
+        // The manifest says what the enum used to: which skill this one builds on.
+        assertThat(skill.manifest().extendsSkill()).isEqualTo(kind.baseSkill());
+        assertThat(skill.manifest().context()).isNotBlank();
+        assertThat(skill.manifest().produces()).isNotBlank();
+        assertThat(tech.wenisch.petri.agent.skill.SkillComposer.compose(skills, kind.skill(), null))
+            .contains(skills.load(kind.baseSkill()).content().substring(
+                skills.load(kind.baseSkill()).content().indexOf("# ")));
         assertThat(skills.load(kind.baseSkill()).description()).isNotBlank();
       }
     }

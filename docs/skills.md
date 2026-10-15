@@ -3,6 +3,38 @@
 A skill is a Markdown playbook in `skills/<name>/SKILL.md` that agents follow. Agents list them with
 `list_skills` and load one with `load_skill`; automations load their skill themselves.
 
+## Skill format
+
+A skill is a directory with a `SKILL.md`: YAML front matter, then the instructions in Markdown.
+`name` (equal to the directory name) and `description` are required. Everything else is optional,
+so skills written without it keep working:
+
+```markdown
+---
+name: vulnerability-scan-and-comment
+description: Scan a pull request and publish the findings as a comment.
+extends: vulnerability-scan
+context: pull_request
+produces: vulnerability_report
+requires: [read_repo, scan]
+version: 1.0.0
+license: MIT
+---
+```
+
+| Field | Meaning |
+| --- | --- |
+| `extends` | The skill whose method this one builds on. Agents follow the base first, then the skill's own text; the front matter of each is not part of what the agent reads. Chains up to four deep; cycles are refused. |
+| `context` | What it works on: `pull_request`, `branch` or `any`. |
+| `produces` | How it ends: `review`, `vulnerability_report` or `none`. |
+| `requires` | The tool capabilities it needs (`read_repo`, `scan`, `write_proposal`, …). Declared for the importer and the permissions view; a skill can never widen the tools of the action that runs it. |
+| `version`, `license` | For skills you share. |
+
+Skills are looked up in the bundled directory (`PETRI_SKILLS_ROOT`, default `./skills`) and then in
+an installed directory (`PETRI_SKILLS_INSTALLED_ROOT`, for skills an administrator adds). A bundled
+skill always wins on a name clash, so an installed skill cannot replace a built-in one. A skill is
+instructions only: it contains no code and runs nothing by itself.
+
 ## Skills tab
 
 Each project has a **Skills** tab next to Automations. It lists every installed skill:
@@ -162,3 +194,21 @@ was added the binary was scanned with Trivy itself: no HIGH or CRITICAL findings
 170 MB to the image. A custom image without Trivy still works; the skill's Run button is disabled
 and says so. Set `PETRI_TRIVY_COMMAND` (property `petri.trivy.command`) to use a Trivy at another
 path.
+
+## Installing and exporting skills
+
+With `PETRI_SKILLS_INSTALLED_ROOT` set to a writable directory, instance admins can install a
+prompt-only skill under **Administration → Actions → Skills** by uploading or pasting its
+`SKILL.md`. The name comes from the front matter, a built-in skill of the same name cannot be
+replaced, and a skill that `extends` another must extend one that exists. Installed skills can be
+removed again; any skill can be exported as its `SKILL.md`. Installed skills are instructions only:
+they never change which tools an agent may use.
+
+## What a skill may use
+
+A skill's `requires` list is what its agent run is allowed to call: `read_repo` (list, read and
+search files, read the pull request) and `scan` (the vulnerability scanner). The tools of
+everything a skill `extends` are added, the result tool (`submit_review` or
+`submit_vulnerability_report`) is added for the kind of run, and nothing outside the automation
+policy is ever granted, whatever a skill asks for. A skill that asks for nothing still reads the
+repository. The grant is stored with the agent run, so a run keeps it if the skill changes.

@@ -23,7 +23,10 @@
         <h2 class="section-title">Automations</h2>
         <p class="section-description">Each automation starts a skill by itself, either on pull requests or on a schedule.</p>
       </div>
-      <button class="btn-primary" type="button" data-dialog-open="automation-new" th:disabled="${unavailable != null}"><i data-lucide="Plus"></i> Add automation</button>
+      <div class="flex gap-2">
+        <button class="btn-secondary" type="button" data-dialog-open="automation-run" th:disabled="${unavailable != null}"><i data-lucide="Play"></i> Run once</button>
+        <button class="btn-primary" type="button" data-dialog-open="automation-new" th:disabled="${unavailable != null}"><i data-lucide="Plus"></i> Add automation</button>
+      </div>
     </div>
     <p th:if="${unavailable != null}" class="hint mb-3" th:text="${unavailable}">Unavailable.</p>
 
@@ -127,6 +130,40 @@
   </section>
 </main>
 
+<dialog id="automation-run" class="dialog">
+  <form class="dialog-panel" method="post" th:action="@{/projects/{id}/automations/run(id=${project.id})}"
+        th:attr="data-branch-kinds=${#strings.listJoin(kinds.?[branchBased].![name()], ',')},x-data=|{ kind: '${kinds[0].name()}' }|">
+    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+    <div class="dialog-header">
+      <div><h2>Run once</h2><p>Start an action now, without saving an automation.</p></div>
+      <button class="icon-button" formmethod="dialog" formnovalidate aria-label="Close"><i data-lucide="X"></i></button>
+    </div>
+    <div class="dialog-body">
+      <div>
+        <label class="label" for="run-kind">Action</label>
+        <select id="run-kind" class="field" name="kind" x-model="kind">
+          <option th:each="value : ${kinds}" th:value="${value}" th:text="${value.title}">CODE_REVIEW</option>
+        </select>
+      </div>
+      <div x-show="!$root.dataset.branchKinds.split(',').includes(kind)">
+        <label class="label" for="run-pr">Pull request number</label>
+        <input id="run-pr" class="field" type="number" min="1" name="pullRequest" inputmode="numeric">
+      </div>
+      <div x-show="$root.dataset.branchKinds.split(',').includes(kind)" x-cloak>
+        <label class="label" for="run-branch">Branch <span class="label-optional">(optional)</span></label>
+        <input id="run-branch" class="field font-mono text-sm" name="branch" th:placeholder="${project.defaultBranch}" autocomplete="off" spellcheck="false">
+      </div>
+      <label class="check" x-show="kind !== 'CODE_REVIEW'" x-cloak>
+        <input type="checkbox" name="completeWithoutApproval" value="true">
+        <span>Complete without approval</span>
+      </label>
+    </div>
+    <div class="dialog-footer">
+      <button class="btn-secondary" formmethod="dialog" formnovalidate>Cancel</button>
+      <button class="btn-primary" type="submit"><i data-lucide="Play"></i> Run</button>
+    </div>
+  </form>
+</dialog>
 <dialog id="automation-new" class="dialog dialog-wide">
   <th:block th:replace="~{fragments/automation :: automationForm(null, 'new')}"></th:block>
 </dialog>

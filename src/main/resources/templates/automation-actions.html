@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head('Actions')}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('admin')}"></header>
+<div th:replace="~{fragments/layout :: adminBanner}"></div>
+
+<div class="area-layout">
+  <nav th:replace="~{fragments/layout :: adminNav('actions')}"></nav>
+
+  <main class="min-w-0">
+    <div class="page-header">
+      <div>
+        <h1 class="page-title">Actions</h1>
+        <p class="page-description">What an automation can run. An action is a skill plus how it works: on a pull request or on a branch, what it produces and what it does with the result. Projects then bind an action to a trigger in their Automations tab.</p>
+      </div>
+    </div>
+
+    <div th:replace="~{fragments/layout :: alert('success', ${notice})}"></div>
+    <div th:replace="~{fragments/layout :: alert('error', ${error})}"></div>
+
+    <section class="mb-8">
+      <div class="section-header"><div><h2 class="section-title">Skills</h2></div></div>
+      <div class="card card-body space-y-4">
+        <p class="text-sm text-ink-300">A skill is a <code>SKILL.md</code> with front matter (name, description, optional <code>extends</code>). Installed skills are prompt-only: they add instructions and never widen what the agent may do. A built-in skill cannot be replaced.</p>
+        <p th:unless="${installable}" class="hint">Installing is off. Set <code>PETRI_SKILLS_INSTALLED_ROOT</code> to a writable directory to enable it.</p>
+        <form th:if="${installable}" method="post" action="/admin/actions/skills" enctype="multipart/form-data" class="space-y-3">
+          <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+          <div>
+            <label class="label" for="skill-file">SKILL.md file</label>
+            <input id="skill-file" class="field" type="file" name="file" accept=".md,text/markdown,text/plain">
+          </div>
+          <div>
+            <label class="label" for="skill-content">Or paste it <span class="label-optional">(optional)</span></label>
+            <textarea id="skill-content" class="field font-mono text-sm" name="content" rows="6" spellcheck="false"></textarea>
+          </div>
+          <button class="btn-primary" type="submit"><i data-lucide="Plus"></i> Install skill</button>
+        </form>
+        <ul class="divide-y divide-ink-700/70 text-sm">
+          <li th:each="skill : ${skills}" class="flex items-center justify-between gap-3 py-2">
+            <span class="min-w-0"><span class="font-mono" th:text="${skill.name}">code-review</span>
+              <span class="text-ink-500" th:text="${skill.description}">Description</span></span>
+            <span class="flex shrink-0 items-center gap-2">
+              <a class="btn-secondary" th:href="@{/admin/actions/skills/{n}/export(n=${skill.name})}">Export</a>
+              <form method="post" action="/admin/actions/skills/remove"
+                    th:if="${#lists.contains(installed.![name], skill.name)}">
+                <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+                <input type="hidden" name="name" th:value="${skill.name}">
+                <button class="icon-button" type="submit" aria-label="Remove skill"><i data-lucide="Trash2"></i></button>
+              </form>
+            </span>
+          </li>
+        </ul>
+      </div>
+    </section>
+
+    <section class="mb-8">
+      <div class="section-header"><div><h2 class="section-title">Add a custom action</h2></div></div>
+      <form class="card card-body space-y-4" method="post" action="/admin/actions"
+            x-data="{ context: 'PULL_REQUEST' }">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        <div class="form-grid">
+          <div>
+            <label class="label" for="action-title">Title</label>
+            <input id="action-title" class="field" name="title" maxlength="120" required autocomplete="off">
+          </div>
+          <div>
+            <label class="label" for="action-skill">Skill</label>
+            <select id="action-skill" class="field" name="skill" required>
+              <option th:each="skill : ${skills}" th:value="${skill.name}" th:text="${skill.name}">code-review</option>
+            </select>
+          </div>
+        </div>
+        <div>
+          <label class="label" for="action-description">Description <span class="label-optional">(optional)</span></label>
+          <input id="action-description" class="field" name="description" maxlength="1000" autocomplete="off">
+        </div>
+        <div>
+          <label class="label" for="action-context">Works on</label>
+          <select id="action-context" class="field" name="context" x-model="context">
+            <option value="PULL_REQUEST">A pull request (review, optionally improve it)</option>
+            <option value="BRANCH">A branch (opens a fix pull request, on a schedule)</option>
+          </select>
+        </div>
+        <div class="space-y-2">
+          <label class="check" x-show="context === 'PULL_REQUEST'">
+            <input type="checkbox" name="vulnerability" value="true"><span>Reports vulnerabilities instead of a code review</span>
+          </label>
+          <label class="check" x-show="context === 'PULL_REQUEST'">
+            <input type="checkbox" name="comments" value="true"><span>Posts its result as a comment on the pull request</span>
+          </label>
+          <label class="check" x-show="context === 'PULL_REQUEST'">
+            <input type="checkbox" name="improves" value="true"><span>Fixes what it found on the pull request's branch</span>
+          </label>
+          <label class="check" x-show="context === 'BRANCH'" x-cloak>
+            <input type="checkbox" name="merges" value="true"><span>Approves and merges the fix once its checks pass</span>
+          </label>
+        </div>
+        <div><button class="btn-primary" type="submit"><i data-lucide="Plus"></i> Add action</button></div>
+      </form>
+    </section>
+
+    <section>
+      <div class="section-header"><div><h2 class="section-title">Available actions</h2></div></div>
+      <div class="card divide-y divide-ink-700/70">
+        <div th:each="action : ${actions}" class="flex items-start justify-between gap-4 p-4">
+          <div class="min-w-0">
+            <p class="font-medium text-ink-100">
+              <span th:text="${action.title}">Code review</span>
+              <span class="badge" th:text="${action.builtin} ? 'Built-in' : 'Custom'">Built-in</span>
+            </p>
+            <p class="text-sm text-ink-300" th:text="${action.description}">Description</p>
+            <p class="mt-1 text-xs text-ink-500">
+              Skill <span class="font-mono" th:text="${action.skill}">code-review</span> ·
+              <span th:text="${action.branchBased} ? 'Branch' : 'Pull request'">Pull request</span>
+            </p>
+          </div>
+          <form th:unless="${action.builtin}" method="post" action="/admin/actions/delete">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <input type="hidden" name="id" th:value="${action.id}">
+            <button class="icon-button" type="submit" aria-label="Remove action"><i data-lucide="Trash2"></i></button>
+          </form>
+        </div>
+      </div>
+    </section>
+  </main>
+</div>
+</body>
+</html>

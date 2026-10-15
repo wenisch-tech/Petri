@@ -29,9 +29,10 @@ class AutomationSchedulerTest {
   private final ProjectProviderSourceService sources = mock(ProjectProviderSourceService.class);
   private final GitAccountConnectionService connections = mock(GitAccountConnectionService.class);
   private final CodeReviewAutomation review = mock(CodeReviewAutomation.class);
+  private final VulnerabilityFixService fixes = mock(VulnerabilityFixService.class);
   private final AutomationScheduler scheduler = new AutomationScheduler(
       automations, settings, runs, sources, connections, review,
-      mock(PullRequestImprovementService.class), mock(VulnerabilityFixService.class), true, 5, 2);
+      mock(PullRequestImprovementService.class), fixes, true, 5, 2);
   private final UUID projectId = UUID.randomUUID();
 
   private static PullRequestRef pull(long number, boolean draft) {
@@ -132,5 +133,18 @@ class AutomationSchedulerTest {
         .isThrownBy(() -> scheduler.retry(automation, draft)).withMessageContaining("draft");
     verify(review, never()).execute(any());
   }
-}
 
+  @Test
+  void aBranchActionRunsOnABranchAndIsRefusedOnAPullRequest() {
+    scheduler.runOnBranch(projectId, AutomationKind.VULNERABILITY_FIX_PR, "release", AutomationPostMode.AUTO);
+
+    verify(fixes).start(projectId, AutomationKind.VULNERABILITY_FIX_PR, AutomationTrigger.MANUAL,
+        "release", AutomationPostMode.AUTO);
+    org.assertj.core.api.Assertions.assertThatIllegalStateException().isThrownBy(
+        () -> scheduler.runOnDemand(projectId, AutomationKind.VULNERABILITY_FIX_PR, 3,
+            AutomationPostMode.AUTO)).withMessageContaining("branch");
+    org.assertj.core.api.Assertions.assertThatIllegalStateException().isThrownBy(
+        () -> scheduler.runOnBranch(projectId, AutomationKind.CODE_REVIEW, "main",
+            AutomationPostMode.AUTO)).withMessageContaining("pull request");
+  }
+}
