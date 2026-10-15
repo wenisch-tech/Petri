@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.18.0 - 2026-10-15
+
+## [0.18.0](https://github.com/wenisch-tech/Petri/compare/v0.17.0...v0.18.0) (2026-10-15)
+
+
+### Features
+
+* package vuln.db for offline use during CI ([df9d704](https://github.com/wenisch-tech/Petri/commit/df9d70490b94a4076e9c332aabab8a3618902a96))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.18.0
+
+
 ## v0.17.0 - 2026-10-15
 
 ## [0.17.0](https://github.com/wenisch-tech/Petri/compare/v0.16.1...v0.17.0) (2026-10-15)
