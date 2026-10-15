@@ -51,8 +51,24 @@ PostgreSQL, and works with OpenAI, LiteLLM, Ollama and any OpenAI-compatible end
 - **MCP servers:** each user connects their own remote MCP servers (bearer, headers or OAuth 2.1
   sign-in) and switches them on per project; read-only tools run directly, other tool calls wait for
   approval in the review tray.
-- **Skills:** lazy-loaded, operator-controlled `SKILL.md` workflows that add guidance but never
-  capabilities.
+- **Skills:** lazy-loaded `SKILL.md` workflows with a manifest (`extends`, `requires`, `produces`).
+  Skills add guidance and can only narrow, never widen, the tools a run gets. Admins can install
+  prompt-only skills and export any skill.
+
+### Automations and vulnerability management
+
+- **Actions** (code review, review and comment, review and improve, vulnerability scan / comment /
+  improve, vulnerability fix PR, fix and merge) are database rows; admins add custom actions in the
+  UI with no code change.
+- **Triggers:** new or updated pull requests, a cron schedule, or **Run once** on a pull request or
+  a branch. Unattended runs can plan, approve, implement, commit, push and open a pull request, with
+  the final gate left to a person unless you allow completion without approval.
+- **Reviews** are posted to GitHub, GitLab and Forgejo pull requests, or held as drafts until a
+  person approves them.
+- **Vulnerability scanning with Trivy:** dependencies are resolved first (Maven, Gradle, npm, Cargo,
+  Composer, Bundler), findings are stored per branch and shown on a sortable **Vulnerabilities**
+  tab with per-finding and **Fix all** buttons. An offline database can ship in the image, with
+  admin-configurable registry and credentials.
 
 ### Development environment
 
@@ -96,6 +112,15 @@ PostgreSQL, and works with OpenAI, LiteLLM, Ollama and any OpenAI-compatible end
 - Tests run only as fixed Maven/Gradle commands, by default in **rootless Podman** with an immutable root
   filesystem, dropped capabilities, resource limits and project-isolated caches. An opt-in `local`
   executor (the Alpine image default) runs them in Petri's own container instead.
+
+### Package sources and private registries
+
+- **Remotes per package manager:** apk, Maven, Gradle, npm, pip, Go, Cargo, Composer, RubyGems and
+  NuGet, plus dedicated **docker.io** and **ghcr.io** mirrors for Podman and Trivy.
+- Instance defaults with **per-project overrides**, replace-or-add semantics, encrypted credentials,
+  a **Test** button per remote, an extra **CA bundle** and an "ignore TLS errors" switch.
+- Petri writes each tool's native configuration into the run's private home (and mounts it into
+  Podman containers); credentials never appear on command lines.
 
 ### Platform and security
 
@@ -156,6 +181,8 @@ helm install petri wenisch-tech/petri -n petri --create-namespace
 | `PETRI_SECRETS_MASTER_KEY` / `PETRI_SECRETS_MASTER_KEY_FILE` | Base64 32-byte key, or key file location (generated at `./data/petri-master.key` if unset). **Back it up**; losing it makes stored secrets unrecoverable. |
 | `PETRI_WORKSPACE_ROOT` | Mirrors and worktrees (default `./data/workspaces`). |
 | `PETRI_SKILLS_ROOT` | Skill directory (default `./skills`). |
+| `PETRI_SKILLS_INSTALLED_ROOT` | Writable directory for skills installed by admins (installing is off when unset). |
+| `PETRI_PACKAGES_PKI_DIR` | Generated CA bundle and trust store for package sources (default `./data/pki`). |
 | `SPRING_DATASOURCE_*` | Switch from embedded H2 (`./data`) to PostgreSQL. |
 
 The full reference, including limits, timeouts and OIDC setup, is in
@@ -175,6 +202,10 @@ The full reference, including limits, timeouts and OIDC setup, is in
 | Model loop and approvals | [Agent workflow](docs/agent-workflow.md) |
 | Multi-agent gates | [Gated orchestration](docs/gated-orchestration.md) |
 | Test isolation | [Test sandboxes](docs/test-sandboxes.md) |
+| Skills and actions | [Skills](docs/skills.md) |
+| Automations and vulnerability fixes | [Automations](docs/automations.md) |
+| MCP servers | [MCP](docs/mcp.md) |
+| Package sources, CA, mirrors | [Configuration](docs/configuration.md#package-sources) |
 | API reference | [HTTP API](docs/http-api.md) |
 | Trust boundaries | [Security model](docs/security.md) |
 | Build and project layout | [Development](docs/development.md) |
