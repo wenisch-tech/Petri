@@ -14,6 +14,13 @@ apk add --no-cache git bash curl ca-certificates
 # least these versions (and to anything newer the repository offers) in this layer.
 apk add --no-cache --upgrade 'libpng>=1.6.59-r0' 'zlib>=1.3.2-r1'
 
+# libexpat: security floor 2.9.0-r0 (several CVEs are fixed in it). Alpine v3.24 still ships
+# 2.8.5-r0 in its own repositories, so this one library comes from edge/main until v3.24 has caught
+# up. libexpat depends on musl only and keeps its soname (libexpat.so.1), so it is a drop-in
+# replacement for the packages that link against it (git, curl). The constraint makes the
+# step a no-op once the base image already carries a fixed version.
+apk add --no-cache --repository https://dl-cdn.alpinelinux.org/alpine/edge/main 'libexpat>=2.9.0-r0'
+
 PETRI_UID="${PETRI_UID:-65532}"
 addgroup -g "$PETRI_UID" -S petri
 adduser -u "$PETRI_UID" -S -G petri -h /home/petri -s /bin/bash petri
