@@ -38,6 +38,7 @@ public class AutomationScheduler {
   private final GitAccountConnectionService connections;
   private final CodeReviewAutomation review;
   private final PullRequestImprovementService improvements;
+  private final VulnerabilityFixService fixes;
   private final boolean enabled;
   private final int maxPerPoll;
   private final Semaphore concurrency;
@@ -49,7 +50,7 @@ public class AutomationScheduler {
       ProjectAutomationRepository automations, AutomationSettingsService settings,
       AutomationRunService runs, ProjectProviderSourceService sources,
       GitAccountConnectionService connections, CodeReviewAutomation review,
-      PullRequestImprovementService improvements,
+      PullRequestImprovementService improvements, VulnerabilityFixService fixes,
       @Value("${petri.automation.enabled:true}") boolean enabled,
       @Value("${petri.automation.max-per-poll:5}") int maxPerPoll,
       @Value("${petri.automation.max-concurrent:2}") int maxConcurrent) {
@@ -60,6 +61,7 @@ public class AutomationScheduler {
     this.connections = connections;
     this.review = review;
     this.improvements = improvements;
+    this.fixes = fixes;
     this.enabled = enabled;
     this.maxPerPoll = Math.max(1, maxPerPoll);
     this.concurrency = new Semaphore(Math.max(1, maxConcurrent));
@@ -86,6 +88,7 @@ public class AutomationScheduler {
     if (!enabled) return;
     try {
       improvements.advanceAll();
+      fixes.advanceAll();
     } catch (RuntimeException exception) {
       log.warn("Advancing improvements failed: {}", exception.getMessage());
     }
@@ -157,6 +160,10 @@ public class AutomationScheduler {
    * now: when it received new commits since, the new head is reviewed instead.
    */
   public void retry(ProjectAutomation automation, AutomationRun failed) {
+    if (automation.getKind().branchBased()) {
+      fixes.start(automation);
+      return;
+    }
     UUID projectId = automation.getProjectId();
     ProjectProviderSource source = sources.find(projectId);
     if (source == null) {
@@ -183,6 +190,11 @@ public class AutomationScheduler {
   }
 
   private int queue(ProjectAutomation automation, boolean includeAll, boolean retryFailed) {
+    if (automation.getKind().branchBased()) {
+      // Works on its selected branch, not on pull requests: one run per start.
+      fixes.start(automation);
+      return 1;
+    }
     UUID projectId = automation.getProjectId();
     ProjectProviderSource source = sources.find(projectId);
     if (source == null) return 0;

@@ -71,7 +71,8 @@ public class ProjectRepositoryViewsController {
     model.addAttribute("petriRuns", petriRuns);
     model.addAttribute("petriRunsLive", petriRuns.stream().anyMatch(run ->
         run.getStatus().active() || run.getStatus() == AutomationRunStatus.IMPROVING));
-    model.addAttribute("petriKinds", AutomationKind.values());
+    model.addAttribute("petriKinds", java.util.Arrays.stream(AutomationKind.values())
+        .filter(kind -> !kind.branchBased()).toList());
     return embedded ? "project-pull-request :: content" : "project-pull-request";
   }
 

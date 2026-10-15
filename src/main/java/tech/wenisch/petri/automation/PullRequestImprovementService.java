@@ -202,7 +202,7 @@ public class PullRequestImprovementService {
   /** Moves every unattended improvement one step forward. Called by the scheduler. */
   public void advanceAll() {
     for (AutomationRun run : runRepository.findByStatus(AutomationRunStatus.IMPROVING)) {
-      if (run.getPostMode() != AutomationPostMode.AUTO) continue;
+      if (run.getPostMode() != AutomationPostMode.AUTO || run.getKind().branchBased()) continue;
       try {
         advance(run);
       } catch (RuntimeException exception) {

@@ -62,6 +62,16 @@ public class AutomationSettingsService {
       UUID projectId, UUID automationId, AutomationKind kind, boolean enabled,
       AutomationTrigger trigger, String cronExpression, boolean completeWithoutApproval,
       UUID providerInstanceId, String model, int maxModelTurns, String actorEmail) {
+    return save(projectId, automationId, kind, enabled, trigger, cronExpression,
+        completeWithoutApproval, providerInstanceId, model, maxModelTurns, null, actorEmail);
+  }
+
+  /** @param branch the branch a branch-based automation works on; ignored by the others */
+  @Transactional
+  public ProjectAutomation save(
+      UUID projectId, UUID automationId, AutomationKind kind, boolean enabled,
+      AutomationTrigger trigger, String cronExpression, boolean completeWithoutApproval,
+      UUID providerInstanceId, String model, int maxModelTurns, String branch, String actorEmail) {
     Project project = access.requireProject(projectId, actorEmail);
     ProjectAutomation existing = automationId == null ? null : require(projectId, automationId, actorEmail);
     AutomationKind effectiveKind = existing != null ? existing.getKind() : kind;
@@ -71,6 +81,14 @@ public class AutomationSettingsService {
     }
     if (maxModelTurns < 1 || maxModelTurns > 50) {
       throw new IllegalArgumentException("Maximum model turns must be between 1 and 50");
+    }
+    String safeBranch = null;
+    if (effectiveKind.branchBased()) {
+      safeBranch = branch == null || branch.isBlank() ? project.getDefaultBranch() : branch.strip();
+      if (safeBranch == null || safeBranch.length() > 255
+          || !safeBranch.matches("[A-Za-z0-9._/\\-]+") || safeBranch.contains("..")) {
+        throw new IllegalArgumentException("Choose the branch the fixes are opened against");
+      }
     }
     String cron = trigger == AutomationTrigger.CRON ? normalizeCron(cronExpression) : null;
     String safeModel = model == null || model.isBlank() ? null : model.strip();
@@ -85,6 +103,7 @@ public class AutomationSettingsService {
             .noneMatch(value -> value.id().equals(providerInstanceId))) {
       throw new IllegalArgumentException("The selected model provider is not usable");
     }
+    final String selectedBranch = safeBranch;
     automations.findByProjectIdAndKindAndTrigger(projectId, effectiveKind, trigger)
         .filter(other -> existing == null || !other.getId().equals(existing.getId()))
         .ifPresent(other -> {
@@ -99,6 +118,7 @@ public class AutomationSettingsService {
         ? AutomationPostMode.AUTO : AutomationPostMode.DRAFT;
     automation.update(enabled, trigger, cron, postMode, providerInstanceId, safeModel,
         maxModelTurns, now);
+    automation.branch(selectedBranch);
     automations.save(automation);
     audit.record(actorEmail, "PROJECT_AUTOMATION_SAVED", "PROJECT", projectId,
         effectiveKind.title() + (enabled ? " enabled (" + trigger + ", "

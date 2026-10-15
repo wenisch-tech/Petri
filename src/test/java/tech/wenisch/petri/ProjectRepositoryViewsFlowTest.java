@@ -119,6 +119,8 @@ class ProjectRepositoryViewsFlowTest {
         .andExpect(content().string(org.hamcrest.Matchers.containsString("State today")))
         .andExpect(content().string(org.hamcrest.Matchers.containsString("Target state")))
         .andExpect(content().string(org.hamcrest.Matchers.containsString("https://nvd.nist.gov/vuln/detail/CVE-2026-1")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("data-fix-prompt")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("Fix all (1)")))
         .andExpect(content().string(org.hamcrest.Matchers.containsString("CVE-2026-1 in lib")))
         .andExpect(content().string(org.hamcrest.Matchers.containsString("Maven was not resolved")));
     mockMvc.perform(get("/projects/{id}/automations/runs/{run}/follow", project.getId(), UUID.randomUUID())

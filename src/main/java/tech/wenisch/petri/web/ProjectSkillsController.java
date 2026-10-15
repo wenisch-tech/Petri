@@ -42,9 +42,15 @@ public class ProjectSkillsController {
       Model model) {
     model.addAttribute("project", access.requireProject(projectId, principal.getName()));
     Set<String> pullRequestSkills = Arrays.stream(AutomationKind.values())
-        .map(AutomationKind::skill).collect(Collectors.toSet());
+        .filter(kind -> !kind.branchBased()).map(AutomationKind::skill).collect(Collectors.toSet());
+    Set<String> branchSkills = Arrays.stream(AutomationKind.values())
+        .filter(AutomationKind::branchBased).map(AutomationKind::skill).collect(Collectors.toSet());
+    branchSkills.add(AutomationKind.FIX_METHOD_SKILL);
     List<SkillCard> cards = skills.list().stream().map(skill -> card(skill, pullRequestSkills)).toList();
-    model.addAttribute("runnable", cards.stream().filter(card -> !card.pullRequest()).toList());
+    List<SkillCard> branchCards = cards.stream().filter(card -> branchSkills.contains(card.name())).toList();
+    model.addAttribute("branchSkills", branchCards);
+    model.addAttribute("runnable", cards.stream()
+        .filter(card -> !card.pullRequest() && !branchSkills.contains(card.name())).toList());
     model.addAttribute("pullRequestSkills", cards.stream().filter(SkillCard::pullRequest).toList());
     return embedded ? "project-skills :: content" : "project-skills";
   }

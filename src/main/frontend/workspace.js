@@ -325,10 +325,11 @@ function initializeEmbeddedViews(state) {
 
   // The skills page runs a skill as a new direct chat in the chat panel.
   content.addEventListener('click', event => {
-    const button = event.target.closest?.('[data-run-skill]');
+    const fix = event.target.closest?.('[data-fix-prompt]');
+    const button = fix || event.target.closest?.('[data-run-skill]');
     if (!button) return;
     button.disabled = true;
-    runSkill(state, button.dataset.runSkill)
+    (fix ? startAgent(state, fix.dataset.fixPrompt) : runSkill(state, button.dataset.runSkill))
       .catch(error => content.prepend(el('div', 'alert alert-error', error.message)))
       .finally(() => { if (button.isConnected) button.disabled = false; });
   });
@@ -466,13 +467,14 @@ function followAutomation(state, projectId, runId) {
   tick();
 }
 
-// Starts a skill as a new direct chat in the chat panel on the right, using the selected model.
-async function runSkill(state, name) {
+// Starts a task as a new direct chat in the chat panel on the right, using the selected model.
+// Without an open branch the chat has no worktree to work in, so the default branch is opened first
+// and the task resumes on the page that opens next.
+async function startAgent(state, prompt, turns = 99) {
   if (!state.worktreeId) {
-    // The chat belongs to a worktree. Open the default branch first and run the skill there.
     const branch = state.root.dataset.defaultBranch;
     if (!branch) throw new Error('Open a branch first: the chat works on a branch of this project.');
-    try { sessionStorage.setItem(`petri:run-skill:${state.projectId}`, name); } catch { /* optional */ }
+    try { sessionStorage.setItem(`petri:start-agent:${state.projectId}`, JSON.stringify({ prompt, turns })); } catch { /* optional */ }
     // Without a branch the model picker is not wired up yet, so keep the user's choice for the page
     // that opens next, which starts the chat with the project's saved model.
     const picker = state.root.querySelector('[data-model-selector]');
@@ -504,11 +506,15 @@ async function runSkill(state, name) {
   selector.dispatchEvent(new Event('change'));
   mode.value = 'DIRECT';
   mode.dispatchEvent(new Event('change'));
-  // Skills take more steps than a chat message: they read files, scan and then report.
-  state.skillTurns = 99;
-  input.value = `Use the load_skill tool to load the skill "${name}" and follow it for this project.`;
+  // Tasks take more steps than a chat message: they read files, scan, change and verify.
+  state.skillTurns = turns;
+  input.value = prompt;
   input.dispatchEvent(new Event('input'));
   send.click();
+}
+
+function runSkill(state, name) {
+  return startAgent(state, `Use the load_skill tool to load the skill "${name}" and follow it for this project.`);
 }
 
 function initializePanelToggles(state) {
@@ -1928,10 +1934,11 @@ function initializeChat(state) {
   state.scroller = scroller;
   // A skill started from a project without an open branch resumes here, after the branch opened.
   try {
-    const pending = sessionStorage.getItem(`petri:run-skill:${state.projectId}`);
+    const pending = sessionStorage.getItem(`petri:start-agent:${state.projectId}`);
     if (pending) {
-      sessionStorage.removeItem(`petri:run-skill:${state.projectId}`);
-      setTimeout(() => runSkill(state, pending).catch(() => {}), 800);
+      sessionStorage.removeItem(`petri:start-agent:${state.projectId}`);
+      const task = JSON.parse(pending);
+      setTimeout(() => startAgent(state, task.prompt, task.turns).catch(() => {}), 800);
     }
   } catch { /* optional */ }
   state.chatMode = selector.selectedOptions[0]?.dataset.mode || 'ORCHESTRATED';

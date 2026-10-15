@@ -73,6 +73,18 @@ public class AutomationRunService {
     }
   }
 
+  /** Registers a run of a branch-based automation; every run is new. */
+  @Transactional
+  public UUID registerBranchRun(
+      UUID projectId, AutomationKind kind, AutomationTrigger trigger, String branch,
+      AutomationPostMode postMode) {
+    String reference = branch.length() > 64 ? branch.substring(0, 64) : branch;
+    AutomationRun run = runs.saveAndFlush(new AutomationRun(
+        UUID.randomUUID(), projectId, kind, trigger, reference, "run-" + System.currentTimeMillis(),
+        kind.title() + " on " + branch, null, postMode, Instant.now()));
+    return run.getId();
+  }
+
   /**
    * A queued or running review of this head that nobody is working on any more (the process was
    * restarted), so it should be picked up again even though the pull request itself did not change.
@@ -134,6 +146,17 @@ public class AutomationRunService {
   @Transactional
   public void improving(UUID id, UUID workflowId, UUID worktreeId) {
     load(id).improving(workflowId, worktreeId, Instant.now());
+  }
+
+  @Transactional
+  public void phase(UUID id, String phase) { load(id).phase(phase, Instant.now()); }
+
+  @Transactional
+  public void fixBranch(UUID id, String branch) { load(id).fixBranch(branch, Instant.now()); }
+
+  @Transactional
+  public void fixPullRequest(UUID id, long number, String url) {
+    load(id).fixPullRequest(number, url, Instant.now());
   }
 
   @Transactional

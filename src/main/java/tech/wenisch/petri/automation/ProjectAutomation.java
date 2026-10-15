@@ -35,6 +35,10 @@ public class ProjectAutomation {
   @Column(name = "post_mode", nullable = false, length = 16)
   private AutomationPostMode postMode;
 
+  /** The branch a branch-based automation scans and opens its pull request into. */
+  @Column(length = 255)
+  private String branch;
+
   @Column(name = "provider_instance_id")
   private UUID providerInstanceId;
 
@@ -88,6 +92,8 @@ public class ProjectAutomation {
     this.updatedAt = now;
   }
 
+  public void branch(String branch) { this.branch = branch; }
+
   public void polled(Instant now) { this.lastPolledAt = now; }
 
   public void cronFired(Instant now) { this.lastCronAt = now; }
@@ -98,6 +104,7 @@ public class ProjectAutomation {
   public boolean isEnabled() { return enabled; }
   public AutomationTrigger getTrigger() { return trigger; }
   public String getCronExpression() { return cronExpression; }
+  public String getBranch() { return branch; }
   public AutomationPostMode getPostMode() { return postMode; }
   public UUID getProviderInstanceId() { return providerInstanceId; }
   public String getModel() { return model; }

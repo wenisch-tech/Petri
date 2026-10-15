@@ -67,6 +67,16 @@ public class AutomationRun {
   @Column(length = 1000)
   private String note;
 
+  /** FIX (the workflow works), CHECKS (the pull request waits for its checks). */
+  @Column(length = 24)
+  private String phase;
+
+  @Column(name = "fix_branch", length = 255)
+  private String fixBranch;
+
+  @Column(name = "fix_pr_number")
+  private Long fixPrNumber;
+
   @Column(name = "improve_workflow_id")
   private UUID improveWorkflowId;
 
@@ -152,6 +162,22 @@ public class AutomationRun {
     transition(AutomationRunStatus.IMPROVING, null, now);
   }
 
+  void phase(String phase, Instant now) {
+    this.phase = phase;
+    this.updatedAt = now;
+  }
+
+  void fixBranch(String branch, Instant now) {
+    this.fixBranch = branch;
+    this.updatedAt = now;
+  }
+
+  void fixPullRequest(long number, String url, Instant now) {
+    this.fixPrNumber = number;
+    this.commentUrl = url;
+    this.updatedAt = now;
+  }
+
   void note(String note, Instant now) {
     this.note = note == null ? null : truncate(note, 1000);
     this.updatedAt = now;
@@ -188,6 +214,9 @@ public class AutomationRun {
   public String getCommentUrl() { return commentUrl; }
   public String getError() { return error; }
   public String getNote() { return note; }
+  public String getPhase() { return phase; }
+  public String getFixBranch() { return fixBranch; }
+  public Long getFixPrNumber() { return fixPrNumber; }
   public UUID getImproveWorkflowId() { return improveWorkflowId; }
   public UUID getImproveWorktreeId() { return improveWorktreeId; }
   public AutomationPostMode getPostMode() { return postMode; }

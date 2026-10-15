@@ -29,6 +29,9 @@ removing one keeps its past runs.
 | **Vulnerability scan and comment** | The same scan, posted as a comment (table and details) on the pull request. | `skills/vulnerability-scan-and-comment/SKILL.md` |
 | **Vulnerability scan and improve** | Scan, post the comment, then fix the findings (for example upgrade dependencies) on the pull request's own branch. | `skills/vulnerability-scan-and-improve/SKILL.md` |
 
+| **Vulnerability fix pull request** | On a schedule, scan a selected branch, fix the findings on a new branch and open a pull request into it. | `skills/vulnerability-fix-pr/SKILL.md` |
+| **Vulnerability fix and merge** | The same, then approve and merge the pull request once its checks pass and a rescan confirms the fixes. | `skills/vulnerability-fix-and-merge/SKILL.md` |
+
 The three code review automations share the review method of the `code-review` skill, the three
 vulnerability scans the method of the `vulnerability-scan` skill; the other skills of each family
 only add to it. Every kind is configured like any other (trigger, approval, model) and can be
@@ -61,6 +64,37 @@ continues exactly as *Code review and improve* below: the `CRITICAL`, `HIGH` and
 are the task of a workflow on the pull request's branch, `LOW` and `INFO` are left alone, there are
 at most two automatic rounds, and a pushed fix is scanned again as a new commit. The target state of
 each finding is what the workflow is asked to reach. A scan is never compared with an earlier one.
+
+### Vulnerability fix pull request and merge
+
+These two work on a **branch you select** (the *Branch* field, default the project's default
+branch), not on somebody's pull request, so they only run on a schedule or with **Run now**. Each
+run:
+
+1. synchronises the mirror and scans the branch with Trivy (dependencies resolved first, `CRITICAL`,
+   `HIGH` and `MEDIUM` findings that have a fix, plus secrets). Nothing fixable ends the run as
+   *Reviewed*, and no branch is created;
+2. skips the run while an earlier `petri/vulnerability-fix-…` pull request into that branch is
+   still open;
+3. creates the branch `petri/vulnerability-fix-<date>-<time>` from it and starts the implementation
+   workflow there with the findings as its task (the `vulnerability-fix` method plus the
+   automation's own skill);
+4. with **Complete without approval** ticked, approves the workflow's plan and final gate itself,
+   commits and pushes the result, rescans it and opens a pull request into the selected branch with
+   the rescan result in its description. Unticked, the workflow waits for its normal approvals in
+   the workspace and nothing is pushed by itself.
+
+*Vulnerability fix and merge* then waits for the pull request's checks (up to 45 minutes; a repository
+without checks is treated as passing after three minutes). When they pass **and** the rescan shows no
+`CRITICAL` or `HIGH` finding left, it approves the pull request and merges it. A failed check, a
+rescan that does not confirm the fixes, an incomplete scan or a merge the provider refuses leave the
+pull request open for a person, with the reason on the run. Approval is best effort: providers do
+not let an account approve its own pull request, in which case the merge decides.
+
+The token of the connected Git account needs write access and permission to open and merge pull
+requests, and branch protection on the selected branch still applies to the merge. The fix workflow
+stops, and nothing is pushed, when its planner has questions, it goes on hold, or it takes longer than
+three hours.
 
 ### Code review and improve
 

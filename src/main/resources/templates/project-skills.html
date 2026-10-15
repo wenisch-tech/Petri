@@ -35,6 +35,20 @@
     </ul>
   </section>
 
+  <section class="mb-8" th:unless="${#lists.isEmpty(branchSkills)}">
+    <h2 class="section-title mb-1">Branch skills</h2>
+    <p class="mb-3 text-sm text-ink-500">These guide the fix workflow of the <em>Vulnerability fix</em> automations: on a schedule they scan a selected branch, fix the findings on a new branch and open a pull request. Set them up under <strong>Automations</strong>; the fix buttons on the Vulnerabilities tab use the same method in the workspace.</p>
+    <ul class="list">
+      <li th:each="skill : ${branchSkills}" class="list-row">
+        <span class="list-icon"><i data-lucide="GitBranch"></i></span>
+        <div class="list-main">
+          <span class="list-title" th:text="${skill.name}">vulnerability-fix-pr</span>
+          <span class="mt-0.5 block text-sm text-ink-500" th:text="${skill.description}">What it does</span>
+        </div>
+      </li>
+    </ul>
+  </section>
+
   <section th:unless="${#lists.isEmpty(pullRequestSkills)}">
     <h2 class="section-title mb-1">Pull request skills</h2>
     <p class="mb-3 text-sm text-ink-500">These work on one pull request. Start them from the pull request with <strong>Let Petri work on this</strong>, or let an automation run them.</p>

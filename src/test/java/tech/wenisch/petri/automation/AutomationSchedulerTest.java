@@ -31,7 +31,7 @@ class AutomationSchedulerTest {
   private final CodeReviewAutomation review = mock(CodeReviewAutomation.class);
   private final AutomationScheduler scheduler = new AutomationScheduler(
       automations, settings, runs, sources, connections, review,
-      mock(PullRequestImprovementService.class), true, 5, 2);
+      mock(PullRequestImprovementService.class), mock(VulnerabilityFixService.class), true, 5, 2);
   private final UUID projectId = UUID.randomUUID();
 
   private static PullRequestRef pull(long number, boolean draft) {

@@ -30,11 +30,22 @@ public enum AutomationKind {
       "Vulnerability scan and improve",
       "Scans pull requests with Trivy, comments, then lets a workflow fix the findings (for example "
           + "upgrade dependencies) and pushes the result to the pull request's branch.",
-      "vulnerability-scan-and-improve", "vulnerability-scan", true, true);
+      "vulnerability-scan-and-improve", "vulnerability-scan", true, true),
+  VULNERABILITY_FIX_PR(
+      "Vulnerability fix pull request",
+      "Scans a selected branch for vulnerabilities, fixes them on a new branch and opens a pull "
+          + "request into the selected branch.",
+      "vulnerability-fix-pr", "vulnerability-fix", true, true),
+  VULNERABILITY_FIX_AND_MERGE(
+      "Vulnerability fix and merge",
+      "The same as the fix pull request, then approves it and merges it once the checks pass and "
+          + "a rescan confirms the fixes.",
+      "vulnerability-fix-and-merge", "vulnerability-fix", true, true);
 
   /** The skill that carries the review method; the other review skills only add to it. */
   public static final String REVIEW_METHOD_SKILL = "code-review";
   public static final String VULNERABILITY_METHOD_SKILL = "vulnerability-scan";
+  public static final String FIX_METHOD_SKILL = "vulnerability-fix";
 
   private final String title;
   private final String description;
@@ -65,8 +76,17 @@ public enum AutomationKind {
   public boolean improves() { return improves; }
   /** Whether this kind scans for vulnerabilities rather than reviewing the change. */
   public boolean vulnerability() { return VULNERABILITY_METHOD_SKILL.equals(baseSkill); }
+  /**
+   * Whether this kind works on a selected branch (it scans, fixes and opens its own pull request)
+   * rather than on a pull request somebody else opened. Such a kind only runs on a schedule or on
+   * demand.
+   */
+  public boolean branchBased() { return FIX_METHOD_SKILL.equals(baseSkill); }
+  /** Whether merging the opened pull request is part of the automation. */
+  public boolean merges() { return this == VULNERABILITY_FIX_AND_MERGE; }
   public Set<AutomationTrigger> triggers() {
-    return Set.of(AutomationTrigger.PULL_REQUEST, AutomationTrigger.CRON);
+    return branchBased() ? Set.of(AutomationTrigger.CRON)
+        : Set.of(AutomationTrigger.PULL_REQUEST, AutomationTrigger.CRON);
   }
   public String getTitle() { return title; }
   public String getDescription() { return description; }

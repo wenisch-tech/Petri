@@ -85,11 +85,13 @@ public class AutomationController {
       @RequestParam(required = false) UUID providerInstanceId,
       @RequestParam(required = false) String model,
       @RequestParam(defaultValue = "20") int maxModelTurns,
+      @RequestParam(required = false) String branch,
       Principal principal,
       RedirectAttributes redirect) {
     try {
       settings.save(projectId, automationId, kind, enabled, trigger, cronExpression,
-          completeWithoutApproval, providerInstanceId, model, maxModelTurns, principal.getName());
+          completeWithoutApproval, providerInstanceId, model, maxModelTurns, branch,
+          principal.getName());
       redirect.addFlashAttribute("notice",
           automationId == null ? "Automation added" : "Automation saved");
     } catch (IllegalArgumentException exception) {

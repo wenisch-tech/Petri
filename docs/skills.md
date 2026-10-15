@@ -84,6 +84,20 @@ are configured under Automations or started on one pull request with **Let Petri
 [automations](automations.md#vulnerability-scans). The first of them is also what the Skills tab
 runs, on the open branch.
 
+### Fixing findings
+
+Every finding on the Vulnerabilities tab has a **Fix** button, and the page has **Fix all**, which
+covers the `CRITICAL`, `HIGH` and `MEDIUM` findings. Each starts a new direct chat in the chat panel
+with a task that carries the finding (where, state today, target state, details) and the
+`vulnerability-fix` skill: the agent upgrades or changes the smallest thing that clears it,
+proposes the changes for your approval like any other change, runs the tests, rescans and reports.
+The fix happens on the branch that is open in the workspace.
+
+The same method drives two automations that need no chat: *Vulnerability fix pull request* and
+*Vulnerability fix and merge* scan a selected branch on a schedule, fix the findings on a new branch
+and open a pull request into it (the second also approves and merges it once the checks pass); see
+[automations](automations.md#vulnerability-fix-pull-request-and-merge).
+
 ### Where the database comes from
 
 Under **Administration > Vulnerability scanning** an administrator chooses the source of the

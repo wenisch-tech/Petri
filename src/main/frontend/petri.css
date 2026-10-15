@@ -329,10 +329,13 @@
   .tab-badge.is-clean { @apply bg-good-500/15 text-good-500; }
   .vuln-table td, .vuln-table th { @apply align-top; }
   .vuln-table { table-layout: fixed; width: 100%; min-width: 52rem; }
-  .vuln-table th:nth-child(1) { width: 25%; }
-  .vuln-table th:nth-child(2) { width: 14%; }
-  .vuln-table th:nth-child(3) { width: 9%; }
-  .vuln-table th:nth-child(4), .vuln-table th:nth-child(5), .vuln-table th:nth-child(6) { width: 17.3%; }
+  .vuln-table th:nth-child(1) { width: 22%; }
+  .vuln-table th:nth-child(2) { width: 12%; }
+  .vuln-table th:nth-child(3) { width: 8%; }
+  .vuln-table th:nth-child(4) { width: 15%; }
+  .vuln-table th:nth-child(5), .vuln-table th:nth-child(6) { width: 16%; }
+  .vuln-table th:nth-child(7) { width: 5.5rem; }
+  .vuln-action { @apply text-right; }
   .vuln-table td { @apply break-words; }
   .vuln-ids { @apply flex flex-wrap content-start gap-1; }
   .vuln-cell { @apply text-sm leading-5; }

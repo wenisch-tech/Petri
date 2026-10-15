@@ -65,13 +65,16 @@
       <li th:each="run : ${runs}" class="list-row">
         <div class="list-main">
           <span class="list-title">
-            <a th:if="${run.webUrl != null}" th:href="${run.webUrl}" target="_blank" rel="noopener noreferrer" th:text="|#${run.externalRef} ${run.title}|">#1 Title</a>
-            <span th:unless="${run.webUrl != null}" th:text="|#${run.externalRef} ${run.title}|">#1 Title</span>
+            <a th:if="${run.webUrl != null and !run.kind.branchBased}" th:href="${run.webUrl}" target="_blank" rel="noopener noreferrer" th:text="|#${run.externalRef} ${run.title}|">#1 Title</a>
+            <span th:if="${run.webUrl == null and !run.kind.branchBased}" th:text="|#${run.externalRef} ${run.title}|">#1 Title</span>
+            <span th:if="${run.kind.branchBased}" th:text="${run.title}">Vulnerability fix pull request on main</span>
           </span>
           <span class="list-meta">
-            <code th:text="${#strings.substring(run.headSha, 0, run.headSha.length() < 8 ? run.headSha.length() : 8)}">abc1234</code>
+            <code th:if="${!run.kind.branchBased}" th:text="${#strings.substring(run.headSha, 0, run.headSha.length() < 8 ? run.headSha.length() : 8)}">abc1234</code>
+            <code th:if="${run.kind.branchBased and run.fixBranch != null}" th:text="${run.fixBranch}">petri/vulnerability-fix-20261015-120000</code>
             <span th:text="${#temporals.format(run.createdAt, 'yyyy-MM-dd HH:mm')}">date</span>
-            <a th:if="${run.commentUrl != null}" th:href="${run.commentUrl}" target="_blank" rel="noopener noreferrer">Comment</a>
+            <a th:if="${run.commentUrl != null}" th:href="${run.commentUrl}" target="_blank" rel="noopener noreferrer"
+               th:text="${run.kind.branchBased} ? |Pull request #${run.fixPrNumber}| : 'Comment'">Comment</a>
             <span th:if="${run.error != null}" th:text="${run.error}">error</span>
             <span th:if="${run.note != null}" th:text="${run.note}">note</span>
             <a th:if="${run.improveWorktreeId != null and run.status.name() != 'POSTED'}"

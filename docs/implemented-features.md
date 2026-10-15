@@ -30,6 +30,9 @@
 - Skills tab per project: lists skills and runs them as a direct chat in the workspace.
 - Vulnerability scan automations on pull requests: scan only, scan and comment, scan and improve
   (a workflow fixes the findings and pushes to the branch), mirroring the code review ones.
+- Fix buttons per finding and for all findings on the Vulnerabilities tab, and the *Vulnerability fix
+  pull request* / *fix and merge* automations that scan a selected branch, fix it on a new branch
+  and open (and optionally merge) a pull request.
 - `vulnerability-scan` skill and `scan_vulnerabilities` tool: Trivy scan of dependencies, secrets and
   misconfigurations, confined to the worktree; Trivy ships in the image.
 - Administration > Vulnerability scanning: choose the scanner's database source (a registry of your

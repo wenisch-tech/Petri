@@ -19,6 +19,10 @@
       </p>
     </div>
     <div class="page-actions" th:if="${report != null}">
+      <button type="button" class="btn-primary" th:if="${fixAllPrompt != null}" th:attr="data-fix-prompt=${fixAllPrompt}"
+              title="Starts an agent in the chat that fixes every critical, high and medium finding">
+        <i data-lucide="Wrench"></i> <span th:text="|Fix all (${fixableCount})|">Fix all</span>
+      </button>
       <button type="button" class="btn-secondary" data-run-skill="vulnerability-scan">
         <i data-lucide="Play"></i> Scan again
       </button>
@@ -88,6 +92,7 @@
               <th scope="col" :aria-sort="aria('where')"><button type="button" class="vuln-sort" @click="sort('where')">Where <span x-text="mark('where')"></span></button></th>
               <th scope="col" :aria-sort="aria('today')"><button type="button" class="vuln-sort" @click="sort('today')">State today <span x-text="mark('today')"></span></button></th>
               <th scope="col" :aria-sort="aria('target')"><button type="button" class="vuln-sort" @click="sort('target')">Target state <span x-text="mark('target')"></span></button></th>
+              <th scope="col"><span class="sr-only">Fix</span></th>
             </tr>
           </thead>
           <tbody x-ref="body">
@@ -107,6 +112,11 @@
               <td class="vuln-cell font-mono text-xs"><div class="line-clamp-3" th:title="${finding.where}" th:text="${finding.where}">where</div></td>
               <td class="vuln-cell"><div class="line-clamp-3" th:title="${finding.stateToday}" th:text="${finding.stateToday}">today</div></td>
               <td class="vuln-cell"><div class="line-clamp-3" th:title="${finding.targetState}" th:text="${finding.targetState}">target</div></td>
+              <td class="vuln-action">
+                <button type="button" class="btn-secondary !min-h-8 !px-2.5 text-xs" th:attr="data-fix-prompt=${fixPrompts[row.index]},aria-label=|Fix ${finding.title}|">
+                  <i data-lucide="Wrench"></i> Fix
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>
@@ -121,7 +131,10 @@
           <header class="mb-2 flex flex-wrap items-center gap-2">
             <span class="vuln-severity" th:classappend="|is-${#strings.toLowerCase(finding.severity)}|"
                   th:text="${#strings.capitalize(#strings.toLowerCase(finding.severity))}">High</span>
-            <h3 class="text-base font-semibold text-ink-100" th:text="|${row.count}. ${finding.title}|">Title</h3>
+            <h3 class="min-w-0 flex-1 text-base font-semibold text-ink-100" th:text="|${row.count}. ${finding.title}|">Title</h3>
+            <button type="button" class="btn-secondary !min-h-8 !px-2.5 text-xs" th:attr="data-fix-prompt=${fixPrompts[row.index]}">
+              <i data-lucide="Wrench"></i> Fix
+            </button>
           </header>
           <p class="mb-2 flex flex-wrap items-center gap-1.5 text-xs text-ink-500">
             <th:block th:each="link : ${finding.identifierLinks}">
