@@ -35,7 +35,7 @@ final class GitlabProviderAdapter extends AbstractHttpGitProviderAdapter {
   public ProviderRepositoryPage repositories(
       GitProviderInstance instance, String token, GitConnectionAuthMethod method,
       int page, int pageSize, String query) {
-    String resource = "/projects?membership=true&order_by=path_with_namespace"
+    String resource = "/projects?membership=true&order_by=path"
         + "&sort=asc&per_page=" + pageSize + "&page=" + page;
     if (query != null && !query.isBlank()) resource += "&search=" + encode(query.trim());
     JsonNode nodes = get(instance, resource, token, method);

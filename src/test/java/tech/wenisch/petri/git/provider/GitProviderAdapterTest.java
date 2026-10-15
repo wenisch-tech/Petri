@@ -97,6 +97,10 @@ class GitProviderAdapterTest {
     });
     assertThat(request.get().uri().getRawQuery()).contains("membership=true")
         .contains("search=service+%26+api")
+        // GitLab rejects any other sort key of /projects with HTTP 400 "order_by does not have a
+        // valid value"; path_with_namespace is not one of them.
+        .contains("order_by=path&")
+        .doesNotContain("path_with_namespace")
         .doesNotContain("simple=true");
   }
 
