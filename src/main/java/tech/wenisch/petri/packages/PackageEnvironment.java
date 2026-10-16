@@ -44,11 +44,34 @@ public class PackageEnvironment {
     PackageRemoteService.Effective effective = remotes.effective(projectId);
     if (effective.empty()) return Map.of();
     try {
+      presentGoCertificates(effective, home);
       return PackageToolConfig.render(effective.remotes(), effective.trust(), home).env();
     } catch (IOException exception) {
       throw new IllegalStateException(
           "Could not prepare the package remote settings: " + exception.getMessage(), exception);
     }
+  }
+
+  /**
+   * Go has no way to skip certificate verification for its proxy, so for an insecure Go remote the
+   * certificates the server presents are written to {@code home} to be trusted explicitly.
+   */
+  private static void presentGoCertificates(PackageRemoteService.Effective effective, Path home)
+      throws IOException {
+    Path file = home.resolve(PackageToolConfig.PRESENTED_CERTIFICATES);
+    Files.deleteIfExists(file);
+    StringBuilder pem = new StringBuilder();
+    for (var remote : effective.remotes()) {
+      if (remote.ecosystem() != PackageEcosystem.GO
+          || !(remote.insecure() || effective.trust().ignoreTlsErrors())) continue;
+      try {
+        String chain = PackageServerCertificates.fetch(remote.url());
+        if (chain != null) pem.append(chain);
+      } catch (IOException exception) {
+        // unreachable now: Go will report the connection error itself
+      }
+    }
+    if (!pem.isEmpty()) Files.writeString(file, pem.toString());
   }
 
   /**
@@ -107,6 +130,7 @@ public class PackageEnvironment {
     try {
       PackageToolConfig.Trust inside = effective.trust().pemBundle() == null
           ? effective.trust() : effective.trust().relocated(CONTAINER_PKI);
+      presentGoCertificates(effective, home);
       var rendered = PackageToolConfig.render(effective.remotes(), inside, home, CONTAINER_FILES);
       Map<String, String> containerEnv = new LinkedHashMap<>(rendered.env());
       Map<String, String> hostEnv = new LinkedHashMap<>();

@@ -24,6 +24,8 @@ import java.util.Set;
 public final class PackageToolConfig {
   /** Where tool files are looked for by the tools that read them (differs inside a container). */
   static final String FILES_DIRECTORY = ".petri";
+  /** Certificates insecure Go proxies present, written before rendering (see PackageEnvironment). */
+  static final String PRESENTED_CERTIFICATES = "go-presented-ca.pem";
 
   private PackageToolConfig() {}
 
@@ -271,7 +273,7 @@ public final class PackageToolConfig {
     if (mine.isEmpty()) return;
     List<String> proxies = new ArrayList<>();
     StringBuilder netrc = new StringBuilder();
-    Set<String> insecureHosts = new LinkedHashSet<>();
+    boolean insecure = false;
     boolean keepDirect = true;
     for (Remote remote : mine) {
       proxies.add(trimSlash(remote.url()));
@@ -281,7 +283,7 @@ public final class PackageToolConfig {
         netrc.append("machine ").append(uri.getHost()).append(" login ").append(remote.username())
             .append(" password ").append(remote.password()).append('\n');
       }
-      if (remote.insecure() || trust.ignoreTlsErrors()) insecureHosts.add(uri.getHost());
+      if (remote.insecure() || trust.ignoreTlsErrors()) insecure = true;
     }
     if (keepDirect) proxies.add("direct");
     env.put("GOPROXY", String.join(",", proxies));
@@ -289,7 +291,19 @@ public final class PackageToolConfig {
       write(out.file(".netrc"), netrc.toString());
       env.put("NETRC", out.ref(".netrc"));
     }
-    if (!insecureHosts.isEmpty()) env.put("GOINSECURE", String.join(",", insecureHosts));
+    // Go cannot skip certificate verification for a proxy (GOINSECURE matches module paths, not
+    // proxy hosts), so the certificates the proxy presents are trusted explicitly. They were
+    // fetched by PackageEnvironment; Go still reads the system roots next to SSL_CERT_FILE.
+    Path presented = out.file(PRESENTED_CERTIFICATES);
+    if (insecure && Files.isRegularFile(presented)) {
+      StringBuilder bundle = new StringBuilder();
+      if (trust.pemBundle() != null && Files.isRegularFile(trust.pemBundle())) {
+        bundle.append(Files.readString(trust.pemBundle())).append('\n');
+      }
+      bundle.append(Files.readString(presented));
+      write(out.file("go-ca.pem"), bundle.toString());
+      env.put("SSL_CERT_FILE", out.ref("go-ca.pem"));
+    }
   }
 
   // ---- Cargo -------------------------------------------------------------------------------

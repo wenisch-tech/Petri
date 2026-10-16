@@ -145,7 +145,7 @@ public class PackageRemoteTester {
   }
 
   /** Accepts every certificate and host name; only used when the administrator chose that. */
-  private static final class TrustAll extends X509ExtendedTrustManager {
+  static final class TrustAll extends X509ExtendedTrustManager {
     @Override public void checkClientTrusted(X509Certificate[] chain, String type) {}
     @Override public void checkServerTrusted(X509Certificate[] chain, String type) {}
     @Override public void checkClientTrusted(X509Certificate[] chain, String type, java.net.Socket socket) {}
