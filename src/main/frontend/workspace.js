@@ -2018,6 +2018,12 @@ function initializeChat(state) {
   };
   form.addEventListener('submit', event => { event.preventDefault(); sendMessage(); });
   sendButton.addEventListener('click', sendMessage);
+  // Enter sends, Shift+Enter inserts a line break (not while an IME composition is being confirmed).
+  input.addEventListener('keydown', event => {
+    if (event.key !== 'Enter' || event.shiftKey || event.isComposing || event.keyCode === 229) return;
+    event.preventDefault();
+    sendMessage();
+  });
   mode.addEventListener('change', () => {
     if (!state.chatId) state.chatMode = mode.value;
     chat.querySelector('[data-chat-automation-group]').hidden = state.chatMode !== 'DIRECT';
