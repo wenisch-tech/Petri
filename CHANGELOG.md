@@ -1,5 +1,25 @@
 # Changelog
 
+## v0.21.0 - 2026-10-16
+
+## [0.21.0](https://github.com/wenisch-tech/Petri/compare/v0.20.0...v0.21.0) (2026-10-16)
+
+
+### Features
+
+* Allow admin to configure global mcp ([75ec67c](https://github.com/wenisch-tech/Petri/commit/75ec67c60712293dcf7ab2d7e7c6e66a85b2efe2))
+* allow sending message via enter ([cf73446](https://github.com/wenisch-tech/Petri/commit/cf734463359a03eef977c3e7ec49dd54461ed279))
+
+
+### Bug Fixes
+
+* further improvements handling GUI update after approval ([ece82c2](https://github.com/wenisch-tech/Petri/commit/ece82c286c1c268fa3a7208654821f13fd5bdf73))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.21.0
+
+
 ## v0.20.0 - 2026-10-16
 
 ## [0.20.0](https://github.com/wenisch-tech/Petri/compare/v0.19.0...v0.20.0) (2026-10-16)
