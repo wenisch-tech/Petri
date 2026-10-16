@@ -272,7 +272,7 @@ public class WorkspaceCollaborationController {
     if (test.status() == tech.wenisch.petri.agent.run.TestRunStatus.PROPOSED) {
       tests.approve(testRunId, actor.getEmail());
     }
-    tests.execute(testRunId);
+    tests.executeAsync(testRunId, () -> queue.approvalsChanged(chatId));
     queue.approvalsChanged(chatId);
     return snapshotFor(chatId, actor);
   }
@@ -296,7 +296,7 @@ public class WorkspaceCollaborationController {
     if (value.status() == tech.wenisch.petri.agent.run.PackageInstallStatus.PROPOSED) {
       packageInstalls.approve(installId, actor.getEmail());
     }
-    packageInstalls.execute(installId);
+    packageInstalls.executeAsync(installId, () -> queue.approvalsChanged(chatId));
     queue.approvalsChanged(chatId);
     return snapshotFor(chatId, actor);
   }
@@ -319,7 +319,7 @@ public class WorkspaceCollaborationController {
     if (terminal.get(commandId).status() == tech.wenisch.petri.agent.run.TerminalCommandStatus.PROPOSED) {
       terminal.approve(commandId, actor.getEmail());
     }
-    terminal.execute(commandId);
+    terminal.executeAsync(commandId, () -> queue.approvalsChanged(chatId));
     queue.approvalsChanged(chatId);
     return snapshotFor(chatId, actor);
   }

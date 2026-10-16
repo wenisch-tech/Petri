@@ -12,6 +12,8 @@ import tech.wenisch.petri.workspace.WorktreeLocator;
 /** Terminal commands for the workspace panel and for the agent's {@code run_command} tool. */
 @Service
 public class TerminalService {
+  private final java.util.concurrent.ExecutorService background =
+      java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
   private static final Logger log = LoggerFactory.getLogger(TerminalService.class);
   static final int MAX_COMMAND_LENGTH = 4000;
 
@@ -64,7 +66,24 @@ public class TerminalService {
   }
 
   public TerminalCommandView execute(UUID id) {
+    return run(state.start(id));
+  }
+
+  /** Marks the command as running and returns at once; it continues in the background. */
+  public TerminalCommandView executeAsync(UUID id, Runnable done) {
     TerminalCommandView started = state.start(id);
+    background.submit(() -> {
+      try {
+        run(started);
+      } finally {
+        done.run();
+      }
+    });
+    return started;
+  }
+
+  private TerminalCommandView run(TerminalCommandView started) {
+    UUID id = started.id();
     try {
       java.nio.file.Path worktree = worktrees.requireActiveWorktree(started.worktreeId());
       UUID projectId = projectWorktrees.get(started.worktreeId()).projectId();

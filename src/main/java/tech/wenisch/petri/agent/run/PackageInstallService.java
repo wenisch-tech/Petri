@@ -27,6 +27,8 @@ public class PackageInstallService {
   private static final int MAX_OUTPUT_BYTES = 200_000;
   private static final String SCRIPTLESS_MARKER = ".petri-noscripts";
 
+  private final java.util.concurrent.ExecutorService background =
+      java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
   private final PackageInstallStateService state;
   private final LocalToolchain toolchain;
   private final WorkspacePaths paths;
@@ -93,7 +95,27 @@ public class PackageInstallService {
 
   /** Installs an approved request. Never holds a database transaction while apk runs. */
   public PackageInstallView execute(UUID id) {
+    return run(state.start(id));
+  }
+
+  /**
+   * Marks the install as running and returns at once; the install itself continues in the
+   * background, so the caller can show its progress. {@code done} runs when it has finished.
+   */
+  public PackageInstallView executeAsync(UUID id, Runnable done) {
     PackageInstallView started = state.start(id);
+    background.submit(() -> {
+      try {
+        run(started);
+      } finally {
+        done.run();
+      }
+    });
+    return started;
+  }
+
+  private PackageInstallView run(PackageInstallView started) {
+    UUID id = started.id();
     try {
       UUID projectId = worktrees.get(started.worktreeId()).projectId();
       Map<String, String> variables = profiles.environmentFor(projectId);

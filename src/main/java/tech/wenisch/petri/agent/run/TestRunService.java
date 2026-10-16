@@ -11,6 +11,8 @@ import tech.wenisch.petri.git.ProjectWorktreeService;
 
 @Service
 public class TestRunService {
+  private final java.util.concurrent.ExecutorService background =
+      java.util.concurrent.Executors.newVirtualThreadPerTaskExecutor();
   private static final Logger log = LoggerFactory.getLogger(TestRunService.class);
 
   private final WorktreeLocator worktrees;
@@ -75,7 +77,22 @@ public class TestRunService {
   }
 
   public TestRunView execute(UUID testRunId) {
+    return run(testRunId, state.claim(testRunId));
+  }
+
+  /** Claims the test run and returns at once; it continues in the background. */
+  public void executeAsync(UUID testRunId, Runnable done) {
     TestRunClaim claim = state.claim(testRunId);
+    background.submit(() -> {
+      try {
+        run(testRunId, claim);
+      } finally {
+        done.run();
+      }
+    });
+  }
+
+  private TestRunView run(UUID testRunId, TestRunClaim claim) {
     TestCommandResult result;
     try {
       Path worktree = worktrees.requireActiveWorktree(claim.worktreeId());
