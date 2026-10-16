@@ -602,6 +602,7 @@ function initializeTerminal(state) {
     toggle?.classList.toggle('is-active', open);
     try { localStorage.setItem('petri:workspace:terminal:open', open ? '1' : '0'); } catch {}
     if (open) { requestAnimationFrame(() => input.focus()); }
+    if (state.snapshot) { renderSnapshot(state, state.snapshot, true); }
     requestAnimationFrame(() => layoutEditor(state));
   };
   const setHeight = height => {
@@ -2288,8 +2289,50 @@ function renderSnapshot(state, data, preservePosition = false) {
   updateGuideToggle(state);
   expandLatestOutput(timeline);
   scheduleRunningPoll(state, data);
+  syncTerminalLive(state, data);
   if (!preservePosition || wasBottom) timeline.scrollTop = timeline.scrollHeight;
   else timeline.scrollTop = previousTop;
+}
+function terminalIsOpen() {
+  const panel = document.querySelector('[data-terminal]');
+  return Boolean(panel) && !panel.hidden;
+}
+// Mirrors the output of long-running agent commands (terminal commands, installs, tests) into the
+// terminal panel while it is open. The chat card keeps the same output, just collapsed.
+function syncTerminalLive(state, data) {
+  const output = state.root.querySelector('[data-terminal-output]');
+  if (!output || !terminalIsOpen()) return;
+  const items = [
+    ...(data?.runs || []).flatMap(value => [...(value.tests || []), ...(value.packageInstalls || []), ...(value.terminalCommands || [])]),
+    ...(data?.workflows || []).flatMap(value => [...(value.tests || []), ...(value.packageInstalls || []), ...(value.terminalCommands || [])])
+  ];
+  state.terminalLive ||= new Map();
+  const follow = output.scrollHeight - output.scrollTop - output.clientHeight < 40;
+  for (const item of items) {
+    if (!item.id) continue;
+    let entry = state.terminalLive.get(item.id);
+    const running = item.status === 'RUNNING';
+    if (!entry && !running) continue;
+    if (!entry) {
+      entry = { root: el('div', 'workspace-terminal-entry'), result: null, meta: null };
+      entry.root.append(el('div', 'workspace-terminal-command',
+        `$ ${item.command || `install ${(item.packages || []).join(' ')}`}`));
+      entry.result = el('div', 'workspace-terminal-result');
+      entry.meta = el('div', 'workspace-terminal-meta', 'running…');
+      entry.root.append(entry.result, entry.meta);
+      output.append(entry.root);
+      state.terminalLive.set(item.id, entry);
+    }
+    entry.result.textContent = item.output || '';
+    entry.result.hidden = !item.output;
+    if (!running) {
+      const failed = item.exitCode != null ? item.exitCode !== 0 : item.status !== 'COMPLETED';
+      entry.meta.textContent = item.exitCode != null ? `exit ${item.exitCode}` : (item.status || '').toLowerCase();
+      entry.meta.classList.toggle('is-failed', failed);
+      state.terminalLive.delete(item.id);
+    }
+  }
+  if (follow) output.scrollTop = output.scrollHeight;
 }
 function scheduleRunningPoll(state, data) {
   const running = value => value?.status === 'RUNNING';
@@ -2988,8 +3031,10 @@ function terminalCard(state, command) {
 // Collapsible output block; the live/most recent one is shown at full size (see expandLatestOutput).
 function outputDetails(output, label, live) {
   const details = el('details', 'workspace-package-output');
-  details.classList.toggle('is-live', Boolean(live));
-  details.open = Boolean(live);
+  // While the terminal panel is open the live output goes there; the chat keeps it collapsed.
+  const showLive = Boolean(live) && !terminalIsOpen();
+  details.classList.toggle('is-live', showLive);
+  details.open = showLive;
   details.append(el('summary', '', label), el('pre', '', output || ''));
   return details;
 }
@@ -2997,7 +3042,7 @@ function outputDetails(output, label, live) {
 function expandLatestOutput(timeline) {
   const outputs = [...timeline.querySelectorAll('details.workspace-package-output')];
   const last = outputs.at(-1);
-  if (!last) return;
+  if (!last || terminalIsOpen()) return;
   let node = last.closest('.workspace-review-card, .workspace-workflow-action') || last;
   while (node.parentElement && node.parentElement !== timeline) node = node.parentElement;
   const following = [];
