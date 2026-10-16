@@ -32,11 +32,12 @@
       <li th:each="server : ${servers}" class="list-row">
         <span class="list-icon"><i data-lucide="PlugZap"></i></span>
         <div class="list-main">
-          <span class="list-title" th:text="${server.name}">Server</span>
+          <span class="list-title"><span th:text="${server.name}">Server</span> <span th:if="${server.global}" class="badge badge-neutral ml-1">Instance-wide</span></span>
           <span class="list-meta">
             <span class="truncate" th:text="${server.url}">url</span>
             <span th:text="|${server.toolCount} tools · ${server.readOnlyCount} read-only|">3 tools</span>
           </span>
+          <span th:if="${server.credentialMissing}" class="mt-1 block text-xs text-warn-400">Needs your own credential, or its tools are not offered. <a class="underline" href="/mcp-servers">Add it</a></span>
           <span th:if="${server.status.name() == 'NEEDS_AUTH'}" class="mt-1 block text-xs text-warn-400">Needs sign-in. <a class="underline" href="/mcp-servers">Open MCP servers</a></span>
           <span th:if="${server.status.name() == 'ERROR'}" class="mt-1 block text-xs text-danger-400">Unreachable at the last test. <a class="underline" href="/mcp-servers">Open MCP servers</a></span>
           <span th:if="${server.toolCount == 0 and server.status.name() == 'ACTIVE'}" class="mt-1 block text-xs text-ink-500">No tools known yet. <a class="underline" href="/mcp-servers">Test the server</a> first.</span>

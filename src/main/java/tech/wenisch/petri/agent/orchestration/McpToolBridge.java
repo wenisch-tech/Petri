@@ -66,14 +66,14 @@ class McpToolBridge {
     }
     Map<String, Object> result = new LinkedHashMap<>();
     if (tool.readOnly() || tool.autoApprove()) {
-      var outcome = servers.callServer(tool.serverId(), tool.remoteName(), arguments);
+      var outcome = servers.callServer(tool.serverId(), tool.actingUserId(), tool.remoteName(), arguments);
       result.put("source", "mcp:" + tool.serverName());
       result.put("untrustedContent", true);
       if (outcome.error()) result.put("isError", true);
       result.put("content", outcome.text());
     } else {
       UUID id = calls.propose(run.runId(), run.worktreeId(), tool.serverId(), tool.serverName(),
-          tool.remoteName(), json.writeValueAsString(arguments));
+          tool.remoteName(), json.writeValueAsString(arguments), tool.actingUserId());
       result.put("mcpToolCallId", id.toString());
       result.put("status", "PROPOSED");
       result.put("note", "This MCP tool call needs the user's approval before it runs. "

@@ -84,10 +84,10 @@ public class McpOAuthService {
   public record Started(Attempt attempt, String authorizationUrl) {}
 
   public Started begin(UUID serverId, String actorEmail, String redirectUri) {
-    UUID ownerId = users.findByEmailIgnoreCase(actorEmail)
-        .orElseThrow(() -> new IllegalArgumentException("Unknown user")).getId();
-    McpServer server = servers.findByIdAndOwnerId(serverId, ownerId)
-        .orElseThrow(() -> new IllegalArgumentException("Unknown MCP server"));
+    var actor = users.findByEmailIgnoreCase(actorEmail)
+        .orElseThrow(() -> new IllegalArgumentException("Unknown user"));
+    UUID ownerId = actor.getId();
+    McpServer server = manageable(serverId, actor);
     if (server.authType() != McpAuthType.OAUTH) {
       throw new IllegalArgumentException("This server does not use OAuth sign-in");
     }
@@ -118,14 +118,14 @@ public class McpOAuthService {
   /** Exchanges the authorization code and stores the tokens. */
   @Transactional
   public void complete(Attempt attempt, String code, String actorEmail) {
-    UUID ownerId = users.findByEmailIgnoreCase(actorEmail)
-        .orElseThrow(() -> new IllegalArgumentException("Unknown user")).getId();
+    var actor = users.findByEmailIgnoreCase(actorEmail)
+        .orElseThrow(() -> new IllegalArgumentException("Unknown user"));
+    UUID ownerId = actor.getId();
     if (!ownerId.equals(attempt.ownerId())) throw new IllegalArgumentException("Sign-in belongs to another user");
     if (Instant.now(clock).isAfter(attempt.expiresAt())) {
       throw new IllegalStateException("The sign-in took too long. Start again.");
     }
-    McpServer server = servers.findByIdAndOwnerId(attempt.serverId(), ownerId)
-        .orElseThrow(() -> new IllegalArgumentException("Unknown MCP server"));
+    McpServer server = manageable(attempt.serverId(), actor);
     Map<String, String> form = new LinkedHashMap<>();
     form.put("grant_type", "authorization_code");
     form.put("code", code);
@@ -137,6 +137,17 @@ public class McpOAuthService {
     servers.save(server);
     audit.record(actorEmail, "MCP_SERVER_SIGNED_IN", "MCP_SERVER", server.id(),
         "Signed in to MCP server " + server.name());
+  }
+
+  /** The user's own server, or an instance-wide one when the user is an administrator (shared sign-in). */
+  private McpServer manageable(UUID serverId, tech.wenisch.petri.security.AppUser actor) {
+    var own = servers.findByIdAndOwnerId(serverId, actor.getId());
+    if (own.isPresent()) return own.get();
+    if (McpServerService.isAdmin(actor)) {
+      var global = servers.findByIdAndOwnerIdIsNull(serverId);
+      if (global.isPresent()) return global.get();
+    }
+    throw new IllegalArgumentException("Unknown MCP server");
   }
 
   public static boolean expired(Attempt attempt, Instant now) {

@@ -9,13 +9,14 @@ import jakarta.persistence.Table;
 import java.time.Instant;
 import java.util.UUID;
 
-/** A remote MCP server of one user. Secrets are encrypted; the page never sees them. */
+/** A remote MCP server of one user, or an instance-wide one. Secrets are encrypted; the page never sees them. */
 @Entity
 @Table(name = "mcp_server")
 class McpServer {
   @Id private UUID id;
 
-  @Column(name = "owner_id", nullable = false)
+  /** Null for an instance-wide server managed by an administrator. */
+  @Column(name = "owner_id")
   private UUID ownerId;
 
   @Column(nullable = false, length = 80)
@@ -149,6 +150,7 @@ class McpServer {
 
   UUID id() { return id; }
   UUID ownerId() { return ownerId; }
+  boolean global() { return ownerId == null; }
   String name() { return name; }
   String url() { return url; }
   McpTransport transport() { return transport; }

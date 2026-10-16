@@ -2,16 +2,18 @@
 <html lang="en" xmlns:th="http://www.thymeleaf.org">
 <head th:replace="~{fragments/layout :: head('MCP servers')}"></head>
 <body>
-<header th:replace="~{fragments/layout :: topbar('settings')}"></header>
+<header th:replace="~{fragments/layout :: topbar(${adminScope} ? 'admin' : 'settings')}"></header>
+<div th:if="${adminScope}" th:replace="~{fragments/layout :: adminBanner}"></div>
 
 <div class="area-layout">
-  <nav th:replace="~{fragments/layout :: settingsNav('mcp-servers')}"></nav>
+  <nav th:replace="${adminScope} ? ~{fragments/layout :: adminNav('mcp-servers')} : ~{fragments/layout :: settingsNav('mcp-servers')}"></nav>
 
   <main class="min-w-0">
     <div class="page-header">
       <div>
-        <h1 class="page-title">MCP servers</h1>
-        <p class="page-description">Tool servers your agents can use. They are yours alone: switch them on per project under the project's MCP settings.</p>
+        <h1 class="page-title" th:text="${adminScope} ? 'Instance-wide MCP servers' : 'MCP servers'">MCP servers</h1>
+        <p class="page-description" th:if="${adminScope}">Tool servers every user can switch on for their projects. Store a token or headers here to share one credential; leave them empty and each user adds their own.</p>
+        <p class="page-description" th:unless="${adminScope}">Tool servers your agents can use. Switch them on per project under the project's MCP settings. Servers marked <em>Instance-wide</em> come from your administrator.</p>
       </div>
       <div class="page-actions">
         <button class="btn-primary" type="button" data-dialog-open="mcp-new"><i data-lucide="Plus"></i> Add server</button>
@@ -24,7 +26,8 @@
     <div th:if="${#lists.isEmpty(servers)}" class="empty-state">
       <i data-lucide="PlugZap"></i>
       <h2>No MCP servers yet</h2>
-      <p>Connect a Model Context Protocol server over HTTP to give your agents extra tools, such as an issue tracker or a knowledge base.</p>
+      <p th:if="${adminScope}">Add a server that everyone on this instance can use.</p>
+      <p th:unless="${adminScope}">Connect a Model Context Protocol server over HTTP to give your agents extra tools, such as an issue tracker or a knowledge base.</p>
       <button class="btn-primary" type="button" data-dialog-open="mcp-new"><i data-lucide="Plus"></i> Add server</button>
     </div>
 
@@ -41,18 +44,49 @@
           <span th:if="${server.lastError != null}" class="mt-1 block text-xs text-danger-400" th:text="${server.lastError}">error</span>
           <span th:if="${server.insecure}" class="mt-1 block text-xs text-warn-400">Unencrypted HTTP — trusted networks only</span>
         </div>
+        <span class="badge badge-neutral" th:if="${server.global and !adminScope}">Instance-wide</span>
+        <span class="badge badge-warn" th:if="${server.credentialRequired and !adminScope and !server.hasPersonalCredential}">Add your credential</span>
+        <span class="badge badge-neutral" th:if="${adminScope and server.credentialRequired}" title="No shared credential: every user adds their own">Per-user credential</span>
         <span class="badge badge-warn" th:if="${server.status.name() == 'NEEDS_AUTH'}">Needs sign-in</span>
         <span class="badge badge-danger" th:if="${server.status.name() == 'ERROR'}">Unreachable</span>
         <span class="badge" th:if="${server.status.name() == 'ACTIVE' and server.toolsRefreshedAt != null}">Connected</span>
         <span class="badge badge-neutral" th:if="${server.status.name() == 'ACTIVE' and server.toolsRefreshedAt == null}">Not tested</span>
         <div class="list-actions">
-          <form method="post" th:action="@{/mcp-servers/{id}/refresh(id=${server.id})}">
+          <form th:if="${adminScope or !server.global}" method="post" th:action="@{${basePath} + '/{id}/refresh'(id=${server.id})}">
             <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <button class="btn-ghost" type="submit" title="Connect and list the server's tools"><i data-lucide="RefreshCw"></i> Test</button>
           </form>
           <button class="btn-ghost" type="button" th:attr="data-dialog-open=|mcp-tools-${server.id}|"><i data-lucide="List"></i> Tools</button>
-          <button class="btn-ghost" type="button" th:attr="data-dialog-open=|mcp-${server.id}|"><i data-lucide="Pencil"></i> Edit</button>
+          <button th:if="${adminScope or !server.global}" class="btn-ghost" type="button" th:attr="data-dialog-open=|mcp-${server.id}|"><i data-lucide="Pencil"></i> Edit</button>
+          <button th:if="${server.credentialRequired and !adminScope}" class="btn-ghost" type="button" th:attr="data-dialog-open=|mcp-cred-${server.id}|"><i data-lucide="KeyRound"></i> Your credential</button>
         </div>
+
+        <dialog th:if="${server.credentialRequired and !adminScope}" class="dialog" th:id="|mcp-cred-${server.id}|">
+          <form class="dialog-panel" method="post" th:action="@{/mcp-servers/{id}/credential(id=${server.id})}" autocomplete="off">
+            <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+            <div class="dialog-header">
+              <div><h2 th:text="|Your credential for ${server.name}|">Your credential</h2><p>Your administrator stores no shared credential for this server. Yours is stored encrypted, used only for your projects and never shown again.</p></div>
+              <button class="icon-button" formmethod="dialog" formnovalidate aria-label="Close"><i data-lucide="X"></i></button>
+            </div>
+            <div class="dialog-body">
+              <div th:if="${server.authType.name() == 'BEARER'}">
+                <label class="label">Token <span th:if="${server.hasPersonalCredential}" class="label-optional">(stored)</span></label>
+                <input class="field font-mono text-sm" type="password" name="secret" required autocomplete="new-password" spellcheck="false" placeholder="Paste your token or API key">
+              </div>
+              <div th:if="${server.authType.name() == 'HEADERS'}">
+                <label class="label">Headers <span th:if="${server.hasPersonalCredential}" class="label-optional">(stored)</span></label>
+                <textarea class="field font-mono text-sm" name="headers" rows="3" required spellcheck="false" autocomplete="off" placeholder="X-Api-Key: …"></textarea>
+                <span class="hint">One <code>Name: value</code> per line.</span>
+              </div>
+            </div>
+            <div class="dialog-footer">
+              <button th:if="${server.hasPersonalCredential}" class="btn-danger btn-sm spacer" type="submit" formnovalidate
+                      th:attr="formaction=@{/mcp-servers/{id}/credential/delete(id=${server.id})}"><i data-lucide="Trash2"></i> Remove</button>
+              <button class="btn-secondary" formmethod="dialog" formnovalidate>Cancel</button>
+              <button class="btn-primary" type="submit"><i data-lucide="Save"></i> Save</button>
+            </div>
+          </form>
+        </dialog>
 
         <dialog class="dialog" th:id="|mcp-tools-${server.id}|">
           <div class="dialog-panel">
@@ -76,8 +110,8 @@
           </div>
         </dialog>
 
-        <dialog class="dialog dialog-wide" th:id="|mcp-${server.id}|">
-          <form class="dialog-panel" method="post" action="/mcp-servers" autocomplete="off"
+        <dialog th:if="${adminScope or !server.global}" class="dialog dialog-wide" th:id="|mcp-${server.id}|">
+          <form class="dialog-panel" method="post" th:action="${basePath}" autocomplete="off"
                 th:attr="x-data=|{ auth: '${server.authType}' }|">
             <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
             <input type="hidden" name="id" th:value="${server.id}">
@@ -90,7 +124,7 @@
             </div>
             <div class="dialog-footer">
               <button class="btn-danger btn-sm spacer" type="submit" formnovalidate
-                      th:attr="formaction=@{/mcp-servers/{id}/delete(id=${server.id})}"
+                      th:attr="formaction=@{${basePath} + '/{id}/delete'(id=${server.id})}"
                       onclick="return confirm('Remove this MCP server? Projects stop using it.')"><i data-lucide="Trash2"></i> Remove</button>
               <button class="btn-secondary" formmethod="dialog" formnovalidate>Cancel</button>
               <button class="btn-primary" type="submit"><i data-lucide="Save"></i> Save</button>
@@ -103,7 +137,7 @@
 </div>
 
 <dialog id="mcp-new" class="dialog dialog-wide">
-  <form class="dialog-panel" method="post" action="/mcp-servers" autocomplete="off" x-data="{ auth: 'NONE' }">
+  <form class="dialog-panel" method="post" th:action="${basePath}" autocomplete="off" x-data="{ auth: 'NONE' }">
     <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
     <div class="dialog-header">
       <div><h2>Add MCP server</h2><p>Petri connects to it from the server. Use an HTTPS URL for anything outside a trusted network.</p></div>
@@ -149,16 +183,16 @@
   <div x-show="auth === 'BEARER'" x-cloak>
     <label class="label">Token <span th:if="${server != null and server.hasSecret and server.authType.name() == 'BEARER'}" class="label-optional">(stored — leave blank to keep)</span></label>
     <input class="field font-mono text-sm" type="password" name="secret" autocomplete="new-password" spellcheck="false" placeholder="Paste the token or API key">
-    <span class="hint">Sent as <code>Authorization: Bearer …</code>.</span>
+    <span class="hint">Sent as <code>Authorization: Bearer …</code>.<span th:if="${adminScope}"> Leave empty to let every user add their own token.</span></span>
   </div>
   <div x-show="auth === 'HEADERS'" x-cloak>
     <label class="label">Headers</label>
     <textarea class="field font-mono text-sm" name="headers" rows="3" spellcheck="false" autocomplete="off"
               placeholder="X-Api-Key: …" th:text="${server != null ? server.maskedHeaders : ''}"></textarea>
-    <span class="hint">One <code>Name: value</code> per line. A saved value shows as <code>********</code>; leave it to keep the value.</span>
+    <span class="hint">One <code>Name: value</code> per line. A saved value shows as <code>********</code>; leave it to keep the value.<span th:if="${adminScope}"> Leave empty to let every user add their own headers.</span></span>
   </div>
   <div x-show="auth === 'OAUTH'" x-cloak class="space-y-4">
-    <p class="text-sm leading-6 text-ink-300">Petri signs in on your behalf with OAuth 2.1 and refreshes the token automatically. The server's authorization settings are discovered; leave the client fields empty to register Petri automatically.</p>
+    <p class="text-sm leading-6 text-ink-300">Petri signs in <span th:text="${adminScope} ? 'once, as you, and shares that sign-in with all users' : 'on your behalf'">on your behalf</span> with OAuth 2.1 and refreshes the token automatically. The server's authorization settings are discovered; leave the client fields empty to register Petri automatically.</p>
     <div class="form-grid">
       <div>
         <label class="label">Client ID <span class="label-optional">(optional)</span></label>

@@ -40,10 +40,10 @@ public class McpToolCallService {
   @Transactional
   public UUID propose(
       UUID agentRunId, UUID worktreeId, UUID serverId, String serverName, String toolName,
-      String argumentsJson) {
+      String argumentsJson, UUID userId) {
     McpToolCall call = new McpToolCall(
         UUID.randomUUID(), agentRunId, worktreeId, serverId, serverName, toolName, argumentsJson,
-        Instant.now(clock));
+        userId, Instant.now(clock));
     calls.save(call);
     return call.id();
   }
@@ -89,7 +89,7 @@ public class McpToolCallService {
       call = markRunning(id);
       Map<String, Object> arguments = json.readValue(
           call.argumentsJson(), new TypeReference<Map<String, Object>>() {});
-      McpClient.CallResult result = servers.callServer(call.serverId(), call.toolName(), arguments);
+      McpClient.CallResult result = servers.callServer(call.serverId(), call.userId(), call.toolName(), arguments);
       finish(id, result.error() ? McpToolCallStatus.FAILED : McpToolCallStatus.COMPLETED,
           result.text(), result.error() ? "The tool reported an error" : null);
     } catch (RuntimeException exception) {

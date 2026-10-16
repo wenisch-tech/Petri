@@ -16,6 +16,12 @@ interface McpServerRepository extends JpaRepository<McpServer, UUID> {
 
   Optional<McpServer> findByOwnerIdAndNameIgnoreCase(UUID ownerId, String name);
 
+  List<McpServer> findByOwnerIdIsNullOrderByNameAsc();
+
+  Optional<McpServer> findByIdAndOwnerIdIsNull(UUID id);
+
+  Optional<McpServer> findByOwnerIdIsNullAndNameIgnoreCase(String name);
+
   @Lock(LockModeType.PESSIMISTIC_WRITE)
   Optional<McpServer> findLockedById(UUID id);
 }

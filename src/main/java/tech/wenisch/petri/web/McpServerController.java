@@ -37,6 +37,8 @@ public class McpServerController {
     model.addAttribute("servers", servers.list(principal.getName()));
     model.addAttribute("transports", McpTransport.values());
     model.addAttribute("authTypes", McpAuthType.values());
+    model.addAttribute("basePath", "/mcp-servers");
+    model.addAttribute("adminScope", false);
     return "mcp-servers";
   }
 
@@ -76,6 +78,31 @@ public class McpServerController {
     return "redirect:/mcp-servers";
   }
 
+  /** A user's own credential for an instance-wide server that stores none for everyone. */
+  @PostMapping("/mcp-servers/{id}/credential")
+  String saveCredential(
+      @PathVariable UUID id,
+      @RequestParam(required = false) String secret,
+      @RequestParam(required = false) String headers,
+      Principal principal,
+      RedirectAttributes redirect) {
+    try {
+      var text = headers != null && !headers.isBlank() ? headers : secret;
+      servers.saveCredential(id, text, principal.getName());
+      redirect.addFlashAttribute("notice", "Your credential was saved");
+    } catch (IllegalArgumentException | IllegalStateException exception) {
+      redirect.addFlashAttribute("error", exception.getMessage());
+    }
+    return "redirect:/mcp-servers";
+  }
+
+  @PostMapping("/mcp-servers/{id}/credential/delete")
+  String clearCredential(@PathVariable UUID id, Principal principal, RedirectAttributes redirect) {
+    servers.clearCredential(id, principal.getName());
+    redirect.addFlashAttribute("notice", "Your credential was removed");
+    return "redirect:/mcp-servers";
+  }
+
   @PostMapping("/mcp-servers/{id}/refresh")
   String refresh(@PathVariable UUID id, Principal principal, RedirectAttributes redirect) {
     try {
@@ -109,7 +136,7 @@ public class McpServerController {
       return "redirect:" + started.authorizationUrl();
     } catch (IllegalArgumentException | IllegalStateException exception) {
       redirect.addFlashAttribute("error", exception.getMessage());
-      return "redirect:/mcp-servers";
+      return "redirect:" + home(id, principal);
     }
   }
 
@@ -142,9 +169,19 @@ public class McpServerController {
       if (code == null || code.isBlank()) throw new IllegalStateException("The server returned no code");
       oauth.complete(attempt, code, principal.getName());
       redirect.addFlashAttribute("notice", "Signed in. Use Test to list the server's tools.");
+      return "redirect:" + home(attempt.serverId(), principal);
     } catch (IllegalArgumentException | IllegalStateException exception) {
       redirect.addFlashAttribute("error", exception.getMessage());
     }
-    return "redirect:/mcp-servers";
+    return "redirect:" + (attempt == null ? "/mcp-servers" : home(attempt.serverId(), principal));
+  }
+
+  /** Instance-wide servers are managed on the administration page. */
+  private String home(UUID serverId, Principal principal) {
+    try {
+      return servers.get(serverId, principal.getName()).global() ? "/admin/mcp-servers" : "/mcp-servers";
+    } catch (IllegalArgumentException unknown) {
+      return "/mcp-servers";
+    }
   }
 }

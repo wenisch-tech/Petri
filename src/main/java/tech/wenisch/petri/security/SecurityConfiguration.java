@@ -85,7 +85,7 @@ public class SecurityConfiguration {
             .requestMatchers("/admin", "/audit", "/audit/**", "/admin/users", "/admin/users/**",
                 "/admin/vulnerability-scanning", "/admin/vulnerability-scanning/**",
                 "/admin/actions", "/admin/actions/**", "/admin/package-sources",
-                "/admin/package-sources/**")
+                "/admin/package-sources/**", "/admin/mcp-servers", "/admin/mcp-servers/**")
             .hasRole("INSTANCE_ADMIN")
             .requestMatchers("/model-settings", "/model-settings/**").hasRole("INSTANCE_ADMIN")
             .requestMatchers("/sandbox-profiles", "/sandbox-profiles/**").hasRole("INSTANCE_ADMIN")

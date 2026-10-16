@@ -42,13 +42,15 @@ public class McpServerService {
       UUID id, String name, String url, McpTransport transport, McpAuthType authType,
       McpServerStatus status, String lastError, boolean hasSecret, boolean signedIn,
       String oauthClientId, String oauthScopes, boolean hasClientSecret, List<ToolInfo> tools,
-      Instant toolsRefreshedAt, boolean insecure, String maskedHeaders) {}
+      Instant toolsRefreshedAt, boolean insecure, String maskedHeaders,
+      boolean global, boolean credentialRequired, boolean hasPersonalCredential) {}
 
   public record SaveCommand(
       String name, String url, McpTransport transport, McpAuthType authType, String secret,
       String oauthClientId, String oauthClientSecret, String oauthScopes) {}
 
   private final McpServerRepository servers;
+  private final McpUserCredentialRepository credentials;
   private final AppUserRepository users;
   private final SecretCipher cipher;
   private final McpClient client;
@@ -58,9 +60,10 @@ public class McpServerService {
   private final Clock clock = Clock.systemUTC();
 
   public McpServerService(
-      McpServerRepository servers, AppUserRepository users, SecretCipher cipher, McpClient client,
-      McpOAuthService oauth, AuditLogService audit, ObjectMapper json) {
+      McpServerRepository servers, McpUserCredentialRepository credentials, AppUserRepository users,
+      SecretCipher cipher, McpClient client, McpOAuthService oauth, AuditLogService audit, ObjectMapper json) {
     this.servers = servers;
+    this.credentials = credentials;
     this.users = users;
     this.cipher = cipher;
     this.client = client;
@@ -76,12 +79,23 @@ public class McpServerService {
   @Transactional(readOnly = true)
   public List<ServerView> list(String actorEmail) {
     AppUser actor = actor(actorEmail);
-    return servers.findByOwnerIdOrderByNameAsc(actor.getId()).stream().map(this::view).toList();
+    List<McpServer> all = new ArrayList<>(servers.findByOwnerIdIsNullOrderByNameAsc());
+    all.addAll(servers.findByOwnerIdOrderByNameAsc(actor.getId()));
+    return all.stream().map(server -> view(server, actor.getId())).toList();
+  }
+
+  /** The instance-wide servers, for the administrator's page. */
+  @Transactional(readOnly = true)
+  public List<ServerView> listGlobal(String actorEmail) {
+    AppUser actor = requireAdmin(actor(actorEmail));
+    return servers.findByOwnerIdIsNullOrderByNameAsc().stream()
+        .map(server -> view(server, actor.getId())).toList();
   }
 
   @Transactional(readOnly = true)
   public ServerView get(UUID id, String actorEmail) {
-    return view(owned(id, actor(actorEmail)));
+    AppUser actor = actor(actorEmail);
+    return view(manageable(id, actor), actor.getId());
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -91,7 +105,21 @@ public class McpServerService {
   /** Creates (id null) or updates a server. An empty or fully masked secret keeps the stored one. */
   @Transactional
   public ServerView save(UUID id, SaveCommand command, String actorEmail) {
+    return save(id, command, actorEmail, false);
+  }
+
+  /**
+   * Creates or updates an instance-wide server (administrators only). Without a stored token or
+   * headers every user adds their own credential.
+   */
+  @Transactional
+  public ServerView saveGlobal(UUID id, SaveCommand command, String actorEmail) {
+    return save(id, command, actorEmail, true);
+  }
+
+  private ServerView save(UUID id, SaveCommand command, String actorEmail, boolean global) {
     AppUser actor = actor(actorEmail);
+    if (global) requireAdmin(actor);
     String name = validName(command.name());
     String url = normalizeUrl(command.url());
     McpAuthType auth = command.authType() == null ? McpAuthType.NONE : command.authType();
@@ -100,13 +128,16 @@ public class McpServerService {
     McpServer server;
     boolean created = id == null;
     if (created) {
-      server = new McpServer(UUID.randomUUID(), actor.getId(), now);
+      server = new McpServer(UUID.randomUUID(), global ? null : actor.getId(), now);
     } else {
-      server = owned(id, actor);
+      server = manageable(id, actor);
     }
-    McpServer same = servers.findByOwnerIdAndNameIgnoreCase(actor.getId(), name).orElse(null);
+    McpServer same = (server.global()
+        ? servers.findByOwnerIdIsNullAndNameIgnoreCase(name)
+        : servers.findByOwnerIdAndNameIgnoreCase(actor.getId(), name)).orElse(null);
     if (same != null && !same.id().equals(server.id())) {
-      throw new IllegalArgumentException("You already have an MCP server called " + name);
+      throw new IllegalArgumentException((server.global() ? "There is already an instance-wide MCP server called "
+          : "You already have an MCP server called ") + name);
     }
     boolean urlChanged = !created && !url.equals(server.url());
     boolean authChanged = !created && auth != server.authType();
@@ -115,11 +146,19 @@ public class McpServerService {
       case BEARER -> {
         String token = command.secret() == null ? "" : command.secret().strip();
         if (!token.isEmpty() && !MASK.equals(token)) server.secret(cipher.encrypt(bounded(token)));
-        else if (server.secretCiphertext() == null || authChanged) {
+        else if (authChanged) {
+          server.secret(null);
+          if (!server.global()) throw new IllegalArgumentException("Enter the bearer token or API key");
+        } else if (server.secretCiphertext() == null && !server.global()) {
           throw new IllegalArgumentException("Enter the bearer token or API key");
         }
       }
       case HEADERS -> {
+        boolean noneGiven = command.secret() == null || command.secret().isBlank();
+        if (noneGiven && server.global()) {
+          server.secret(null); // every user then adds their own headers
+          break;
+        }
         Map<String, String> headers = parseHeaders(command.secret());
         Map<String, String> current = headerValues(server);
         headers.replaceAll((header, value) ->
@@ -155,14 +194,15 @@ public class McpServerService {
     }
     servers.save(server);
     audit.record(actor.getEmail(), created ? "MCP_SERVER_CREATED" : "MCP_SERVER_UPDATED", TARGET_TYPE,
-        server.id(), (created ? "Added" : "Updated") + " MCP server " + name);
-    return view(server);
+        server.id(), (created ? "Added" : "Updated") + (server.global() ? " instance-wide" : "")
+            + " MCP server " + name);
+    return view(server, actor.getId());
   }
 
   @Transactional
   public void delete(UUID id, String actorEmail) {
     AppUser actor = actor(actorEmail);
-    McpServer server = owned(id, actor);
+    McpServer server = manageable(id, actor);
     servers.delete(server);
     audit.record(actor.getEmail(), "MCP_SERVER_REMOVED", TARGET_TYPE, id, "Removed MCP server " + server.name());
   }
@@ -173,13 +213,16 @@ public class McpServerService {
     McpClient.Endpoint endpoint;
     synchronized (this) {
       actor = actor(actorEmail);
-      endpoint = endpoint(owned(id, actor));
+      endpoint = endpoint(manageable(id, actor), actor.getId());
     }
     List<McpClient.Tool> tools = null;
     McpServerStatus status = McpServerStatus.ACTIVE;
     String error = null;
     try {
       tools = client.listTools(endpoint);
+    } catch (MissingCredentialException exception) {
+      status = McpServerStatus.NEEDS_AUTH;
+      error = "Add your own credential for this server first; it stores none for everyone.";
     } catch (McpClient.AuthRequiredException exception) {
       status = McpServerStatus.NEEDS_AUTH;
       error = "The server needs authentication. Check the credentials or sign in again.";
@@ -192,7 +235,7 @@ public class McpServerService {
 
   @Transactional
   ServerView storeRefresh(UUID id, AppUser actor, List<McpClient.Tool> tools, McpServerStatus status, String error) {
-    McpServer server = owned(id, actor);
+    McpServer server = manageable(id, actor);
     Instant now = Instant.now(clock);
     if (tools != null) server.tools(json.writeValueAsString(tools), now);
     server.mark(status, error, now);
@@ -200,7 +243,7 @@ public class McpServerService {
     audit.record(actor.getEmail(), "MCP_SERVER_TOOLS_REFRESHED", TARGET_TYPE, id,
         tools == null ? "Could not list tools of " + server.name()
             : "Discovered " + tools.size() + " tools of " + server.name());
-    return view(server);
+    return view(server, actor.getId());
   }
 
   // ---------------------------------------------------------------------------------------------
@@ -208,15 +251,23 @@ public class McpServerService {
   // ---------------------------------------------------------------------------------------------
 
   /** Connection details with credentials resolved. Never leaves the server process. */
-  McpClient.Endpoint endpoint(McpServer server) {
+  McpClient.Endpoint endpoint(McpServer server, UUID userId) {
     Map<String, String> headers = new LinkedHashMap<>();
+    // An instance-wide server without a stored secret uses the credential of the user it runs for.
+    String secret = server.secretCiphertext();
+    if (secret == null && server.global()
+        && (server.authType() == McpAuthType.BEARER || server.authType() == McpAuthType.HEADERS)) {
+      secret = userId == null ? null : credentials.findById(new McpUserCredential.Key(server.id(), userId))
+          .map(McpUserCredential::secretCiphertext).orElse(null);
+      if (secret == null) throw new MissingCredentialException(server.name());
+    }
     switch (server.authType()) {
       case BEARER -> {
-        if (server.secretCiphertext() != null) {
-          headers.put("Authorization", "Bearer " + cipher.decrypt(server.secretCiphertext()));
-        }
+        if (secret != null) headers.put("Authorization", "Bearer " + cipher.decrypt(secret));
       }
-      case HEADERS -> headers.putAll(headerValues(server));
+      case HEADERS -> {
+        if (secret != null) headers.putAll(parseHeaders(cipher.decrypt(secret)));
+      }
       case OAUTH -> {
         String token = oauth.accessToken(server.id());
         if (token != null) headers.put("Authorization", "Bearer " + token);
@@ -230,19 +281,25 @@ public class McpServerService {
    * Calls one tool on behalf of the server's owner. Output is capped; an authentication failure
    * marks the server so the user sees that it needs attention.
    */
-  public McpClient.CallResult callServer(UUID serverId, String tool, Map<String, Object> arguments) {
+  public McpClient.CallResult callServer(
+      UUID serverId, UUID userId, String tool, Map<String, Object> arguments) {
     McpServer server = servers.findById(serverId)
         .orElseThrow(() -> new IllegalStateException("The MCP server no longer exists"));
     Map<String, Object> clean = new LinkedHashMap<>();
     if (arguments != null) arguments.forEach((key, value) -> { if (value != null) clean.put(key, value); });
     try {
-      McpClient.CallResult result = client.callTool(endpoint(server), tool, clean);
+      McpClient.CallResult result = client.callTool(endpoint(server, userId), tool, clean);
       String text = result.text();
       if (text.length() > MAX_OUTPUT) text = text.substring(0, MAX_OUTPUT) + "\n[output truncated]";
       return new McpClient.CallResult(text, result.error());
+    } catch (MissingCredentialException exception) {
+      throw new IllegalStateException("The MCP server " + server.name()
+          + " needs your own credential. Ask the user to add it under MCP servers.");
     } catch (McpClient.AuthRequiredException exception) {
-      markServer(server.id(), McpServerStatus.NEEDS_AUTH,
-          "The server needs authentication. Check the credentials or sign in again.");
+      if (!server.global() || server.secretCiphertext() != null) {
+        markServer(server.id(), McpServerStatus.NEEDS_AUTH,
+            "The server needs authentication. Check the credentials or sign in again.");
+      }
       throw new IllegalStateException(
           "The MCP server " + server.name() + " needs authentication. Ask the user to sign in under MCP servers.");
     } catch (McpClient.McpException exception) {
@@ -267,7 +324,51 @@ public class McpServerService {
     }
   }
 
-  private ServerView view(McpServer server) {
+  /** Personal credentials for instance-wide servers that store no shared secret. */
+  @Transactional
+  public void saveCredential(UUID serverId, String secret, String actorEmail) {
+    AppUser actor = actor(actorEmail);
+    McpServer server = servers.findByIdAndOwnerIdIsNull(serverId)
+        .orElseThrow(() -> new IllegalArgumentException("Unknown MCP server"));
+    if (!credentialRequired(server)) {
+      throw new IllegalArgumentException("This server does not take a personal credential");
+    }
+    String value = secret == null ? "" : secret.strip();
+    if (value.isEmpty()) throw new IllegalArgumentException("Enter your credential");
+    String stored = server.authType() == McpAuthType.HEADERS ? formatHeaders(parseHeaders(value)) : bounded(value);
+    Instant now = Instant.now(clock);
+    var key = new McpUserCredential.Key(serverId, actor.getId());
+    McpUserCredential credential = credentials.findById(key).orElse(null);
+    if (credential == null) credential = new McpUserCredential(serverId, actor.getId(), cipher.encrypt(stored), now);
+    else credential.secret(cipher.encrypt(stored), now);
+    credentials.save(credential);
+    audit.record(actor.getEmail(), "MCP_CREDENTIAL_SAVED", TARGET_TYPE, serverId,
+        "Stored a personal credential for MCP server " + server.name());
+  }
+
+  @Transactional
+  public void clearCredential(UUID serverId, String actorEmail) {
+    AppUser actor = actor(actorEmail);
+    credentials.deleteById(new McpUserCredential.Key(serverId, actor.getId()));
+    audit.record(actor.getEmail(), "MCP_CREDENTIAL_REMOVED", TARGET_TYPE, serverId,
+        "Removed a personal MCP credential");
+  }
+
+  boolean hasCredential(UUID serverId, UUID userId) {
+    return credentials.existsById(new McpUserCredential.Key(serverId, userId));
+  }
+
+  static boolean credentialRequired(McpServer server) {
+    return server.global() && server.secretCiphertext() == null
+        && (server.authType() == McpAuthType.BEARER || server.authType() == McpAuthType.HEADERS);
+  }
+
+  /** An instance-wide server stores no secret and this user has not added their own. */
+  static final class MissingCredentialException extends RuntimeException {
+    MissingCredentialException(String server) { super("No credential for MCP server " + server); }
+  }
+
+  private ServerView view(McpServer server, UUID viewerId) {
     List<ToolInfo> tools = cachedTools(server).stream()
         .map(tool -> new ToolInfo(tool.name(), tool.description(), tool.readOnly())).toList();
     boolean secret = server.secretCiphertext() != null;
@@ -278,7 +379,9 @@ public class McpServerService {
         server.id(), server.name(), server.url(), server.transport(), server.authType(), server.status(),
         server.lastError(), secret, server.oauthAccessCiphertext() != null, server.oauthClientId(),
         server.oauthScopes(), server.oauthClientSecretCiphertext() != null, tools,
-        server.toolsRefreshedAt(), server.url().startsWith("http://"), masked);
+        server.toolsRefreshedAt(), server.url().startsWith("http://"), masked,
+        server.global(), credentialRequired(server),
+        credentialRequired(server) && viewerId != null && hasCredential(server.id(), viewerId));
   }
 
   private Map<String, String> headerValues(McpServer server) {
@@ -348,9 +451,24 @@ public class McpServerService {
     }
   }
 
-  McpServer owned(UUID id, AppUser actor) {
-    return servers.findByIdAndOwnerId(id, actor.getId())
-        .orElseThrow(() -> new IllegalArgumentException("Unknown MCP server"));
+  /** The actor's own server, or an instance-wide one when the actor is an administrator. */
+  McpServer manageable(UUID id, AppUser actor) {
+    var own = servers.findByIdAndOwnerId(id, actor.getId());
+    if (own.isPresent()) return own.get();
+    if (isAdmin(actor)) {
+      var global = servers.findByIdAndOwnerIdIsNull(id);
+      if (global.isPresent()) return global.get();
+    }
+    throw new IllegalArgumentException("Unknown MCP server");
+  }
+
+  static boolean isAdmin(AppUser actor) {
+    return "INSTANCE_ADMIN".equals(actor.getRole());
+  }
+
+  private static AppUser requireAdmin(AppUser actor) {
+    if (!isAdmin(actor)) throw new IllegalArgumentException("Only an administrator can manage instance-wide MCP servers");
+    return actor;
   }
 
   private AppUser actor(String email) {

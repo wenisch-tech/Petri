@@ -18,6 +18,9 @@ class McpToolCall {
   @Column(name = "agent_run_id", nullable = false)
   private UUID agentRunId;
 
+  @Column(name = "user_id")
+  private UUID userId;
+
   @Column(name = "worktree_id", nullable = false)
   private UUID worktreeId;
 
@@ -56,7 +59,8 @@ class McpToolCall {
 
   McpToolCall(
       UUID id, UUID agentRunId, UUID worktreeId, UUID serverId, String serverName, String toolName,
-      String argumentsJson, Instant now) {
+      String argumentsJson, UUID userId, Instant now) {
+    this.userId = userId;
     this.id = id;
     this.agentRunId = agentRunId;
     this.worktreeId = worktreeId;
@@ -81,6 +85,7 @@ class McpToolCall {
   }
 
   UUID id() { return id; }
+  UUID userId() { return userId; }
   UUID agentRunId() { return agentRunId; }
   UUID worktreeId() { return worktreeId; }
   UUID serverId() { return serverId; }

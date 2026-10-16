@@ -36,6 +36,21 @@ remote servers.
 Secrets and tokens are encrypted at rest with the instance master key and are never shown again; a
 saved header or secret appears as `********` and keeps its value when left unchanged.
 
+## Instance-wide servers (administrators)
+
+Administration → **MCP servers** (`/admin/mcp-servers`) adds servers every user can use. They look
+like personal servers, with one difference in credentials:
+
+- **Token or headers entered**: everybody shares that credential. Nobody else sees it.
+- **Token or headers left empty**: each user adds their own under **MCP servers → Your credential**.
+  Until they do, the server's tools are not offered to their projects.
+- **OAuth sign-in**: the administrator signs in once and the sign-in is shared by all users.
+  Per-user OAuth sign-in is not supported.
+
+Users see these servers, marked *Instance-wide*, on their own MCP page and in each project's MCP tab.
+Each project still decides whether to use one, and with or without auto-approve. Only administrators
+can edit, test or remove them; the tools shown come from the administrator's last test.
+
 ## Use a server in a project
 
 Project settings → **MCP** (`/projects/{id}/settings/mcp`): switch each server on for the project and,
