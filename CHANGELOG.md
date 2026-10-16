@@ -1,5 +1,26 @@
 # Changelog
 
+## v0.20.0 - 2026-10-16
+
+## [0.20.0](https://github.com/wenisch-tech/Petri/compare/v0.19.0...v0.20.0) (2026-10-16)
+
+
+### Features
+
+* added onboarding panel to dashboard ([ba2b099](https://github.com/wenisch-tech/Petri/commit/ba2b099691a59c51dd4a3c157021a68f5730d629))
+
+
+### Bug Fixes
+
+* fixed chat not being updated after approve ([eda913e](https://github.com/wenisch-tech/Petri/commit/eda913ee34918da4cfb9cb576c23f97301b3d199))
+* fixed problem ignore tls not working for go remotes ([669f622](https://github.com/wenisch-tech/Petri/commit/669f622fc18cfee5726f76fef58d06169c592e15))
+* live output of terminal commands is displayed in terminal window ([9dc0956](https://github.com/wenisch-tech/Petri/commit/9dc095656d116f2283d6dd22a74e5b91e9258f77))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.20.0
+
+
 ## v0.19.0 - 2026-10-15
 
 ## [0.19.0](https://github.com/wenisch-tech/Petri/compare/v0.18.0...v0.19.0) (2026-10-15)
