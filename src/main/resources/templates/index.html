@@ -50,6 +50,32 @@
       </div>
     </section>
 
+    <aside class="space-y-6">
+    <section aria-labelledby="onboarding-title" data-onboarding>
+      <div class="mb-3 flex items-baseline justify-between gap-2">
+        <h2 id="onboarding-title" class="section-title" th:text="${onboarding.complete()} ? 'You are all set' : 'Get started'">Get started</h2>
+        <span class="text-xs text-ink-500" th:text="|${onboarding.done()} of ${onboarding.total()} done|">2 of 8 done</span>
+      </div>
+      <div class="card overflow-hidden">
+        <div class="h-1 bg-ink-800" role="progressbar" aria-valuemin="0" aria-valuemax="100" th:aria-valuenow="${onboarding.percent()}" aria-label="Setup progress">
+          <div class="h-full bg-brand-400 transition-all" th:style="|width: ${onboarding.percent()}%|"></div>
+        </div>
+        <ol class="divide-y divide-ink-800">
+          <li th:each="step : ${onboarding.steps()}" class="flex items-start gap-3 px-4 py-3">
+            <span class="mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full border"
+                  th:classappend="${step.done()} ? 'border-brand-400 bg-brand-400 text-ink-950' : 'border-ink-600 text-transparent'"
+                  th:attr="aria-label=${step.done()} ? 'Done' : 'Not done yet'">
+              <i data-lucide="Check" class="!h-3 !w-3"></i>
+            </span>
+            <span class="min-w-0 flex-1">
+              <span class="block text-sm font-semibold" th:classappend="${step.done()} ? 'text-ink-500 line-through'" th:text="${step.title()}">Step</span>
+              <span class="block text-xs text-ink-500" th:unless="${step.done()}" th:text="${step.description()}">Description</span>
+            </span>
+            <a th:unless="${step.done()}" th:href="${step.href()}" class="shrink-0 text-xs font-medium text-brand-400 hover:underline" th:text="${step.action()}">Go</a>
+          </li>
+        </ol>
+      </div>
+    </section>
     <nav class="space-y-3" aria-labelledby="shortcuts-title">
       <h2 id="shortcuts-title" class="section-title mb-3">Shortcuts</h2>
       <a class="card card-body flex items-center gap-3 transition hover:border-ink-500 hover:bg-ink-800/50" href="/git-accounts">
@@ -69,6 +95,7 @@
         <span><span class="block text-sm font-semibold">Administration</span><span class="block text-xs text-ink-500">Users, models, sandboxes, Git providers, audit</span></span>
       </a>
     </nav>
+    </aside>
   </div>
 </main>
 </body>

@@ -9,6 +9,7 @@ import org.springframework.security.oauth2.client.registration.ClientRegistratio
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.web.bind.annotation.GetMapping;
+import tech.wenisch.petri.dashboard.OnboardingService;
 import tech.wenisch.petri.project.ProjectRepository;
 import tech.wenisch.petri.security.AppUserRepository;
 
@@ -17,14 +18,17 @@ public class HomeController {
   private final ProjectRepository projects;
   private final ObjectProvider<ClientRegistrationRepository> clientRegistrations;
   private final AppUserRepository users;
+  private final OnboardingService onboarding;
 
   public HomeController(
       ProjectRepository projects,
       ObjectProvider<ClientRegistrationRepository> clientRegistrations,
-      AppUserRepository users) {
+      AppUserRepository users,
+      OnboardingService onboarding) {
     this.projects = projects;
     this.clientRegistrations = clientRegistrations;
     this.users = users;
+    this.onboarding = onboarding;
   }
 
   @GetMapping("/")
@@ -34,6 +38,7 @@ public class HomeController {
         .orElseThrow(() -> new IllegalArgumentException("Unknown user"));
     model.addAttribute("projectCount", projects.countByCreatedBy(owner.getId()));
     model.addAttribute("recentProjects", projects.findTop5ByCreatedByOrderByCreatedAtDesc(owner.getId()));
+    model.addAttribute("onboarding", onboarding.checklist(owner.getId(), principal.getName()));
     return "index";
   }
 
