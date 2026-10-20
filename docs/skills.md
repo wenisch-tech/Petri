@@ -80,7 +80,8 @@ The skill ends by saving its result with the `submit_vulnerability_report` tool.
 **Vulnerabilities** tab (next to Pull requests) shows the latest report of the branch that is open
 in the workspace: a table with *Finding*, *Severity*, *Where*, *State today* and *Target state*, and
 the full description of every finding below it. Each branch keeps its own report; a new scan
-replaces it. A branch that was never scanned shows a button that runs the skill. A scan that could
+replaces it, except that a CVE-only scan (`cve-scan` and its automations) replaces only the CVE findings
+and keeps the secrets and misconfigurations that an earlier full scan of the branch saved. A branch that was never scanned shows a button that runs the skill. A scan that could
 not cover everything (for example unresolved dependencies) is marked as incomplete.
 
 ### Dependency resolution
@@ -124,6 +125,9 @@ with a task that carries the finding (where, state today, target state, details)
 `vulnerability-fix` skill: the agent upgrades or changes the smallest thing that clears it,
 proposes the changes for your approval like any other change, runs the tests, rescans and reports.
 The fix happens on the branch that is open in the workspace.
+
+`cve-scan` and `cve-fix` are the same two skills restricted to known vulnerabilities (CVEs) in
+dependencies: only the `vuln` scanner, no secrets, Dockerfiles, Helm charts or other configuration.
 
 The same method drives two automations that need no chat: *Vulnerability fix pull request* and
 *Vulnerability fix and merge* scan a selected branch on a schedule, fix the findings on a new branch

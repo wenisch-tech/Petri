@@ -46,6 +46,7 @@ public class ProjectSkillsController {
     Set<String> branchSkills = Arrays.stream(AutomationKind.values())
         .filter(AutomationKind::branchBased).map(AutomationKind::skill).collect(Collectors.toSet());
     branchSkills.add(AutomationKind.FIX_METHOD_SKILL);
+    branchSkills.add("cve-fix");
     List<SkillCard> cards = skills.list().stream().map(skill -> card(skill, pullRequestSkills)).toList();
     List<SkillCard> branchCards = cards.stream().filter(card -> branchSkills.contains(card.name())).toList();
     model.addAttribute("branchSkills", branchCards);
@@ -57,7 +58,7 @@ public class ProjectSkillsController {
 
   private SkillCard card(SkillSummary skill, Set<String> pullRequestSkills) {
     boolean pullRequest = pullRequestSkills.contains(skill.name());
-    if ("vulnerability-scan".equals(skill.name())) {
+    if ("vulnerability-scan".equals(skill.name()) || "cve-scan".equals(skill.name())) {
       boolean ready = trivy.available();
       return new SkillCard(skill.name(), skill.description(), false,
           ready ? "Uses Trivy, which is installed. The first scan downloads its vulnerability database."

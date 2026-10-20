@@ -72,6 +72,31 @@ public record AutomationKind(
       "vulnerability-fix-and-merge", "vulnerability-fix", true, true, true, true, false,
       SCHEDULED, true);
 
+  public static final AutomationKind CVE_SCAN = new AutomationKind(
+      "CVE_SCAN", "CVE scan",
+      "Like the vulnerability scan, but only for known vulnerabilities (CVEs) in dependencies: no "
+          + "secrets, Dockerfiles, Helm charts or other configuration. Nothing is posted.",
+      "cve-scan", "vulnerability-scan", false, false, false, false, true, ANY, true);
+  public static final AutomationKind CVE_SCAN_AND_COMMENT = new AutomationKind(
+      "CVE_SCAN_AND_COMMENT", "CVE scan and comment",
+      "Scans pull requests for CVEs in dependencies only and posts the findings as a comment.",
+      "cve-scan-and-comment", "vulnerability-scan", true, false, false, false, true, ANY, true);
+  public static final AutomationKind CVE_SCAN_AND_IMPROVE = new AutomationKind(
+      "CVE_SCAN_AND_IMPROVE", "CVE scan and improve",
+      "Scans pull requests for CVEs in dependencies only, comments, then lets a workflow upgrade "
+          + "the dependencies and pushes the result to the pull request's branch.",
+      "cve-scan-and-improve", "vulnerability-scan", true, true, false, false, true, ANY, true);
+  public static final AutomationKind CVE_FIX_PR = new AutomationKind(
+      "CVE_FIX_PR", "CVE fix pull request",
+      "Scans a selected branch for CVEs in dependencies only, fixes them on a new branch and opens "
+          + "a pull request into the selected branch. An open one is updated instead.",
+      "cve-fix-pr", "vulnerability-fix", true, true, true, false, false, SCHEDULED, true);
+  public static final AutomationKind CVE_FIX_AND_MERGE = new AutomationKind(
+      "CVE_FIX_AND_MERGE", "CVE fix and merge",
+      "The same as the CVE fix pull request, then approves it and merges it once the checks pass "
+          + "and a rescan confirms the fixes.",
+      "cve-fix-and-merge", "vulnerability-fix", true, true, true, true, false, SCHEDULED, true);
+
   /** The skill that carries the review method; the other review skills only add to it. */
   public static final String REVIEW_METHOD_SKILL = "code-review";
   public static final String VULNERABILITY_METHOD_SKILL = "vulnerability-scan";
@@ -80,7 +105,8 @@ public record AutomationKind(
   private static final List<AutomationKind> BUILTIN = List.of(
       CODE_REVIEW, CODE_REVIEW_AND_COMMENT, CODE_REVIEW_AND_IMPROVE, VULNERABILITY_SCAN,
       VULNERABILITY_SCAN_AND_COMMENT, VULNERABILITY_SCAN_AND_IMPROVE, VULNERABILITY_FIX_PR,
-      VULNERABILITY_FIX_AND_MERGE);
+      VULNERABILITY_FIX_AND_MERGE, CVE_SCAN, CVE_SCAN_AND_COMMENT, CVE_SCAN_AND_IMPROVE, CVE_FIX_PR,
+      CVE_FIX_AND_MERGE);
 
   /** What is known right now: the built-in actions plus the custom ones loaded from the table. */
   private static volatile List<AutomationKind> catalog = BUILTIN;
@@ -146,6 +172,12 @@ public record AutomationKind(
   public boolean isMerges() { return merges; }
   public boolean isVulnerability() { return vulnerability; }
   public boolean isBuiltin() { return builtin; }
+
+  /**
+   * The skill is one of the {@code cve-} skills: only the {@code vuln} scanner is used, so secrets
+   * and misconfigurations (Dockerfiles, Helm charts, ...) are neither scanned nor fixed.
+   */
+  public boolean isCveOnly() { return skill.startsWith("cve-"); }
 
   public String title() { return title; }
 

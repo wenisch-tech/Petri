@@ -32,6 +32,30 @@ removing one keeps its past runs.
 | **Vulnerability fix pull request** | On a schedule, scan a selected branch, fix the findings on a new branch and open a pull request into it. | `skills/vulnerability-fix-pr/SKILL.md` |
 | **Vulnerability fix and merge** | The same, then approve and merge the pull request once its checks pass and a rescan confirms the fixes. | `skills/vulnerability-fix-and-merge/SKILL.md` |
 
+### CVE-only variants
+
+Every vulnerability action has a CVE-only twin that scans only for known vulnerabilities (CVEs) in
+dependencies, with the Trivy scanner `vuln`. They skip secrets and misconfigurations, so
+Dockerfiles, Kubernetes manifests, Helm charts and Terraform are neither scanned nor changed.
+
+| Action | Same as | Skill |
+| --- | --- | --- |
+| **CVE scan** | Vulnerability scan | `skills/cve-scan/SKILL.md` |
+| **CVE scan and comment** | Vulnerability scan and comment | `skills/cve-scan-and-comment/SKILL.md` |
+| **CVE scan and improve** | Vulnerability scan and improve | `skills/cve-scan-and-improve/SKILL.md` |
+| **CVE fix pull request** | Vulnerability fix pull request | `skills/cve-fix-pr/SKILL.md` |
+| **CVE fix and merge** | Vulnerability fix and merge | `skills/cve-fix-and-merge/SKILL.md` |
+
+Their results are merged into the branch's table on the **Vulnerabilities** tab: a CVE-only scan
+replaces only the CVE findings and keeps the secrets and misconfigurations of an earlier full scan;
+a full scan replaces the whole table.
+
+They are bound to a trigger and run, including **Run now**, exactly like their counterparts. The
+branch-based ones enforce the CVE-only scanner in Petri itself; for the pull request ones the skill
+and the task tell the scanning agent to use `vuln` only. A custom action whose skill name starts
+with `cve-` is treated as CVE-only too. The `cve-scan` and `cve-fix` skills can also be run
+directly from the project's Skills tab.
+
 The three code review automations share the review method of the `code-review` skill, the three
 vulnerability scans the method of the `vulnerability-scan` skill; the other skills of each family
 only add to it. Every kind is configured like any other (trigger, approval, model) and can be

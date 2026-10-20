@@ -165,7 +165,8 @@ public class CodeReviewAutomation {
           ? VulnerabilityPrompts.instructions(skillText(job.kind()))
           : CodeReviewPrompts.instructions(skillText(job.kind()));
       String task = scan
-          ? VulnerabilityPrompts.task(job.pr(), diff.changedFiles(), MAX_LISTED_FILES)
+          ? VulnerabilityPrompts.task(job.pr(), diff.changedFiles(), MAX_LISTED_FILES,
+              job.kind().isCveOnly())
           : CodeReviewPrompts.task(job.pr(), diff.changedFiles(), diff.diff(),
               diff.truncated(), MAX_LISTED_FILES, previous, sinceDiff);
       AgentRunView created = agentRuns.createAutomationRun(
@@ -186,9 +187,16 @@ public class CodeReviewAutomation {
         var report = vulnerabilityReports.find(job.projectId(), null, job.runId().toString())
             .orElse(null);
         if (report != null) {
-          vulnerabilityReports.save(job.projectId(), job.pr().headRef(), job.pr().headSha(),
-              report.scanner(), report.summary(), report.complete(), report.completenessNote(),
-              report.findings(), owner.getId());
+          if (job.kind().isCveOnly()) {
+            // Keeps the secrets and misconfigurations of an earlier full scan of this branch.
+            vulnerabilityReports.save(job.projectId(), job.pr().headRef(), job.pr().headSha(),
+                report.scanner(), report.summary(), report.complete(), report.completenessNote(),
+                report.findings(), owner.getId(), false, true);
+          } else {
+            vulnerabilityReports.save(job.projectId(), job.pr().headRef(), job.pr().headSha(),
+                report.scanner(), report.summary(), report.complete(), report.completenessNote(),
+                report.findings(), owner.getId());
+          }
           reviews.submitVulnerabilityReport(job.runId(), report);
           result = runs.require(job.runId());
         }
