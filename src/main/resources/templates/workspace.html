@@ -76,8 +76,9 @@
         <button class="workspace-git-button" type="button" data-git-fetch><i data-lucide="CloudDownload"></i><span>Fetch</span></button>
         <button class="workspace-git-button" type="button" data-git-pull th:disabled="${selectedWorktree == null || selectedWorktree.detached}"><i data-lucide="GitPullRequestArrow"></i><span>Pull</span></button>
         <button class="workspace-git-button" type="button" data-git-rebase-action th:disabled="${selectedWorktree == null || selectedWorktree.detached}"><i data-lucide="GitCompare"></i><span>Rebase</span></button>
-        <button class="workspace-git-button" type="button" data-git-push th:disabled="${selectedWorktree == null || selectedWorktree.detached || (providerSource != null && providerSource.credentialMode.name() == 'CONNECTION' && !providerSource.canWrite)}" th:title="${providerSource != null && providerSource.credentialMode.name() == 'CONNECTION' && !providerSource.canWrite ? 'Repository is read-only' : 'Push'}"><i data-lucide="CloudUpload"></i><span>Push</span></button>
         <button class="workspace-git-button" type="button" data-git-commit th:disabled="${selectedWorktree == null}"><i data-lucide="GitCommitHorizontal"></i><span>Commit</span></button>
+        <button class="workspace-git-button" type="button" data-git-push th:disabled="${selectedWorktree == null || selectedWorktree.detached || (providerSource != null && providerSource.credentialMode.name() == 'CONNECTION' && !providerSource.canWrite)}" th:title="${providerSource != null && providerSource.credentialMode.name() == 'CONNECTION' && !providerSource.canWrite ? 'Repository is read-only' : 'Push'}"><i data-lucide="CloudUpload"></i><span>Push</span></button>
+        <button class="workspace-git-button" type="button" data-git-pull-request th:disabled="${selectedWorktree == null || selectedWorktree.detached}" title="Open pull request"><i data-lucide="GitPullRequest"></i><span>Pull request</span></button>
         <button class="workspace-git-button" type="button" data-git-more title="More Git actions" aria-label="More Git actions"><i data-lucide="MoreHorizontal"></i><span>More</span></button>
       </div>
       <div class="workspace-git-rebase-actions" data-git-rebase-controls
@@ -87,7 +88,6 @@
       </div>
       </div>
       <div class="workspace-git-menu" data-git-menu hidden>
-        <button type="button" data-git-pull-request th:disabled="${selectedWorktree == null || selectedWorktree.detached}"><i data-lucide="GitPullRequestArrow"></i>Open pull request…</button>
         <button type="button" data-git-force-push th:disabled="${selectedWorktree == null || selectedWorktree.detached || (providerSource != null && providerSource.credentialMode.name() == 'CONNECTION' && !providerSource.canWrite)}"><i data-lucide="CloudUpload"></i>Force with lease…</button>
         <button type="button" data-git-delete-branch th:disabled="${selectedWorktree == null || selectedWorktree.detached}"><i data-lucide="Trash2"></i>Delete branch…</button>
         <button type="button" data-git-delete-remote th:disabled="${providerSource != null && providerSource.credentialMode.name() == 'CONNECTION' && !providerSource.canWrite}"><i data-lucide="Trash2"></i>Delete remote branch…</button>
