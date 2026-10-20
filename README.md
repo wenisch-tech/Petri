@@ -4,8 +4,15 @@
 
 # Petri
 
+[![GitHub Release](https://img.shields.io/github/v/release/wenisch-tech/Petri?logo=github)](https://github.com/wenisch-tech/Petri/releases)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPLv3-blue.svg)](LICENSE.md)
+[![Container](https://img.shields.io/badge/container-ghcr.io-blue?logo=github)](https://github.com/wenisch-tech/Petri/pkgs/container/petri)
+[![Artifact Hub](https://img.shields.io/endpoint?url=https://artifacthub.io/badge/repository/petri)](https://artifacthub.io/packages/helm/jfwenisch/petri)
+[![Signed](https://img.shields.io/badge/signed-cosign-green?logo=data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCAyNCAyNCI+PHBhdGggZmlsbD0id2hpdGUiIGQ9Ik0xMiAxTDMgNXY2YzAgNS41NSAzLjg0IDEwLjc0IDkgMTIgNS4xNi0xLjI2IDktNi40NSA5LTEyVjVsLTktNHoiLz48L3N2Zz4=)](https://github.com/wenisch-tech/Petri/actions)
+[![Coverage](https://raw.githubusercontent.com/wenisch-tech/Petri/badges/jacoco.svg)](https://github.com/wenisch-tech/Petri/actions/workflows/ci.yml)
+
 **Petri is a self-hosted agentic coding harness, multi-agent orchestrator and agentic development
-environment.**
+environment built for running in a container.**
 
 - **Harness:** a controlled runtime around the model. Every model response, tool call and tool
   result is persisted. File changes and test runs are *proposals* that need explicit approval, run

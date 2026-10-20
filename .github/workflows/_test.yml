@@ -15,7 +15,7 @@ jobs:
   test-build:
     runs-on: ubuntu-latest
     permissions:
-      contents: read
+      contents: write
       checks: write
       pull-requests: write
 
@@ -52,3 +52,36 @@ jobs:
         with:
           name: test-reports
           path: target/surefire-reports/*.xml
+
+      - name: Generate coverage badge
+        id: jacoco
+        uses: cicirello/jacoco-badge-generator@v2
+        with:
+          jacoco-csv-file: target/site/jacoco/jacoco.csv
+          badges-directory: badges
+          generate-coverage-badge: true
+          generate-summary: true
+
+      - name: Publish coverage badge
+        if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          if git fetch origin badges; then
+            git worktree add ../badges-wt FETCH_HEAD --detach
+          else
+            git worktree add --detach ../badges-wt
+            git -C ../badges-wt checkout --orphan badges
+            git -C ../badges-wt rm -rf . > /dev/null
+          fi
+          cp badges/*.svg ../badges-wt/
+          cd ../badges-wt
+          git add -A
+          git diff --cached --quiet || (git commit -m "chore: update coverage badge [skip ci]" && git push origin HEAD:badges)
+
+      - name: Upload coverage report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: coverage-report
+          path: target/site/jacoco
