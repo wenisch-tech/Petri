@@ -34,8 +34,16 @@ class CodeReviewSkillTest {
       assertThat(skill.description()).isNotBlank();
       if (!kind.baseSkill().equals(kind.skill())) {
         assertThat(skill.content()).contains(kind.baseSkill());
-        // The manifest says what the enum used to: which skill this one builds on.
-        assertThat(skill.manifest().extendsSkill()).isEqualTo(kind.baseSkill());
+        // The manifest says what the enum used to: which skill this one builds on. A skill may
+        // extend an intermediate one (cve-scan-and-comment extends vulnerability-scan-and-comment),
+        // so follow the chain until it reaches the base skill.
+        var current = skill;
+        int hops = 0;
+        while (!kind.baseSkill().equals(current.manifest().extendsSkill()) && hops++ < 5) {
+          assertThat(current.manifest().extendsSkill()).isNotBlank();
+          current = skills.load(current.manifest().extendsSkill());
+        }
+        assertThat(current.manifest().extendsSkill()).isEqualTo(kind.baseSkill());
         assertThat(skill.manifest().context()).isNotBlank();
         assertThat(skill.manifest().produces()).isNotBlank();
         assertThat(tech.wenisch.petri.agent.skill.SkillComposer.compose(skills, kind.skill(), null))
