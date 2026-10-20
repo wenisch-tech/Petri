@@ -21,7 +21,7 @@ public class AgentRunService {
   private static final java.time.Duration ABANDONED_AFTER = java.time.Duration.ofSeconds(90);
 
   private static final int MAX_PROMPT_LENGTH = 200_000;
-  private static final int DEFAULT_MAX_MODEL_TURNS = 20;
+  private static final int DEFAULT_MAX_MODEL_TURNS = 100;
 
   private final AgentRunRepository runs;
   private final AgentChatRepository chats;
@@ -102,8 +102,8 @@ public class AgentRunService {
     int maxTurns = command.maxModelTurns() == null
         ? DEFAULT_MAX_MODEL_TURNS
         : command.maxModelTurns();
-    if (maxTurns < 1 || maxTurns > 100) {
-      throw new IllegalArgumentException("Maximum model turns must be between 1 and 100");
+    if (maxTurns != -1 && (maxTurns < 1 || maxTurns > 100)) {
+      throw new IllegalArgumentException("Maximum model turns must be between 1 and 100, or -1 for no limit");
     }
     int contextWindowTokens = command.contextWindowTokens() == null
         ? credential.contextWindowTokens()
@@ -182,8 +182,8 @@ public class AgentRunService {
         ? credential.contextWindowTokens() : command.contextWindowTokens();
     validateContextWindow(contextWindowTokens, maxOutputTokens);
     int maxTurns = command.maxModelTurns() == null ? DEFAULT_MAX_MODEL_TURNS : command.maxModelTurns();
-    if (maxTurns < 1 || maxTurns > 100) {
-      throw new IllegalArgumentException("Maximum model turns must be between 1 and 100");
+    if (maxTurns != -1 && (maxTurns < 1 || maxTurns > 100)) {
+      throw new IllegalArgumentException("Maximum model turns must be between 1 and 100, or -1 for no limit");
     }
     Instant now = Instant.now(clock);
     AgentRun run = createRun(chat, prompt, provider, credential.id(), model, maxTurns, maxOutputTokens,

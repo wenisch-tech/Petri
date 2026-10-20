@@ -42,6 +42,11 @@ record AgentExecutionState(
     };
   }
 
+  /** A budget of -1 means the run has no turn limit. */
+  boolean turnBudgetSpent() {
+    return maxModelTurns >= 0 && modelTurnCount >= maxModelTurns;
+  }
+
   boolean initialModelRequest() {
     return modelTurnCount == 0;
   }

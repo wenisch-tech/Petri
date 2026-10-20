@@ -56,7 +56,7 @@
               <a class="line-clamp-2 text-ink-100 hover:text-brand-400" th:href="@{/runs/{id}(id=${run.id})}" th:text="${#strings.abbreviate(run.prompt, 400)}" th:title="${#strings.abbreviate(run.prompt, 1000)}">prompt</a>
             </td>
             <td><span class="block text-xs text-ink-500" th:text="${run.provider.displayName()}">OpenAI</span><code class="text-xs" th:text="${run.model}">model</code></td>
-            <td class="whitespace-nowrap text-right tabular-nums" th:text="|${run.modelTurnCount} / ${run.maxModelTurns}|">0 / 20</td>
+            <td class="whitespace-nowrap text-right tabular-nums" th:text="|${run.modelTurnCount} / ${run.maxModelTurns < 0 ? '∞' : run.maxModelTurns}|">0 / 20</td>
             <td class="whitespace-nowrap text-xs"><time data-local th:attr="datetime=${run.createdAt}" th:text="${run.createdAt}">time</time></td>
             <td class="text-right"><a class="btn-ghost" th:href="@{/runs/{id}(id=${run.id})}">Inspect</a></td>
           </tr>

@@ -54,6 +54,7 @@ curl -X POST \
   "$PETRI_URL/api/v1/agent/worktrees/$WORKTREE_ID/runs/start"
 ```
 
+`maxModelTurns` is optional, defaults to 100 and accepts 1 to 100, or `-1` for no limit.
 Optional run fields are `model`, `maxOutputTokens`, `reasoningEffort` and `textVerbosity`.
 
 `provider` selects the oldest administrator-defined provider of that kind. To target a specific

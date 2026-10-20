@@ -18,7 +18,8 @@ import tech.wenisch.petri.workspace.WorkspaceModelPreferenceView;
 
 @Service
 public class OrchestrationProfileService {
-  private static final int DEFAULT_TURNS = 20;
+  private static final int DEFAULT_TURNS = 50;
+  private static final int DEFAULT_IMPLEMENTER_TURNS = 90;
   private static final int DEFAULT_ATTEMPTS = 3;
   private final OrchestrationProfileRepository profiles;
   private final AgentWorkflowRoleSnapshotRepository snapshots;
@@ -66,7 +67,8 @@ public class OrchestrationProfileService {
       ModelCredentialStatus credential = credentials.resolve(
           userId, command.provider(), command.providerInstanceId());
       String model = required(command.model(), "Model", 200);
-      int turns = bounded(command.maxModelTurns(), DEFAULT_TURNS, 1, 100, "Maximum model turns");
+      int turns = turns(command.maxModelTurns(),
+          command.role() == AgentWorkflowRole.IMPLEMENTER ? DEFAULT_IMPLEMENTER_TURNS : DEFAULT_TURNS);
       int output = bounded(command.maxOutputTokens(), credential.maxOutputTokens(), 16, 1_000_000, "Maximum output tokens");
       int context = bounded(command.contextWindowTokens(), credential.contextWindowTokens(), output + 2048, 10_000_000, "Context window");
       validateContextWindow(context, output);
@@ -112,7 +114,7 @@ public class OrchestrationProfileService {
         : credentials.resolve(userId, base.provider(), base.providerInstanceId());
     ModelProvider provider = credential.provider();
     String model = command.model() == null ? base.model() : required(command.model(), "Model", 200);
-    int turns = bounded(command.maxModelTurns(), base.maxModelTurns(), 1, 100, "Maximum model turns");
+    int turns = turns(command.maxModelTurns(), base.maxModelTurns());
     int output = bounded(command.maxOutputTokens(), base.maxOutputTokens(), 16, 1_000_000, "Maximum output tokens");
     int context = bounded(command.contextWindowTokens(), base.contextWindowTokens(), output + 2048,
         10_000_000, "Context window");
@@ -140,7 +142,7 @@ public class OrchestrationProfileService {
         .orElse(usable.getFirst());
     String model = preferred != null ? preference.model() : chosen.model();
     return new OrchestrationRoleProfileView(role, chosen.provider(), chosen.id(), model,
-        DEFAULT_TURNS, chosen.maxOutputTokens(), chosen.contextWindowTokens(),
+        role == AgentWorkflowRole.IMPLEMENTER ? DEFAULT_IMPLEMENTER_TURNS : DEFAULT_TURNS, chosen.maxOutputTokens(), chosen.contextWindowTokens(),
         chosen.reasoningEffort(), chosen.textVerbosity(), DEFAULT_ATTEMPTS, null, false);
   }
 
@@ -159,6 +161,15 @@ public class OrchestrationProfileService {
     if (value.length() > max) throw new IllegalArgumentException("Prompt addendum is too long");
     return value.strip();
   }
+  /** A turn budget of 1..100, or -1 for no limit. */
+  private static int turns(Integer value, int fallback) {
+    int result = value == null ? fallback : value;
+    if (result != -1 && (result < 1 || result > 100)) {
+      throw new IllegalArgumentException("Maximum model turns must be between 1 and 100, or -1 for no limit");
+    }
+    return result;
+  }
+
   private static int bounded(Integer value, Integer fallback, int min, int max, String label) {
     int result = value == null ? fallback : value;
     if (result < min || result > max) throw new IllegalArgumentException(label + " must be between " + min + " and " + max);

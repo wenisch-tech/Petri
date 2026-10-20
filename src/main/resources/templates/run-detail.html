@@ -25,7 +25,7 @@
 
   <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
     <div class="stat"><span class="stat-label"><i data-lucide="Cpu"></i> Model</span><span class="mt-2 block break-words font-mono text-sm" th:text="${run.model}">model</span><span class="text-xs text-ink-500" th:text="${run.provider.displayName()}">provider</span></div>
-    <div class="stat"><span class="stat-label"><i data-lucide="RefreshCw"></i> Model turns</span><span class="stat-value" th:text="|${run.modelTurnCount} / ${run.maxModelTurns}|">0 / 20</span></div>
+    <div class="stat"><span class="stat-label"><i data-lucide="RefreshCw"></i> Model turns</span><span class="stat-value" th:text="|${run.modelTurnCount} / ${run.maxModelTurns < 0 ? '∞' : run.maxModelTurns}|">0 / 20</span></div>
     <div class="stat"><span class="stat-label"><i data-lucide="Clock"></i> Created</span><span class="mt-2 block text-sm"><time data-local th:attr="datetime=${run.createdAt}" th:text="${run.createdAt}">time</time></span></div>
     <div class="stat"><span class="stat-label"><i data-lucide="Settings2"></i> Generation</span><span class="mt-2 block text-sm" th:text="|${run.maxOutputTokens} tokens|">tokens</span><span class="text-xs text-ink-500" th:text="|reasoning ${run.reasoningEffort ?: 'default'} · verbosity ${run.textVerbosity ?: 'default'}|">settings</span></div>
   </div>

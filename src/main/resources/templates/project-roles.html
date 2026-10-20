@@ -101,7 +101,7 @@
             <summary>
               <i data-lucide="ChevronRight" class="role-chevron"></i>
               <span class="font-medium text-ink-300">Limits</span>
-              <span class="text-ink-500" th:text="|${row.profile.maxAttempts} attempts · ${row.profile.maxModelTurns} turns · ${row.profile.maxOutputTokens} output · ${row.profile.contextWindowTokens} context|">3 attempts</span>
+              <span class="text-ink-500" th:text="|${row.profile.maxAttempts} attempts · ${row.profile.maxModelTurns < 0 ? 'unlimited' : row.profile.maxModelTurns} turns · ${row.profile.maxOutputTokens} output · ${row.profile.contextWindowTokens} context|">3 attempts</span>
             </summary>
             <div class="mt-3 grid grid-cols-2 gap-4 sm:grid-cols-4">
             <div>
@@ -110,7 +110,7 @@
             </div>
             <div>
               <label class="label" th:for="|${row.key}-turns|">Turns</label>
-              <input class="field role-field" type="number" min="1" max="100" th:id="|${row.key}-turns|" th:name="|${row.key}.maxModelTurns|" th:value="${row.profile.maxModelTurns}" required>
+              <input class="field role-field" type="number" min="-1" max="100" title="1 to 100, or -1 for no limit" th:id="|${row.key}-turns|" th:name="|${row.key}.maxModelTurns|" th:value="${row.profile.maxModelTurns}" required>
             </div>
             <div>
               <label class="label" th:for="|${row.key}-output|">Output tokens</label>

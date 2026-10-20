@@ -79,8 +79,8 @@ public class AutomationSettingsService {
     if (trigger == null || !effectiveKind.triggers().contains(trigger)) {
       throw new IllegalArgumentException("This skill cannot be started that way");
     }
-    if (maxModelTurns < 1 || maxModelTurns > 50) {
-      throw new IllegalArgumentException("Maximum model turns must be between 1 and 50");
+    if (maxModelTurns != -1 && (maxModelTurns < 1 || maxModelTurns > 100)) {
+      throw new IllegalArgumentException("Maximum model turns must be between 1 and 100, or -1 for no limit");
     }
     String safeBranch = null;
     if (effectiveKind.branchBased()) {

@@ -14,7 +14,7 @@ the workspace and project settings. Users cannot define their own skills yet.
    unticked it is held until a project owner approves it. This applies to every skill, so future
    actions use the same switch. For code review it controls whether the comment is posted
    immediately or kept as a draft.
-4. **Enabled**, and optionally a model provider, model and maximum model turns.
+4. **Enabled**, and optionally a model provider, model and maximum model turns (default 50, 1 to 100, or `-1` for no limit).
 
 A project can have one automation per skill and trigger. Disabled automations keep their settings;
 removing one keeps its past runs.

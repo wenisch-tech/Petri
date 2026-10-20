@@ -133,6 +133,14 @@ path was applied.
 independently. Per-user/per-project profiles include provider, model, generation/context budgets,
 attempt limit and a prompt addendum. Petri snapshots those values when the task is submitted.
 
+### Turn budgets
+
+Each role has a model-turn budget. New profiles default to 90 turns for the Implementer and 50 for
+every other role; profiles that were already saved keep their value. Enter a number from 1 to 100,
+or `-1` for no limit. A role without a limit keeps working until it finishes, fails or is cancelled,
+so use it with care: a run that loops can consume many model calls. The loop guard and the
+cancel button still apply.
+
 | Role | Server-enforced tools |
 | --- | --- |
 | Orchestrator | read, search, diff and skills |

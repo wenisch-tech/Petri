@@ -155,7 +155,7 @@ public class AgentRunExecutor {
           if (!state.pendingToolCalls().isEmpty()) continue;
         }
 
-        if (state.modelTurnCount() >= state.maxModelTurns()) {
+        if (state.turnBudgetSpent()) {
           state = stateService.exhaustBudget(runId, claimId, actor);
           continue;
         }

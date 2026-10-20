@@ -69,7 +69,7 @@ public class ProjectAutomation {
     this.enabled = false;
     this.trigger = AutomationTrigger.PULL_REQUEST;
     this.postMode = AutomationPostMode.AUTO;
-    this.maxModelTurns = 20;
+    this.maxModelTurns = 50;
     this.createdAt = now;
     this.updatedAt = now;
   }

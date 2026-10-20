@@ -352,6 +352,9 @@ class AgentRun {
   String prompt() { return prompt; }
   AgentRunStatus status() { return status; }
   int maxModelTurns() { return maxModelTurns; }
+
+  /** A budget of -1 means the run has no turn limit. */
+  boolean turnBudgetSpent() { return maxModelTurns >= 0 && modelTurnCount >= maxModelTurns; }
   int maxOutputTokens() { return maxOutputTokens; }
   int contextWindowTokens() { return contextWindowTokens; }
   ReasoningEffort reasoningEffort() { return reasoningEffort; }

@@ -84,7 +84,7 @@ public class AutomationController {
       @RequestParam(defaultValue = "false") boolean completeWithoutApproval,
       @RequestParam(required = false) UUID providerInstanceId,
       @RequestParam(required = false) String model,
-      @RequestParam(defaultValue = "20") int maxModelTurns,
+      @RequestParam(defaultValue = "50") int maxModelTurns,
       @RequestParam(required = false) String branch,
       Principal principal,
       RedirectAttributes redirect) {

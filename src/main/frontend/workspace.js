@@ -1996,7 +1996,7 @@ function initializeChat(state) {
       } else {
         const option = model?.selectedOptions[0];
         const body = { prompt, providerInstanceId: model?.value || null, provider: option?.dataset.kind || null, model: option?.dataset.model,
-          maxModelTurns: state.skillTurns || 20, maxOutputTokens: option?.dataset.tokens ? Number(option.dataset.tokens) : null,
+          maxModelTurns: state.skillTurns || 100, maxOutputTokens: option?.dataset.tokens ? Number(option.dataset.tokens) : null,
           contextWindowTokens: option?.dataset.context ? Number(option.dataset.context) : null,
           reasoningEffort: option?.dataset.reasoning || null, textVerbosity: option?.dataset.verbosity || null };
         state.skillTurns = null;

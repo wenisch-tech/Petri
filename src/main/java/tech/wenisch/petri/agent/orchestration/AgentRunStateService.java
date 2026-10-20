@@ -127,7 +127,7 @@ class AgentRunStateService {
       cancel(run, actor);
       return state(run, allTurns(run.id()));
     }
-    if (run.modelTurnCount() >= run.maxModelTurns()) {
+    if (run.turnBudgetSpent()) {
       exhaust(run, actor);
       return state(run, allTurns(run.id()));
     }
@@ -299,7 +299,7 @@ class AgentRunStateService {
     requireActiveClaim(run, claimId);
     if (run.status() == AgentRunStatus.CANCELLATION_REQUESTED) {
       cancel(run, actor);
-    } else if (run.modelTurnCount() >= run.maxModelTurns()) {
+    } else if (run.turnBudgetSpent()) {
       exhaust(run, actor);
     }
     return state(run, allTurns(run.id()));

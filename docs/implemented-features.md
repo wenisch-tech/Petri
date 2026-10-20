@@ -82,7 +82,7 @@
 ## Agent runtime
 
 - Persistent runs and ordered user, model, tool-call, tool-result and error turns.
-- Explicit model-turn budgets.
+- Explicit model-turn budgets (1 to 100, or `-1` for no limit; shown as ∞ in run lists).
 - Execution leases that prevent concurrent workers from driving one run.
 - Cancellation and resumable interrupted runs.
 - Asynchronous start/resume for browser and API clients.
