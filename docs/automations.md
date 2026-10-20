@@ -71,15 +71,21 @@ These two work on a **branch you select** (the *Branch* field, default the proje
 branch), not on somebody's pull request, so they only run on a schedule or with **Run now**. Each
 run:
 
-1. synchronises the mirror and scans the branch with Trivy (dependencies resolved first, `CRITICAL`,
-   `HIGH` and `MEDIUM` findings that have a fix, plus secrets). Nothing fixable ends the run as
-   *Reviewed*, and no branch is created;
-2. skips the run while an earlier `petri/vulnerability-fix-…` pull request into that branch is
-   still open;
-3. creates the branch `petri/vulnerability-fix-<date>-<time>` from it and starts the implementation
+1. skips the run while another fix run of the project is still working, so two runs never open two
+   pull requests;
+2. synchronises the mirror. If an earlier `petri/vulnerability-fix-…` pull request into the selected
+   branch is still open, the run **updates that pull request**: it scans the pull request's branch,
+   starts the workflow on that branch with the remaining findings, pushes to the same branch and
+   leaves a comment on the pull request. No second branch or pull request is created. Nothing
+   fixable left ends the run as *Reviewed*, and a pull request whose branch is open in a workspace
+   is left alone (the run is *Skipped*). Otherwise the run continues with the next steps;
+3. scans the branch with Trivy (dependencies resolved first, `CRITICAL`, `HIGH` and `MEDIUM`
+   findings that have a fix, plus secrets). Nothing fixable ends the run as *Reviewed*, and no
+   branch is created;
+4. creates the branch `petri/vulnerability-fix-<date>-<time>` from it and starts the implementation
    workflow there with the findings as its task (the `vulnerability-fix` method plus the
    automation's own skill);
-4. with **Complete without approval** ticked, approves the workflow's plan and final gate itself,
+5. with **Complete without approval** ticked, approves the workflow's plan and final gate itself,
    commits and pushes the result, rescans it and opens a pull request into the selected branch with
    the rescan result in its description. Unticked, the workflow waits for its normal approvals in
    the workspace and nothing is pushed by itself.
