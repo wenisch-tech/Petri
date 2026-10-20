@@ -32,7 +32,7 @@ class AutomationSchedulerTest {
   private final VulnerabilityFixService fixes = mock(VulnerabilityFixService.class);
   private final AutomationScheduler scheduler = new AutomationScheduler(
       automations, settings, runs, sources, connections, review,
-      mock(PullRequestImprovementService.class), fixes, true, 5, 2);
+      mock(PullRequestImprovementService.class), fixes, mock(AutomationPollSettingsService.class), true, 5, 2);
   private final UUID projectId = UUID.randomUUID();
 
   private static PullRequestRef pull(long number, boolean draft) {

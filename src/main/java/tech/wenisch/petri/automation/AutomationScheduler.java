@@ -39,8 +39,10 @@ public class AutomationScheduler {
   private final CodeReviewAutomation review;
   private final PullRequestImprovementService improvements;
   private final VulnerabilityFixService fixes;
+  private final AutomationPollSettingsService pollSettings;
   private final boolean enabled;
   private final int maxPerPoll;
+  private volatile Instant lastPoll;
   private final Semaphore concurrency;
   private final ExecutorService tasks = Executors.newVirtualThreadPerTaskExecutor();
   private final Set<UUID> inFlight = ConcurrentHashMap.newKeySet();
@@ -51,6 +53,7 @@ public class AutomationScheduler {
       AutomationRunService runs, ProjectProviderSourceService sources,
       GitAccountConnectionService connections, CodeReviewAutomation review,
       PullRequestImprovementService improvements, VulnerabilityFixService fixes,
+      AutomationPollSettingsService pollSettings,
       @Value("${petri.automation.enabled:true}") boolean enabled,
       @Value("${petri.automation.max-per-poll:5}") int maxPerPoll,
       @Value("${petri.automation.max-concurrent:2}") int maxConcurrent) {
@@ -62,16 +65,22 @@ public class AutomationScheduler {
     this.review = review;
     this.improvements = improvements;
     this.fixes = fixes;
+    this.pollSettings = pollSettings;
     this.enabled = enabled;
     this.maxPerPoll = Math.max(1, maxPerPoll);
     this.concurrency = new Semaphore(Math.max(1, maxConcurrent));
   }
 
+  // Ticks often and polls when the interval the administrator configured has passed.
   @Scheduled(
       initialDelayString = "${petri.automation.initial-delay-ms:30000}",
-      fixedDelayString = "${petri.automation.poll-interval-ms:120000}")
+      fixedDelay = 10_000)
   void pollPullRequests() {
     if (!enabled) return;
+    Instant now = Instant.now();
+    Instant last = lastPoll;
+    if (last != null && now.isBefore(last.plus(pollSettings.interval()))) return;
+    lastPoll = now;
     for (ProjectAutomation automation : automations.findAllByEnabledTrue()) {
       if (automation.getTrigger() != AutomationTrigger.PULL_REQUEST) continue;
       try {

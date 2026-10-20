@@ -124,7 +124,7 @@ author. The branch must not be open in a workspace; close it first so edits do n
 
 | Trigger | Behavior |
 | --- | --- |
-| **Pull request** | Petri lists open pull requests of the project's repository through the connected Git account about every two minutes (`PETRI_AUTOMATION_POLL_INTERVAL_MS`). A pull request is reviewed when it was opened or updated after the automation was enabled. Drafts are skipped. Nothing needs to reach Petri from the Git provider, so no webhook is required. |
+| **Pull request** | Petri lists open pull requests of the project's repository through the connected Git account every two minutes by default; an administrator sets the interval (1 to 1440 minutes) under **Administration → Actions → Pull request checks**, which overrides `PETRI_AUTOMATION_POLL_INTERVAL_MS`. A pull request is reviewed when it was opened or updated after the automation was enabled. Drafts are skipped. Nothing needs to reach Petri from the Git provider, so no webhook is required. |
 | **Cron** | On the configured schedule (UTC, five or six fields) every open pull request without a review for its latest commit is reviewed. |
 
 Every head commit is reviewed once. Failed or skipped runs are retried with **Review open pull
@@ -239,7 +239,7 @@ itself.
 | Variable | Default | Purpose |
 | --- | --- | --- |
 | `PETRI_AUTOMATION_ENABLED` | `true` | Master switch for polling and schedules. |
-| `PETRI_AUTOMATION_POLL_INTERVAL_MS` | `120000` | Pull request polling interval. |
+| `PETRI_AUTOMATION_POLL_INTERVAL_MS` | `120000` | Default pull request polling interval; the administration setting takes precedence. |
 | `PETRI_AUTOMATION_MAX_PER_POLL` | `5` | New reviews started per poll and project. |
 | `PETRI_AUTOMATION_MAX_CONCURRENT` | `2` | Reviews running at the same time. |
 | `PETRI_AUTOMATION_MAX_DIFF_BYTES` | `120000` | Diff size included in the prompt. |

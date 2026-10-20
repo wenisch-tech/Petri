@@ -14,14 +14,18 @@ import org.springframework.web.servlet.mvc.support.RedirectAttributes;
 import tech.wenisch.petri.agent.skill.SkillService;
 import tech.wenisch.petri.automation.AutomationActionService;
 import tech.wenisch.petri.automation.AutomationActionService.CustomAction;
+import tech.wenisch.petri.automation.AutomationPollSettingsService;
 
 /** Administration of the actions that automations can run: the built-in ones and custom ones. */
 @Controller
 public class AutomationActionsController {
   private final AutomationActionService actions;
   private final SkillService skills;
+  private final AutomationPollSettingsService pollSettings;
 
-  public AutomationActionsController(AutomationActionService actions, SkillService skills) {
+  public AutomationActionsController(
+      AutomationActionService actions, SkillService skills, AutomationPollSettingsService pollSettings) {
+    this.pollSettings = pollSettings;
     this.actions = actions;
     this.skills = skills;
   }
@@ -29,6 +33,7 @@ public class AutomationActionsController {
   @GetMapping("/admin/actions")
   String page(Model model) {
     model.addAttribute("actions", actions.list());
+    model.addAttribute("poll", pollSettings.view());
     model.addAttribute("skills", skills.list());
     model.addAttribute("installable", skills.installable());
     model.addAttribute("installed", skills.listInstalled());
@@ -52,6 +57,17 @@ public class AutomationActionsController {
       actions.saveCustom(id, new CustomAction(title, description, skill, "BRANCH".equals(context),
           vulnerability, comments, improves, merges), principal.getName());
       redirect.addFlashAttribute("notice", id == null || id.isBlank() ? "Action added" : "Action saved");
+    } catch (IllegalArgumentException exception) {
+      redirect.addFlashAttribute("error", exception.getMessage());
+    }
+    return "redirect:/admin/actions";
+  }
+
+  @PostMapping("/admin/actions/polling")
+  String savePolling(@RequestParam int intervalMinutes, Principal principal, RedirectAttributes redirect) {
+    try {
+      pollSettings.save(intervalMinutes, principal.getName());
+      redirect.addFlashAttribute("notice", "Pull request check interval saved");
     } catch (IllegalArgumentException exception) {
       redirect.addFlashAttribute("error", exception.getMessage());
     }
