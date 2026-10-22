@@ -3,6 +3,7 @@ import { hydrateIcons } from './icons';
 import { initializeWorkspace } from './workspace';
 import { initializeDashboard } from './dashboard';
 import { hydrateMarkdown, scheduleMarkdown } from './markdown';
+import { hydrateLogs } from './logview';
 
 const storedTheme = (() => {
   try { return localStorage.getItem('petri-theme'); } catch { return null; }
@@ -121,6 +122,7 @@ window.addEventListener('petri-content', event => {
   relativeTimes(event.detail);
   localizeTimes(event.detail);
   hydrateMarkdown(event.detail);
+  hydrateLogs(event.detail);
 });
 
 function bootPetri() {
@@ -150,6 +152,7 @@ function bootPetri() {
   }
   localizeTimes();
   hydrateMarkdown(document);
+  hydrateLogs(document);
 
   const chat = document.querySelector('[data-chat-run]');
   const scroller = document.querySelector('[data-chat-scroll]');

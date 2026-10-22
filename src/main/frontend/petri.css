@@ -1055,6 +1055,49 @@
   .petri-code-copy:hover { background: color-mix(in srgb, var(--color-ink-700) 60%, transparent); @apply text-ink-100; }
   .petri-code-pre { margin: 0; padding: .7rem .9rem; overflow-x: auto; }
   .petri-code-pre code.hljs { display: block; background: transparent; color: var(--code-fg); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.55; white-space: pre; }
+  /* CI log viewer */
+  .log-view { margin-top: 1rem; overflow: hidden; border-radius: .6rem; border: 1px solid color-mix(in srgb, var(--color-ink-700) 74%, transparent); background: var(--code-bg); }
+  .log-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: .5rem; padding: .35rem .75rem; background: var(--code-head-bg); border-bottom: 1px solid color-mix(in srgb, var(--color-ink-700) 60%, transparent); }
+  .log-toolbar [data-log-info] { margin-right: auto; font-size: 11px; @apply text-ink-500; }
+  .log-tool { display: inline-flex; align-items: center; gap: .3rem; font-size: 10px; font-weight: 600; text-transform: uppercase; letter-spacing: .06em; border-radius: .35rem; padding: .2rem .5rem; background: transparent; @apply text-ink-500; cursor: pointer; transition: background .15s, color .15s; }
+  .log-tool svg { width: .85rem; height: .85rem; }
+  .log-tool:hover, .log-tool[aria-pressed="true"] { background: color-mix(in srgb, var(--color-ink-700) 60%, transparent); @apply text-ink-100; }
+  .log-scroll { max-height: calc(100vh - 20rem); min-height: 12rem; overflow: auto; padding: .5rem 0; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 12px; line-height: 1.55; color: var(--code-fg); }
+  .log-line { display: flex; gap: .75rem; padding: 0 .9rem 0 0; white-space: pre; }
+  .log-line::before { content: attr(data-n); flex: none; min-width: 3.6rem; padding-right: .5rem; text-align: right; user-select: none; @apply text-ink-500/60; }
+  .log-line:hover { background: color-mix(in srgb, var(--color-ink-700) 35%, transparent); }
+  .log-line.is-error { background: color-mix(in srgb, var(--color-danger-400) 10%, transparent); box-shadow: inset 2px 0 0 var(--color-danger-400); }
+  .log-line.is-warn { background: color-mix(in srgb, var(--color-warn-400) 8%, transparent); box-shadow: inset 2px 0 0 var(--color-warn-400); }
+  .log-view.is-wrapped .log-line { white-space: pre-wrap; word-break: break-word; }
+  .log-view.is-only-errors .log-line:not(.is-error), .log-view.is-only-errors .log-group > summary { display: none; }
+  .log-view.is-only-errors .log-group { display: contents; }
+  .log-time { flex: none; @apply text-ink-500/60; user-select: none; }
+  .log-group > summary { cursor: pointer; padding: .1rem .9rem .1rem 4.4rem; font-weight: 600; @apply text-ink-300; }
+  .log-group > summary:hover { background: color-mix(in srgb, var(--color-ink-700) 35%, transparent); }
+  .log-url { color: var(--tok-meta); text-decoration: underline; text-underline-offset: 2px; }
+  .log-ref { color: var(--tok-title); }
+  .log-level-error { font-weight: 700; color: var(--color-danger-400); }
+  .log-level-warn { font-weight: 700; color: var(--color-warn-400); }
+  .log-level-info { color: var(--tok-string); }
+  .log-duration { color: var(--tok-number); }
+  .ansi-bold { font-weight: 700; }
+  .ansi-dim { opacity: .65; }
+  .ansi-black { @apply text-ink-500; }
+  .ansi-red, .ansi-bright-red { color: var(--color-danger-400); }
+  .ansi-green, .ansi-bright-green { color: var(--tok-string); }
+  .ansi-yellow, .ansi-bright-yellow { color: var(--color-warn-400); }
+  .ansi-blue, .ansi-bright-blue, .ansi-bright-cyan { color: var(--tok-meta); }
+  .ansi-cyan { color: var(--tok-type); }
+  .ansi-magenta, .ansi-bright-magenta { color: var(--tok-keyword); }
+  .ansi-white, .ansi-bright-white { @apply text-ink-100; }
+  .ansi-bright-black { @apply text-ink-500; }
+  .job-tabs { display: flex; flex-wrap: wrap; gap: .4rem; margin-top: 1rem; }
+  .job-tab { display: inline-flex; align-items: center; gap: .4rem; border-radius: .5rem; border: 1px solid var(--color-line-strong); padding: .3rem .65rem; font-size: 12px; font-weight: 600; @apply bg-ink-800 text-ink-300; }
+  .job-tab svg { width: .9rem; height: .9rem; }
+  .job-tab:hover { @apply border-ink-500; }
+  .job-tab.is-active { @apply border-brand-400 text-ink-100; }
+  .job-tab.is-failed svg { color: var(--color-danger-400); }
+  .job-tab.is-success svg { @apply text-good-500; }
   .hljs-comment, .hljs-quote { color: var(--tok-comment); font-style: italic; }
   .hljs-keyword, .hljs-selector-tag, .hljs-doctag { color: var(--tok-keyword); }
   .hljs-literal, .hljs-bool, .hljs-symbol, .hljs-bullet { color: var(--tok-literal); }

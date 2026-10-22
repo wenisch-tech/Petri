@@ -19,6 +19,8 @@ import tools.jackson.databind.ObjectMapper;
 
 abstract class AbstractHttpGitProviderAdapter implements GitProviderAdapter {
   private static final int MAX_RESPONSE_BYTES = 4 * 1024 * 1024;
+  private static final int MAX_LOG_BYTES = 2 * 1024 * 1024;
+  private static final int MAX_REDIRECTS = 3;
   private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(30);
 
   private final HttpClient client;
@@ -47,6 +49,85 @@ abstract class AbstractHttpGitProviderAdapter implements GitProviderAdapter {
         .header("User-Agent", "Petri/0.1");
     authorize(request, token, method);
     return send(request.GET().build());
+  }
+
+  /**
+   * A plain-text resource such as a job log. Providers answer with a redirect to signed storage, which is
+   * followed without the credentials. Only the tail of an oversized log is kept.
+   */
+  protected PipelineLog getText(
+      GitProviderInstance instance,
+      String resource,
+      String token,
+      GitConnectionAuthMethod method) {
+    HttpRequest.Builder first = HttpRequest.newBuilder(safeUri(instance.getApiBaseUrl(), resource))
+        .timeout(REQUEST_TIMEOUT)
+        .header("Accept", "text/plain, */*")
+        .header("User-Agent", "Petri/0.1");
+    authorize(first, token, method);
+    HttpRequest request = first.GET().build();
+    try {
+      for (int hop = 0; ; hop++) {
+        HttpResponse<InputStream> response = client.send(request, HttpResponse.BodyHandlers.ofInputStream());
+        int status = response.statusCode();
+        if (status >= 300 && status < 400) {
+          response.body().close();
+          String location = response.headers().firstValue("Location").orElse(null);
+          if (location == null || hop >= MAX_REDIRECTS) {
+            throw new GitProviderException("Provider log redirected too many times");
+          }
+          URI target = request.uri().resolve(location);
+          validateEndpoint(URI.create(target.getScheme() + "://" + target.getRawAuthority() + target.getRawPath()));
+          request = HttpRequest.newBuilder(target)
+              .timeout(REQUEST_TIMEOUT)
+              .header("Accept", "text/plain, */*")
+              .header("User-Agent", "Petri/0.1")
+              .GET().build();
+          continue;
+        }
+        try (InputStream input = response.body()) {
+          if (status < 200 || status >= 300) {
+            byte[] body = input.readNBytes(4096);
+            throw new GitProviderException("Provider request failed with HTTP " + status + providerMessage(body));
+          }
+          return readTail(input);
+        }
+      }
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      throw new GitProviderException("Provider request was interrupted", exception);
+    } catch (IOException exception) {
+      throw new GitProviderException("Provider request failed", exception);
+    }
+  }
+
+  private static PipelineLog readTail(InputStream input) throws IOException {
+    byte[] buffer = new byte[MAX_LOG_BYTES];
+    int kept = 0;
+    boolean truncated = false;
+    byte[] chunk = new byte[8192];
+    int read;
+    while ((read = input.read(chunk)) != -1) {
+      if (kept + read > MAX_LOG_BYTES) {
+        truncated = true;
+        int drop = kept + read - MAX_LOG_BYTES;
+        System.arraycopy(buffer, drop, buffer, 0, Math.max(0, kept - drop));
+        kept = Math.max(0, kept - drop);
+        if (read > MAX_LOG_BYTES) {
+          System.arraycopy(chunk, read - MAX_LOG_BYTES, buffer, 0, MAX_LOG_BYTES);
+          kept = MAX_LOG_BYTES;
+          continue;
+        }
+      }
+      System.arraycopy(chunk, 0, buffer, kept, read);
+      kept += read;
+    }
+    String text = new String(buffer, 0, kept, StandardCharsets.UTF_8);
+    if (truncated) {
+      int newline = text.indexOf('\n');
+      if (newline >= 0) text = text.substring(newline + 1);
+    }
+    return new PipelineLog(text, truncated);
   }
 
   protected JsonNode postJson(
@@ -293,6 +374,36 @@ abstract class AbstractHttpGitProviderAdapter implements GitProviderAdapter {
     return new PullRequestDetail(
         summary, text(pr, "body"), text(pr.path("head"), "sha"), pr.path("additions").asInt(0),
         pr.path("deletions").asInt(0), pr.path("commits").asInt(0), files, comments);
+  }
+
+  protected List<PipelineJob> githubStyleJobs(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method, String fullName,
+      String runId) {
+    JsonNode body = get(instance,
+        "/repos/" + repositoryPath(fullName) + "/actions/runs/" + numeric(runId) + "/jobs?per_page=100",
+        token, method);
+    JsonNode jobs = body.path("jobs").isArray() ? body.path("jobs") : body;
+    List<PipelineJob> result = new java.util.ArrayList<>();
+    for (JsonNode node : jobs) {
+      String status = text(node, "status");
+      String conclusion = text(node, "conclusion");
+      result.add(new PipelineJob(
+          text(node, "id"), text(node, "name"), PipelineStatus.github(status, conclusion),
+          text(node, "html_url"), instant(text(node, "started_at")), instant(text(node, "completed_at"))));
+    }
+    return result;
+  }
+
+  protected PipelineLog githubStyleJobLog(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method, String fullName,
+      String jobId) {
+    return getText(instance,
+        "/repos/" + repositoryPath(fullName) + "/actions/jobs/" + numeric(jobId) + "/logs", token, method);
+  }
+
+  protected static String numeric(String value) {
+    if (value == null || !value.matches("[0-9]{1,19}")) throw new IllegalArgumentException("Invalid id");
+    return value;
   }
 
   protected void githubStyleReview(

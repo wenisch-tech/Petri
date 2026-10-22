@@ -50,8 +50,7 @@
         </span>
         <div class="list-main">
           <span class="list-title">
-            <a th:if="${run.webUrl != null}" class="hover:text-brand-400" th:href="${run.webUrl}" th:title="${run.name}" target="_blank" rel="noopener noreferrer" th:text="${run.name}">Workflow</a>
-            <span th:unless="${run.webUrl != null}" th:text="${run.name}">Workflow</span>
+            <a class="hover:text-brand-400" data-pipeline-run th:href="@{/projects/{id}/pipelines/{run}(id=${project.id}, run=${run.id})}" th:title="${run.name}" th:text="${run.name}">Workflow</a>
           </span>
           <span class="list-meta">
             <span class="inline-flex items-center gap-1 font-mono" th:if="${run.ref != null}"><i data-lucide="GitBranch"></i><span th:text="${run.ref}">main</span></span>
@@ -64,6 +63,7 @@
             <time data-relative th:attr="datetime=${run.updatedAt != null ? run.updatedAt : run.createdAt}" th:text="${run.updatedAt != null ? run.updatedAt : run.createdAt}">time</time>
           </span>
         </div>
+        <button type="button" class="btn-secondary btn-sm" data-analyze-pipeline th:attr="data-run-id=${run.id}" title="Analyze the log and suggest fixes"><i data-lucide="Sparkles"></i> Analyze</button>
         <span class="badge" th:classappend="${run.status == 'FAILED'} ? 'badge-danger' : (${run.status == 'RUNNING' or run.status == 'PENDING'} ? 'badge-brand' : (${run.status == 'SUCCESS'} ? '' : 'badge-neutral'))"
               th:text="${run.status == 'SUCCESS'} ? 'Passed' : (${run.status == 'FAILED'} ? 'Failed' : (${run.status == 'RUNNING'} ? 'Running' : (${run.status == 'PENDING'} ? 'Queued' : (${run.status == 'CANCELLED'} ? 'Cancelled' : (${run.status == 'SKIPPED'} ? 'Skipped' : 'Unknown')))))">Passed</span>
       </li>

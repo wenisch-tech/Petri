@@ -93,6 +93,7 @@ function initializeEmbeddedViews(state) {
   const parentView = { roles: 'settings', environment: 'settings', mcp: 'settings' };
   const runPath = /^\/runs\/([0-9a-fA-F-]{36})$/;
   const prPath = /^\/projects\/[0-9a-fA-F-]{36}\/pull-requests\/(\d+)$/;
+  const pipelinePath = /^\/projects\/[0-9a-fA-F-]{36}\/pipelines\/(\d+)$/;
   const buttons = [...document.querySelectorAll('.workspace-view-tab[data-workspace-view]')];
   // The numbers on the tabs: open pull requests, findings of the open branch, configured automations.
   const badge = (container, text, tone, title) => {
@@ -158,7 +159,7 @@ function initializeEmbeddedViews(state) {
     if (!current) items.push({ label: 'Workspace' });
     else if (detail) {
       items.push({ label: titles[current], view: current });
-      items.push({ label: current === 'pullrequests' ? `#${detail}` : `Run ${detail.slice(0, 8)}` });
+      items.push({ label: current === 'pullrequests' ? `#${detail}` : current === 'pipelines' ? `Run ${detail}` : `Run ${detail.slice(0, 8)}` });
     } else if (parentView[current]) {
       items.push({ label: titles[parentView[current]], view: parentView[current] });
       items.push({ label: titles[current] });
@@ -189,11 +190,15 @@ function initializeEmbeddedViews(state) {
       if (current) url.searchParams.set('view', current); else url.searchParams.delete('view');
       url.searchParams.delete('run');
       url.searchParams.delete('pr');
-      if (current && detail) url.searchParams.set(current === 'pullrequests' ? 'pr' : 'run', detail);
+      url.searchParams.delete('pipeline');
+      url.searchParams.delete('job');
+      if (current && detail) url.searchParams.set(current === 'pullrequests' ? 'pr' : current === 'pipelines' ? 'pipeline' : 'run', detail);
+      const job = current === 'pipelines' && detail ? new URLSearchParams(currentSearch).get('job') : null;
+      if (job) url.searchParams.set('job', job);
       history.replaceState(null, '', url);
     } catch { /* the address bar is cosmetic */ }
   };
-  const pagePath = () => (!detail ? urls[current] : current === 'pullrequests' ? `${urls.pullrequests}/${detail}` : `/runs/${detail}`);
+  const pagePath = () => (!detail ? urls[current] : current === 'pullrequests' ? `${urls.pullrequests}/${detail}` : current === 'pipelines' ? `${urls.pipelines}/${detail}` : `/runs/${detail}`);
   const close = () => {
     clearTimeout(liveTimer);
     current = null;
@@ -323,6 +328,21 @@ function initializeEmbeddedViews(state) {
     document.addEventListener('keydown', event => { if (event.key === 'Escape') closeMenu(); });
   }
 
+  // "Analyze" keeps the pipeline's log in the middle and lets the agent work on it in the chat panel.
+  content.addEventListener('click', event => {
+    const analyze = event.target.closest?.('[data-analyze-pipeline]');
+    if (!analyze) return;
+    event.preventDefault();
+    const runId = analyze.dataset.runId;
+    if (!/^\d+$/.test(runId || '')) return;
+    const jobId = /^\d+$/.test(analyze.dataset.jobId || '') ? analyze.dataset.jobId : null;
+    if (current !== 'pipelines' || detail !== runId) show('pipelines', runId, jobId ? `?job=${jobId}` : '');
+    analyze.disabled = true;
+    startAgent(state, pipelinePrompt(runId, jobId))
+      .catch(error => content.prepend(el('div', 'alert alert-error', error.message)))
+      .finally(() => { if (analyze.isConnected) analyze.disabled = false; });
+  });
+
   // The skills page runs a skill as a new direct chat in the chat panel.
   content.addEventListener('click', event => {
     const fix = event.target.closest?.('[data-fix-prompt]');
@@ -343,7 +363,11 @@ function initializeEmbeddedViews(state) {
     const name = Object.keys(urls).find(key => urls[key] === url.pathname);
     const run = runPath.exec(url.pathname);
     const pull = prPath.exec(url.pathname);
-    if (name) {
+    const pipeline = pipelinePath.exec(url.pathname);
+    if (pipeline) {
+      event.preventDefault();
+      show('pipelines', pipeline[1], url.search);
+    } else if (name) {
       event.preventDefault();
       show(name, null, url.search);
     } else if (pull) {
@@ -393,7 +417,11 @@ function initializeEmbeddedViews(state) {
   const requested = params.get('view');
   const requestedRun = params.get('run');
   const requestedPr = params.get('pr');
-  if (requested === 'pullrequests' && /^\d+$/.test(requestedPr || '')) show('pullrequests', requestedPr);
+  const requestedPipeline = params.get('pipeline');
+  const requestedJob = params.get('job');
+  if (requested === 'pipelines' && /^\d+$/.test(requestedPipeline || '')) {
+    show('pipelines', requestedPipeline, /^\d+$/.test(requestedJob || '') ? `?job=${requestedJob}` : '');
+  } else if (requested === 'pullrequests' && /^\d+$/.test(requestedPr || '')) show('pullrequests', requestedPr);
   else if (requested && urls[requested]) show(requested, runPath.test(`/runs/${requestedRun}`) ? requestedRun : null);
   else renderCrumbs();
 }
@@ -511,6 +539,12 @@ async function startAgent(state, prompt, turns = 99) {
   input.value = prompt;
   input.dispatchEvent(new Event('input'));
   send.click();
+}
+
+function pipelinePrompt(runId, jobId) {
+  const job = jobId ? ` and job ${jobId}` : ' (start with the first failed job)';
+  return `Use the load_skill tool to load the skill "pipeline-log-analysis" and follow it for this project. `
+    + `Analyze the CI pipeline run ${runId}${job}.`;
 }
 
 function runSkill(state, name) {

@@ -277,6 +277,68 @@ class GitProviderAdapterTest {
   }
 
   @Test
+  void pipelineJobsAndLogsAreReadOnEveryProvider() {
+    AtomicReference<HttpRequest> request = new AtomicReference<>();
+    java.util.List<HttpRequest> seen = new java.util.ArrayList<>();
+    GithubProviderAdapter github = new GithubProviderAdapter(json, client(request, value -> {
+      seen.add(value);
+      if (value.uri().getPath().endsWith("/jobs")) {
+        return ok("""
+            {"jobs":[{"id":11,"name":"build","status":"completed","conclusion":"success",
+                      "html_url":"https://x/j/11","started_at":"2026-05-01T10:00:00Z"},
+                     {"id":12,"name":"test","status":"completed","conclusion":"failure"}]}
+            """);
+      }
+      return value.uri().getHost().equals("git.example.test")
+          ? new ResponseSpec(302, "", "https://logs.example.test/blob/12?sig=abc")
+          : ok("line one\nboom: failed\n");
+    }));
+    var instance = instance(GitProviderType.GITHUB);
+
+    var jobs = github.listPipelineJobs(instance, "tok", GitConnectionAuthMethod.PAT, "42", "acme/petri", "7");
+    assertThat(jobs).extracting(PipelineJob::status).containsExactly("SUCCESS", "FAILED");
+    assertThat(seen.getFirst().uri().getPath()).isEqualTo("/api/repos/acme/petri/actions/runs/7/jobs");
+
+    seen.clear();
+    var log = github.pipelineJobLog(instance, "tok", GitConnectionAuthMethod.PAT, "42", "acme/petri", "7", "12");
+    assertThat(log.text()).contains("boom: failed");
+    assertThat(log.truncated()).isFalse();
+    assertThat(seen.getFirst().uri().getPath()).isEqualTo("/api/repos/acme/petri/actions/jobs/12/logs");
+    assertThat(seen.getFirst().headers().firstValue("Authorization")).isPresent();
+    // The signed storage URL gets no credentials.
+    assertThat(seen.get(1).uri().getHost()).isEqualTo("logs.example.test");
+    assertThat(seen.get(1).headers().firstValue("Authorization")).isEmpty();
+
+    GitlabProviderAdapter gitlab = new GitlabProviderAdapter(json, client(request, value ->
+        value.uri().getPath().endsWith("/jobs")
+            ? ok("[{\"id\":5,\"name\":\"lint\",\"status\":\"failed\",\"web_url\":\"https://x/5\"}]")
+            : ok("\u001B[31mERROR\u001B[0m: bad\n")));
+    var gitlabJobs = gitlab.listPipelineJobs(instance(GitProviderType.GITLAB), "tok",
+        GitConnectionAuthMethod.PAT, "42", "acme/petri", "9");
+    assertThat(gitlabJobs.getFirst().status()).isEqualTo("FAILED");
+    assertThat(request.get().uri().getPath()).isEqualTo("/api/projects/42/pipelines/9/jobs");
+    assertThat(gitlab.pipelineJobLog(instance(GitProviderType.GITLAB), "tok",
+        GitConnectionAuthMethod.PAT, "42", "acme/petri", "9", "5").text()).contains("ERROR");
+    assertThat(request.get().uri().getPath()).isEqualTo("/api/projects/42/jobs/5/trace");
+  }
+
+  @Test
+  void anOversizedLogKeepsItsTailAndRefusesBadIds() {
+    String big = ("0123456789".repeat(9) + "\n").repeat(40_000);
+    GithubProviderAdapter github = new GithubProviderAdapter(json,
+        client(new AtomicReference<>(), value -> ok(big + "the end\n")));
+    var instance = instance(GitProviderType.GITHUB);
+
+    var log = github.pipelineJobLog(instance, "tok", GitConnectionAuthMethod.PAT, "42", "acme/petri", "7", "12");
+
+    assertThat(log.truncated()).isTrue();
+    assertThat(log.text().length()).isLessThanOrEqualTo(2 * 1024 * 1024);
+    assertThat(log.text()).endsWith("the end\n").startsWith("0123456789");
+    org.junit.jupiter.api.Assertions.assertThrows(IllegalArgumentException.class, () ->
+        github.pipelineJobLog(instance, "tok", GitConnectionAuthMethod.PAT, "42", "acme/petri", "7", "1/../2"));
+  }
+
+  @Test
   void githubListsOpenPullRequestsAndPostsAComment() {
     AtomicReference<HttpRequest> request = new AtomicReference<>();
     HttpClient client = client(request, value -> value.method().equals("POST")
@@ -491,7 +553,9 @@ class GitProviderAdapterTest {
 
   private static ResponseSpec ok(String body) { return new ResponseSpec(200, body); }
 
-  private record ResponseSpec(int status, String body) {}
+  private record ResponseSpec(int status, String body, String location) {
+    private ResponseSpec(int status, String body) { this(status, body, null); }
+  }
 
   private static final class StubHttpClient extends HttpClient {
     private final AtomicReference<HttpRequest> captured;
@@ -556,7 +620,10 @@ class GitProviderAdapterTest {
     @Override public int statusCode() { return spec.status(); }
     @Override public HttpRequest request() { return request; }
     @Override public Optional<HttpResponse<InputStream>> previousResponse() { return Optional.empty(); }
-    @Override public HttpHeaders headers() { return HttpHeaders.of(Map.of(), (a, b) -> true); }
+    @Override public HttpHeaders headers() {
+      return HttpHeaders.of(spec.location() == null ? Map.of() : Map.of("Location", java.util.List.of(spec.location())),
+          (a, b) -> true);
+    }
     @Override public InputStream body() {
       return new ByteArrayInputStream(spec.body().getBytes(StandardCharsets.UTF_8));
     }

@@ -166,4 +166,22 @@ public class ProjectRepositoryViewsController {
     model.addAttribute("view", activity.pipelines(projectId, principal.getName()));
     return embedded ? "project-pipelines :: content" : "project-pipelines";
   }
+
+  @GetMapping("/projects/{projectId}/pipelines/{runId}")
+  String pipelineRun(
+      @PathVariable UUID projectId,
+      @PathVariable String runId,
+      @RequestParam(required = false) String job,
+      @RequestParam(defaultValue = "false") boolean embedded,
+      Principal principal,
+      Model model) {
+    if (!runId.matches("[0-9]{1,19}") || (job != null && !job.matches("[0-9]{1,19}"))) {
+      throw new org.springframework.web.server.ResponseStatusException(
+          org.springframework.http.HttpStatus.NOT_FOUND);
+    }
+    model.addAttribute("project", access.requireProject(projectId, principal.getName()));
+    model.addAttribute("runId", runId);
+    model.addAttribute("view", activity.pipelineRun(projectId, principal.getName(), runId, job));
+    return embedded ? "project-pipeline-run :: content" : "project-pipeline-run";
+  }
 }

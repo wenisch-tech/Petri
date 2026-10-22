@@ -182,6 +182,30 @@ final class GitlabProviderAdapter extends AbstractHttpGitProviderAdapter {
   }
 
   @Override
+  public List<PipelineJob> listPipelineJobs(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, String runId) {
+    if (!repositoryId.matches("[0-9]+")) throw new IllegalArgumentException("Invalid repository id");
+    JsonNode nodes = get(instance, "/projects/" + repositoryId + "/pipelines/" + numeric(runId)
+        + "/jobs?per_page=100", token, method);
+    List<PipelineJob> result = new ArrayList<>();
+    for (JsonNode node : nodes) {
+      result.add(new PipelineJob(
+          text(node, "id"), text(node, "name"), PipelineStatus.gitlab(text(node, "status")),
+          text(node, "web_url"), instant(text(node, "started_at")), instant(text(node, "finished_at"))));
+    }
+    return result;
+  }
+
+  @Override
+  public PipelineLog pipelineJobLog(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, String runId, String jobId) {
+    if (!repositoryId.matches("[0-9]+")) throw new IllegalArgumentException("Invalid repository id");
+    return getText(instance, "/projects/" + repositoryId + "/jobs/" + numeric(jobId) + "/trace", token, method);
+  }
+
+  @Override
   public String postPullRequestComment(
       GitProviderInstance instance, String token, GitConnectionAuthMethod method,
       String repositoryId, String fullName, long number, String webUrl, String markdown) {

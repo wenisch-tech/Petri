@@ -23,6 +23,9 @@ public class ProjectSkillsController {
   public record SkillCard(
       String name, String description, boolean pullRequest, String requirement, boolean ready) {}
 
+  /** Started with Analyze on a pipeline, which names the run; it has nothing to run on its own. */
+  private static final String PIPELINE_SKILL = "pipeline-log-analysis";
+
   private final ProjectAccessService access;
   private final SkillService skills;
   private final TrivyScanService trivy;
@@ -51,7 +54,8 @@ public class ProjectSkillsController {
     List<SkillCard> branchCards = cards.stream().filter(card -> branchSkills.contains(card.name())).toList();
     model.addAttribute("branchSkills", branchCards);
     model.addAttribute("runnable", cards.stream()
-        .filter(card -> !card.pullRequest() && !branchSkills.contains(card.name())).toList());
+        .filter(card -> !card.pullRequest() && !branchSkills.contains(card.name())
+            && !PIPELINE_SKILL.equals(card.name())).toList());
     model.addAttribute("pullRequestSkills", cards.stream().filter(SkillCard::pullRequest).toList());
     return embedded ? "project-skills :: content" : "project-skills";
   }

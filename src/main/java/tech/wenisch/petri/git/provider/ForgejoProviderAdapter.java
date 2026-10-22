@@ -135,6 +135,20 @@ final class ForgejoProviderAdapter extends AbstractHttpGitProviderAdapter {
   }
 
   @Override
+  public List<PipelineJob> listPipelineJobs(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, String runId) {
+    return githubStyleJobs(instance, token, method, fullName, runId);
+  }
+
+  @Override
+  public PipelineLog pipelineJobLog(
+      GitProviderInstance instance, String token, GitConnectionAuthMethod method,
+      String repositoryId, String fullName, String runId, String jobId) {
+    return githubStyleJobLog(instance, token, method, fullName, jobId);
+  }
+
+  @Override
   public String postPullRequestComment(
       GitProviderInstance instance, String token, GitConnectionAuthMethod method,
       String repositoryId, String fullName, long number, String webUrl, String markdown) {

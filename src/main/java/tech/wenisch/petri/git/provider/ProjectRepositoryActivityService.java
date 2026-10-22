@@ -17,6 +17,8 @@ import tech.wenisch.petri.project.ProjectAccessService;
 @Service
 public class ProjectRepositoryActivityService {
   private static final Duration TTL = Duration.ofSeconds(20);
+  private static final Duration FINISHED_LOG_TTL = Duration.ofMinutes(10);
+  private static final Duration LIVE_LOG_TTL = Duration.ofSeconds(3);
   private static final int MAX_ENTRIES = 200;
 
   public record Repository(String provider, String fullName, String webUrl) {}
@@ -33,6 +35,11 @@ public class ProjectRepositoryActivityService {
   public record Pipelines(
       Repository repository, List<PipelineRun> items, int running, int failed, int succeeded,
       String unavailable, String error) {}
+
+  /** One run with its jobs and the log of the selected job. */
+  public record PipelineRunPage(
+      Repository repository, PipelineRun run, List<PipelineJob> jobs, PipelineJob selected,
+      PipelineLog log, String unavailable, String error) {}
 
   private record Cached(long expiresAt, Object value) {}
 
@@ -123,6 +130,60 @@ public class ProjectRepositoryActivityService {
       return new Pipelines(repository, items, running, failed, succeeded, null, null);
     } catch (GitProviderException | IllegalStateException exception) {
       return new Pipelines(repository, List.of(), 0, 0, 0, null, explain(exception, "pipelines"));
+    }
+  }
+
+  /** One run with its jobs and the log of {@code jobId}, or of the first failed (else first) job. */
+  public PipelineRunPage pipelineRun(UUID projectId, String actorEmail, String runId, String jobId) {
+    access.requireProject(projectId, actorEmail);
+    return loadPipelineRun(projectId, runId, jobId);
+  }
+
+  /** The same without an access check, for callers that already established the project. */
+  public PipelineRunPage loadPipelineRun(UUID projectId, String runId, String jobId) {
+    ProjectProviderSource source = sources.find(projectId);
+    if (source == null) return new PipelineRunPage(null, null, List.of(), null, null, NOT_IMPORTED, null);
+    Repository repository = repository(source);
+    PipelineRun run = null;
+    try {
+      List<PipelineRun> all = cached("ci|" + projectId, () -> {
+        var call = connections.prepare(source.getConnectionId());
+        return call.adapter().listPipelines(call.instance(), call.token(), call.method(),
+            source.getExternalRepositoryId(), source.getFullName());
+      });
+      run = all.stream().filter(candidate -> runId.equals(candidate.id())).findFirst().orElse(null);
+    } catch (GitProviderException | IllegalStateException ignored) {
+      // The run list is context only; the jobs below decide whether this page works.
+    }
+    try {
+      List<PipelineJob> jobs = cached("jobs|" + projectId + "|" + runId, () -> {
+        var call = connections.prepare(source.getConnectionId());
+        return call.adapter().listPipelineJobs(call.instance(), call.token(), call.method(),
+            source.getExternalRepositoryId(), source.getFullName(), runId);
+      }, run != null && ("RUNNING".equals(run.status()) || "PENDING".equals(run.status()))
+          ? LIVE_LOG_TTL : TTL);
+      PipelineJob selected = jobs.stream().filter(job -> job.id() != null && job.id().equals(jobId))
+          .findFirst()
+          .or(() -> jobs.stream().filter(job -> "FAILED".equals(job.status())).findFirst())
+          .or(() -> jobs.stream().findFirst())
+          .orElse(null);
+      if (selected == null) return new PipelineRunPage(repository, run, jobs, null, null, null, null);
+      PipelineJob job = selected;
+      boolean live = "RUNNING".equals(job.status()) || "PENDING".equals(job.status());
+      PipelineLog log;
+      try {
+        log = cached("log|" + projectId + "|" + runId + "|" + job.id(), () -> {
+          var call = connections.prepare(source.getConnectionId());
+          return call.adapter().pipelineJobLog(call.instance(), call.token(), call.method(),
+              source.getExternalRepositoryId(), source.getFullName(), runId, job.id());
+        }, live ? LIVE_LOG_TTL : FINISHED_LOG_TTL);
+      } catch (GitProviderException | IllegalStateException exception) {
+        return new PipelineRunPage(repository, run, jobs, selected, null, null,
+            explain(exception, "the log of this job"));
+      }
+      return new PipelineRunPage(repository, run, jobs, selected, log, null, null);
+    } catch (GitProviderException | IllegalStateException exception) {
+      return new PipelineRunPage(repository, run, List.of(), null, null, null, explain(exception, "this pipeline"));
     }
   }
 
@@ -282,12 +343,17 @@ public class ProjectRepositoryActivityService {
 
   @SuppressWarnings("unchecked")
   private <T> T cached(String key, Supplier<T> loader) {
+    return cached(key, loader, TTL);
+  }
+
+  @SuppressWarnings("unchecked")
+  private <T> T cached(String key, Supplier<T> loader, Duration ttl) {
     long now = System.nanoTime();
     Cached hit = cache.get(key);
     if (hit != null && hit.expiresAt() > now) return (T) hit.value();
     T value = loader.get();
     if (cache.size() > MAX_ENTRIES) cache.clear();
-    cache.put(key, new Cached(now + TTL.toNanos(), value));
+    cache.put(key, new Cached(now + ttl.toNanos(), value));
     return value;
   }
 

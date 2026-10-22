@@ -36,6 +36,47 @@ class ProjectRepositoryViewsFlowTest {
   @Autowired tech.wenisch.petri.vulnerability.VulnerabilityReportService vulnerabilities;
 
   @Test
+  void pipelineRunPageShowsTheLogReadOnlyAndIsOwnerScoped() throws Exception {
+    AppUser alice = users.save(new AppUser(UUID.randomUUID(), "alice@petri.local", "unused", "USER"));
+    users.save(new AppUser(UUID.randomUUID(), "bob@petri.local", "unused", "USER"));
+    Project project = projects.save(new Project(UUID.randomUUID(), "Demo", "demo",
+        "https://example.test/acme/demo.git", "main", alice.getId(), Instant.now()));
+    var repository = new ProjectRepositoryActivityService.Repository(
+        "FORGEJO", "acme/demo", "https://example.test/acme/demo");
+    var failed = new tech.wenisch.petri.git.provider.PipelineJob("12", "unit-tests", "FAILED", null, null, null);
+    var passed = new tech.wenisch.petri.git.provider.PipelineJob("11", "build", "SUCCESS", null, null, null);
+    when(activity.pipelineRun(project.getId(), "alice@petri.local", "7", null))
+        .thenReturn(new ProjectRepositoryActivityService.PipelineRunPage(repository,
+            new PipelineRun("7", "CI", "FAILED", "failure", "main", "abcdef1234", "push",
+                "https://example.test/runs/7", Instant.now(), Instant.now()),
+            List.of(passed, failed), failed,
+            new tech.wenisch.petri.git.provider.PipelineLog("ok\nERROR: </script><b>x</b>\n", false),
+            null, null));
+
+    mockMvc.perform(get("/projects/{id}/pipelines/{run}", project.getId(), "7")
+            .with(user("alice@petri.local").roles("USER")).param("embedded", "true"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("data-log-view")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("unit-tests")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("data-analyze-pipeline")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("data-run-id=\"7\"")))
+        .andExpect(content().string(org.hamcrest.Matchers.containsString("&lt;/script&gt;&lt;b&gt;x")))
+        .andExpect(content().string(org.hamcrest.Matchers.not(
+            org.hamcrest.Matchers.containsString("<b>x</b>"))));
+    mockMvc.perform(get("/projects/{id}/pipelines/{run}", project.getId(), "abc")
+            .with(user("alice@petri.local").roles("USER")).param("embedded", "true"))
+        .andExpect(status().isNotFound());
+    mockMvc.perform(get("/projects/{id}/pipelines/{run}", project.getId(), "7")
+            .with(user("bob@petri.local").roles("USER")))
+        .andExpect(status().isNotFound());
+    mockMvc.perform(get("/projects/{id}/skills", project.getId())
+            .with(user("alice@petri.local").roles("USER")).param("embedded", "true"))
+        .andExpect(status().isOk())
+        .andExpect(content().string(org.hamcrest.Matchers.not(
+            org.hamcrest.Matchers.containsString("pipeline-log-analysis"))));
+  }
+
+  @Test
   void pullRequestAndPipelineViewsRenderStatesAndAreOwnerScoped() throws Exception {
     AppUser alice = users.save(new AppUser(UUID.randomUUID(), "alice@petri.local", "unused", "USER"));
     users.save(new AppUser(UUID.randomUUID(), "bob@petri.local", "unused", "USER"));

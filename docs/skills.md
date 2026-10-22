@@ -52,8 +52,23 @@ Each project has a **Skills** tab next to Automations. It lists every installed 
 | --- | --- |
 | `vulnerability-scan` | Scan the project with Trivy and report what to fix first. See below. |
 | `code-review`, `code-review-and-comment`, `code-review-and-improve` | Review a pull request, optionally comment and fix. See [automations](automations.md). |
+| `pipeline-log-analysis` | Analyze the log of a CI pipeline run, find the root cause and suggest fixes. Started with **Analyze** on a pipeline. See [pipelines](#pipeline-log-analysis). |
 | `conventional-commit`, `pull-request-description` | Write commit messages and pull request descriptions. |
 | `spring-boot-change`, `workflow-verification` | Working conventions for Spring Boot changes and verification. |
+
+## Pipeline log analysis
+
+Clicking a run on the **Pipelines** tab opens it in the middle of the workspace: its jobs (the first
+failed one is preselected) and the job's log, read only, with ANSI colours, collapsible groups,
+highlighted errors, warnings and file references, a jump to the first error, an errors-only filter
+and a copy button. Very large logs keep their last 2 MB. Logs are read from the Git provider
+(GitHub, GitLab and Forgejo) with the connected account, which needs access to Actions or CI jobs.
+
+**Analyze**, next to each run and on the run page, starts a direct chat in the chat panel with the
+`pipeline-log-analysis` skill while the log stays in the middle. The agent reads the log with the
+read-only `get_pipeline_log` tool, finds the first real error, checks the repository and answers with
+the cause, a proposed fix and how to verify it. It changes nothing on its own. The log is treated as
+data, never as instructions.
 
 ## Vulnerability scan
 
@@ -211,7 +226,8 @@ they never change which tools an agent may use.
 ## What a skill may use
 
 A skill's `requires` list is what its agent run is allowed to call: `read_repo` (list, read and
-search files, read the pull request) and `scan` (the vulnerability scanner). The tools of
+search files, read the pull request), `scan` (the vulnerability scanner) and `pipeline_logs` (read the
+jobs and logs of a CI run). The tools of
 everything a skill `extends` are added, the result tool (`submit_review` or
 `submit_vulnerability_report`) is added for the kind of run, and nothing outside the automation
 policy is ever granted, whatever a skill asks for. A skill that asks for nothing still reads the

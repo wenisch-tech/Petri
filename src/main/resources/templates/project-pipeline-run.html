@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(|${project.name} pipeline|)}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('projects')}"></header>
+
+<th:block th:fragment="content">
+<main class="page-narrow !max-w-6xl" th:attr="data-live-refresh=${view.selected != null and (view.selected.status == 'RUNNING' or view.selected.status == 'PENDING')} ? 'true' : null">
+  <a class="back-link" th:href="@{/projects/{id}/pipelines(id=${project.id})}"><i data-lucide="ArrowLeft"></i> Pipelines</a>
+
+  <div th:if="${view.unavailable != null}" class="empty-state">
+    <i data-lucide="Rocket"></i>
+    <h2>Pipelines are not available</h2>
+    <p th:text="${view.unavailable}">Reason</p>
+    <a class="btn-primary" href="/git-accounts"><i data-lucide="PlugZap"></i> Git accounts</a>
+  </div>
+
+  <div th:if="${view.unavailable == null and view.error != null}" class="alert alert-error">
+    <i data-lucide="CircleAlert"></i><span th:text="${view.error}">error</span>
+  </div>
+
+  <th:block th:if="${view.unavailable == null and (view.run != null or !#lists.isEmpty(view.jobs))}">
+    <div class="page-header">
+      <div class="min-w-0">
+        <h1 class="page-title" th:text="${view.run != null ? view.run.name : 'Pipeline run'}">Workflow</h1>
+        <p class="pr-meta" th:if="${view.run != null}">
+          <span class="badge" th:classappend="${view.run.status == 'FAILED'} ? 'badge-danger' : (${view.run.status == 'RUNNING' or view.run.status == 'PENDING'} ? 'badge-brand' : (${view.run.status == 'SUCCESS'} ? '' : 'badge-neutral'))"
+                th:text="${view.run.status == 'SUCCESS'} ? 'Passed' : (${view.run.status == 'FAILED'} ? 'Failed' : (${view.run.status == 'RUNNING'} ? 'Running' : (${view.run.status == 'PENDING'} ? 'Queued' : (${view.run.status == 'CANCELLED'} ? 'Cancelled' : (${view.run.status == 'SKIPPED'} ? 'Skipped' : 'Unknown')))))">Passed</span>
+          <span class="inline-flex items-center gap-1 font-mono" th:if="${view.run.ref != null}"><i data-lucide="GitBranch"></i><span th:text="${view.run.ref}">main</span></span>
+          <code th:if="${view.run.sha != null}" th:text="${#strings.substring(view.run.sha, 0, view.run.sha.length() < 7 ? view.run.sha.length() : 7)}">abc1234</code>
+          <span th:if="${view.run.event != null}" th:text="${view.run.event}">push</span>
+          <time th:if="${view.run.updatedAt != null}" data-relative th:attr="datetime=${view.run.updatedAt}" th:text="${view.run.updatedAt}">time</time>
+        </p>
+      </div>
+      <div class="page-actions">
+        <button type="button" class="btn-primary" data-analyze-pipeline th:attr="data-run-id=${runId},data-job-id=${view.selected != null ? view.selected.id : null}"><i data-lucide="Sparkles"></i> Analyze</button>
+        <a th:with="url=${view.selected != null and view.selected.webUrl != null ? view.selected.webUrl : (view.run != null ? view.run.webUrl : null)}"
+           th:if="${url != null}" class="btn-secondary" th:href="${url}" target="_blank" rel="noopener noreferrer"><i data-lucide="ExternalLink"></i> Open on provider</a>
+      </div>
+    </div>
+
+    <nav th:if="${#lists.size(view.jobs) > 1}" class="job-tabs" aria-label="Jobs">
+      <a th:each="job : ${view.jobs}" class="job-tab" th:classappend="|is-${#strings.toLowerCase(job.status)} ${view.selected != null and view.selected.id == job.id ? 'is-active' : ''}|"
+         th:href="@{/projects/{id}/pipelines/{run}(id=${project.id}, run=${runId}, job=${job.id})}">
+        <i th:attr="data-lucide=${job.status == 'SUCCESS'} ? 'CircleCheck' : (${job.status == 'FAILED'} ? 'CircleX' : (${job.status == 'RUNNING'} ? 'LoaderCircle' : (${job.status == 'PENDING'} ? 'Clock' : (${job.status == 'CANCELLED'} ? 'Ban' : 'CircleDashed'))))"></i>
+        <span th:text="${job.name}">build</span>
+      </a>
+    </nav>
+
+    <p th:if="${view.error == null and view.selected == null}" class="mt-6 text-sm text-ink-500">This run has no jobs yet.</p>
+
+    <section th:if="${view.log != null}" class="log-view" data-log-view data-log-focus="error"
+             th:attr="data-log-follow=${view.selected.status == 'RUNNING'} ? 'true' : 'false'" aria-label="Job log">
+      <div class="log-toolbar">
+        <span data-log-info></span>
+        <button type="button" class="log-tool" data-log-first-error hidden><i data-lucide="CircleAlert"></i><span>First error</span></button>
+        <button type="button" class="log-tool" data-log-only-errors aria-pressed="false"><i data-lucide="Filter"></i><span>Errors only</span></button>
+        <button type="button" class="log-tool" data-log-wrap aria-pressed="false"><i data-lucide="WrapText"></i><span>Wrap</span></button>
+        <button type="button" class="log-tool" data-log-copy><i data-lucide="Copy"></i><span>Copy</span></button>
+      </div>
+      <p th:if="${view.log.truncated}" class="log-toolbar !border-t-0 text-xs text-ink-500">The log is large; only its last part is shown.</p>
+      <div class="log-scroll" data-log-scroll>
+        <div data-log-output></div>
+      </div>
+      <pre hidden data-log-source th:text="${view.log.text}"></pre>
+    </section>
+  </th:block>
+</main>
+</th:block>
+</body>
+</html>

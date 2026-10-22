@@ -76,6 +76,29 @@ public interface GitProviderAdapter {
     throw new GitProviderException("This provider does not support listing pipelines");
   }
 
+  /** The jobs of one CI/CD run, in the order the provider reports them. */
+  default List<PipelineJob> listPipelineJobs(
+      GitProviderInstance instance,
+      String token,
+      GitConnectionAuthMethod method,
+      String repositoryId,
+      String fullName,
+      String runId) {
+    throw new GitProviderException("This provider does not support pipeline jobs");
+  }
+
+  /** The plain-text log of one job; only the tail is kept when it is very large. */
+  default PipelineLog pipelineJobLog(
+      GitProviderInstance instance,
+      String token,
+      GitConnectionAuthMethod method,
+      String repositoryId,
+      String fullName,
+      String runId,
+      String jobId) {
+    throw new GitProviderException("This provider does not support pipeline logs");
+  }
+
   /** Adds a comment to a pull request and returns a link to it when the provider gives one. */
   default String postPullRequestComment(
       GitProviderInstance instance,
