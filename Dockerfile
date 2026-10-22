@@ -68,6 +68,8 @@ LABEL org.opencontainers.image.title="Petri" \
 ENV PETRI_TESTS_EXECUTOR=local \
     PETRI_TERMINAL_CONFINE_COMMAND=/usr/local/bin/petri-confine \
     HOME=/home/petri \
+    LANG=C.UTF-8 \
+    LC_ALL=C.UTF-8 \
     JAVA_TOOL_OPTIONS="-XX:+UseContainerSupport -XX:MaxRAMPercentage=75.0 -XX:InitialRAMPercentage=20.0 -XX:+UseG1GC -Djava.security.egd=file:/dev/urandom"
 
 COPY --chown=65532:0 target/petri-*.jar /app/app.jar

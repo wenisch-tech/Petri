@@ -6,6 +6,8 @@
   },
   "remoteUser": "petri",
   "containerEnv": {
+    "LANG": "C.UTF-8",
+    "LC_ALL": "C.UTF-8",
     "PETRI_TESTS_EXECUTOR": "local",
     "PETRI_TERMINAL_CONFINE_COMMAND": "/usr/local/bin/petri-confine",
     "PETRI_TOOLCHAIN_ROOT": "/workspaces/Petri/data/toolchain",

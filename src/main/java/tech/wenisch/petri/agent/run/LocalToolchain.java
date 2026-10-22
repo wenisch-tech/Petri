@@ -139,7 +139,7 @@ public class LocalToolchain {
     env.put("TMPDIR", home.toString());
     env.put("JAVA_TOOL_OPTIONS", "-Djava.io.tmpdir=" + home);
     env.put("CI", "true");
-    env.put("LC_ALL", "C");
+    env.put("LC_ALL", "C.UTF-8");
     env.putAll(commandEnvironment.extra(profileVariables));
     if (packages != null) env.putAll(packages.environment(projectId, home));
     env.putAll(extra);

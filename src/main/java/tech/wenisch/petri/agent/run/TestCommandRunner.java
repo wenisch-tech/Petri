@@ -138,7 +138,7 @@ class TestCommandRunner implements TestExecutor {
         "--tmpfs", "/tmp:rw,nosuid,nodev,size=512m",
         "--volume", worktree + ":/workspace:rw,Z",
         "--volume", cache + ":/cache:rw,Z",
-        "--workdir", "/workspace", "--env", "CI=true", "--env", "LC_ALL=C",
+        "--workdir", "/workspace", "--env", "CI=true", "--env", "LC_ALL=C.UTF-8",
         "--env", "HOME=/tmp/petri-home"));
     if (command.buildSystem() == TestBuildSystem.MAVEN) {
       result.addAll(List.of("--env", "MAVEN_OPTS=-Dmaven.repo.local=/cache/maven"));
@@ -236,7 +236,7 @@ class TestCommandRunner implements TestExecutor {
     }
     environment.clear();
     environment.putAll(retained);
-    environment.put("LC_ALL", "C");
+    environment.put("LC_ALL", "C.UTF-8");
   }
 
   private record CapturedOutput(String value, boolean truncated) {}

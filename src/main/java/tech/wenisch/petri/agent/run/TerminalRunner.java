@@ -125,7 +125,7 @@ class TerminalRunner {
         "--network=" + (profile.networkEnabled() ? "slirp4netns" : "none"),
         "--volume", scratch + ":/tmp:rw,nosuid,nodev,Z",
         "--volume", worktree + ":/workspace:rw,Z", "--volume", cache + ":/cache:rw,Z",
-        "--workdir", "/workspace", "--env", "CI=true", "--env", "LC_ALL=C",
+        "--workdir", "/workspace", "--env", "CI=true", "--env", "LC_ALL=C.UTF-8",
         "--env", "HOME=/tmp/petri-home"));
     argv.addAll(commandEnvironment.containerEnvArguments(profile.environment()));
     Path packageHome = Files.createTempDirectory(paths.temporaryDirectory(), "petri-pkg-");
