@@ -19,6 +19,9 @@ base URL, model and defaults. Its **kind** (below) decides which API Petri speak
 
 ## Models
 
+The default model is optional; leave it empty and pick a model per run or under **Models**.
+While you fill in the base URL and API key, the form checks the endpoint (`GET <base URL>/models`) and shows whether it works.
+
 Each provider offers a list of models, shown under **Models** on its row:
 
 - **Discovered** models are read from the endpoint's `GET <base URL>/models` listing. An

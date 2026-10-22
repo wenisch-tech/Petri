@@ -94,7 +94,9 @@ public class ModelCatalogService {
       boolean admin = isAdmin(actor);
       boolean canRefresh = instance.global() ? admin : actor.getId().equals(instance.ownerId());
       List<AvailableModel> list = new ArrayList<>();
-      list.add(new AvailableModel(null, instance.model(), false, false, false));
+      if (!instance.model().isBlank()) {
+        list.add(new AvailableModel(null, instance.model(), false, false, false));
+      }
       for (ModelProviderModel row : rows.getOrDefault(id, List.of())) {
         boolean mine = actor.getId().equals(row.ownerId());
         if (row.ownerId() != null && !mine) continue;
@@ -123,7 +125,7 @@ public class ModelCatalogService {
     }
     for (ModelCredentialStatus status : statuses) {
       Set<String> values = new LinkedHashSet<>();
-      if (status.model() != null) values.add(status.model());
+      if (status.model() != null && !status.model().isBlank()) values.add(status.model());
       rows.getOrDefault(status.id(), List.of()).stream()
           .map(ModelProviderModel::modelId)
           .sorted(String.CASE_INSENSITIVE_ORDER)
@@ -131,6 +133,26 @@ public class ModelCatalogService {
       result.put(status.id(), List.copyOf(values));
     }
     return result;
+  }
+
+  /** Checks an unsaved URL and key by listing the endpoint's models. */
+  public ModelConnectionResult testConnection(
+      ModelProvider provider, String baseUrl, String apiKey, UUID instanceId, String actorEmail) {
+    var target = credentials.probeTarget(provider, baseUrl, apiKey, instanceId, actorEmail);
+    try {
+      int status = transport.probe(target.baseUrl(), target.apiKey());
+      if (status >= 200 && status < 300) return new ModelConnectionResult(true, "Connected");
+      if (status == 401 || status == 403) {
+        return new ModelConnectionResult(false, "The endpoint rejected the API key (HTTP " + status + ")");
+      }
+      if (status == 404) {
+        return new ModelConnectionResult(false,
+            "The endpoint answered 404. Check the base URL, it usually ends in /v1");
+      }
+      return new ModelConnectionResult(false, "The endpoint answered HTTP " + status);
+    } catch (ModelClientException exception) {
+      return new ModelConnectionResult(false, exception.getMessage());
+    }
   }
 
   /** Re-lists the endpoint's models. Administrators for global instances, owners for personal. */

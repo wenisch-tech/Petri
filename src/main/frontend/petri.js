@@ -56,6 +56,49 @@ function initializeDialogs() {
   }));
 }
 
+// Checks the base URL and API key of a provider form once both are filled in and shows the outcome.
+function initializeProviderChecks() {
+  document.querySelectorAll('[data-provider-check]').forEach(form => {
+    const url = form.querySelector('[name=baseUrl]');
+    const key = form.querySelector('[name=apiKey]');
+    const kind = form.querySelector('[name=provider]');
+    const result = form.querySelector('[data-check-result]');
+    if (!url || !key || !result) return;
+    let timer;
+    let sequence = 0;
+    const show = (state, text) => {
+      result.hidden = !text;
+      result.textContent = text;
+      result.dataset.state = state;
+      result.style.color = state === 'ok' ? 'var(--color-success, #16a34a)'
+        : state === 'fail' ? 'var(--color-danger, #dc2626)' : '';
+    };
+    const run = async () => {
+      const provider = form.dataset.kind || kind?.value;
+      const hasKey = key.value.trim() !== '' || form.dataset.hasKey === 'true';
+      if (!provider || url.value.trim() === '' || !hasKey) { show('idle', ''); return; }
+      const current = ++sequence;
+      show('pending', 'Checking connection…');
+      const body = new URLSearchParams({ provider, baseUrl: url.value.trim(), apiKey: key.value });
+      if (form.dataset.id) body.set('id', form.dataset.id);
+      const headers = { 'Content-Type': 'application/x-www-form-urlencoded' };
+      const token = document.querySelector('meta[name=_csrf]')?.content;
+      const header = document.querySelector('meta[name=_csrf_header]')?.content;
+      if (token && header) headers[header] = token;
+      try {
+        const response = await fetch('/model-providers/test', { method: 'POST', headers, body });
+        const data = await response.json();
+        if (current === sequence) show(data.ok ? 'ok' : 'fail', (data.ok ? '✓ ' : '✗ ') + data.message);
+      } catch {
+        if (current === sequence) show('fail', '✗ Could not run the connection check');
+      }
+    };
+    const schedule = () => { clearTimeout(timer); sequence++; show('idle', ''); timer = setTimeout(run, 700); };
+    [url, key].forEach(input => input.addEventListener('input', schedule));
+    kind?.addEventListener('change', schedule);
+  });
+}
+
 function localizeTimes(scope = document) {
   const format = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium', timeStyle: 'short' });
   const dateOnly = new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' });
@@ -141,6 +184,7 @@ function bootPetri() {
     }).catch(() => {});
   });
   initializeDialogs();
+  initializeProviderChecks();
   // Pages that follow something in progress (an agent run) reload themselves until it ends.
   if (document.querySelector('[data-live-refresh]') && !document.querySelector('[data-workspace]')) {
     const tick = () => {

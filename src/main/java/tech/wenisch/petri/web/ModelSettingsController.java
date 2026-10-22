@@ -46,7 +46,7 @@ public class ModelSettingsController {
       @RequestParam(required = false) ModelProvider provider,
       @RequestParam String displayName,
       @RequestParam(required = false) String baseUrl,
-      @RequestParam String model,
+      @RequestParam(defaultValue = "") String model,
       @RequestParam(required = false) String apiKey,
       @RequestParam(defaultValue = "false") boolean clearApiKey,
       @RequestParam(required = false) Integer maxOutputTokens,

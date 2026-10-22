@@ -104,13 +104,31 @@ public class ModelProviderController {
     return "redirect:/model-providers";
   }
 
+  /** Checks an unsaved base URL and key so the form can show whether the endpoint works. */
+  @PostMapping("/model-providers/test")
+  @org.springframework.web.bind.annotation.ResponseBody
+  org.springframework.http.ResponseEntity<tech.wenisch.petri.agent.model.ModelConnectionResult> test(
+      @RequestParam ModelProvider provider,
+      @RequestParam(required = false) String baseUrl,
+      @RequestParam(required = false) String apiKey,
+      @RequestParam(required = false) UUID id,
+      Principal principal) {
+    try {
+      return org.springframework.http.ResponseEntity.ok(
+          catalog.testConnection(provider, baseUrl, apiKey, id, principal.getName()));
+    } catch (IllegalArgumentException | IllegalStateException exception) {
+      return org.springframework.http.ResponseEntity.ok(
+          new tech.wenisch.petri.agent.model.ModelConnectionResult(false, exception.getMessage()));
+    }
+  }
+
   @PostMapping("/model-providers/own")
   String saveOwn(
       @RequestParam(required = false) UUID id,
       @RequestParam(required = false) ModelProvider provider,
       @RequestParam String displayName,
       @RequestParam(required = false) String baseUrl,
-      @RequestParam String model,
+      @RequestParam(defaultValue = "") String model,
       @RequestParam(required = false) String apiKey,
       @RequestParam(defaultValue = "false") boolean clearApiKey,
       @RequestParam(required = false) Integer maxOutputTokens,

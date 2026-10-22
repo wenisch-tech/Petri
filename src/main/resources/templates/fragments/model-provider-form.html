@@ -9,7 +9,8 @@
   keyLabel label for the API key input
   keyHint  helper text below the API key input
 -->
-<div th:fragment="fields(prefix, inst, kinds, keyLabel, keyHint)" class="space-y-5">
+<div th:fragment="fields(prefix, inst, kinds, keyLabel, keyHint)" class="space-y-5" data-provider-check
+     th:attr="data-kind=${inst != null ? inst.provider().name() : null},data-id=${inst != null ? inst.id() : null},data-has-key=${inst != null and inst.hasSharedKey()}">
   <div th:if="${inst == null}">
     <label class="label" th:for="|${prefix}-kind|">Kind</label>
     <select class="field" name="provider" th:id="|${prefix}-kind|" required
@@ -32,14 +33,14 @@
              th:value="${inst != null ? inst.displayName() : ''}" placeholder="Team LiteLLM">
     </div>
     <div>
-      <label class="label" th:for="|${prefix}-model|">Default model</label>
-      <input class="field" name="model" th:id="|${prefix}-model|" maxlength="200" required
+      <label class="label" th:for="|${prefix}-model|">Default model <span class="label-optional">(optional)</span></label>
+      <input class="field" name="model" th:id="|${prefix}-model|" maxlength="200"
              th:value="${inst != null ? inst.model() : ''}" placeholder="model-name"
              th:attr="list=${inst != null and catalogs != null and catalogs[inst.id()] != null} ? |${prefix}-model-list| : null">
       <datalist th:if="${inst != null and catalogs != null and catalogs[inst.id()] != null}" th:id="|${prefix}-model-list|">
         <option th:each="entry : ${catalogs[inst.id()].models()}" th:value="${entry.modelId()}"></option>
       </datalist>
-      <span class="hint">Used when nothing else is chosen. More models are listed under <em>Models</em> once the provider is saved.</span>
+      <span class="hint">Optional. Used when nothing else is chosen; pick one under <em>Models</em> or per run otherwise. More models are listed under <em>Models</em> once the provider is saved.</span>
     </div>
   </div>
 
@@ -56,6 +57,7 @@
     <input class="field" type="password" name="apiKey" th:id="|${prefix}-key|" autocomplete="new-password" spellcheck="false"
            placeholder="Paste key">
     <span class="hint" th:text="${keyHint}">Hint</span>
+    <p class="hint" data-check-result role="status" aria-live="polite" hidden></p>
     <label th:if="${inst != null && inst.hasSharedKey()}" class="check mt-2">
       <input type="checkbox" name="clearApiKey" value="true"><span>Remove the stored key</span>
     </label>

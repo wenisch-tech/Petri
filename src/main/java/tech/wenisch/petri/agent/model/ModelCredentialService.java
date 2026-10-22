@@ -415,7 +415,8 @@ public class ModelCredentialService {
   private void apply(
       ModelProviderInstance instance, SaveModelProviderCommand command, AppUser actor) {
     String displayName = required(command.displayName(), "Name", 120).strip();
-    String model = required(command.model(), "Model", 200).strip();
+    String model = command.model() == null ? "" : command.model().strip();
+    if (model.length() > 200) throw new IllegalArgumentException("Model must be at most 200 characters");
     ModelProvider kind = instance.kind();
     String baseUrl = normalizeBaseUrl(
         command.baseUrl() == null || command.baseUrl().isBlank()
@@ -553,6 +554,28 @@ public class ModelCredentialService {
               + " input tokens after the safety reserve");
     }
   }
+
+  /**
+   * Checks an endpoint before it is saved. Only administrators, or users when personal providers
+   * are allowed, may make the server call an arbitrary address.
+   */
+  ProbeTarget probeTarget(
+      ModelProvider provider, String baseUrl, String apiKey, UUID instanceId, String actorEmail) {
+    AppUser actor = actor(actorEmail);
+    if (!ADMIN_ROLE.equals(actor.getRole()) && !allowUserProviders()) {
+      throw new IllegalStateException("Personal model providers are disabled");
+    }
+    String url = normalizeBaseUrl(
+        baseUrl == null || baseUrl.isBlank() ? defaultBaseUrl(provider) : baseUrl);
+    String key = apiKey;
+    if ((key == null || key.isBlank()) && instanceId != null) {
+      var stored = visibleInstance(instanceId, actor.getId());
+      if (stored.sharedApiKeyCiphertext() != null) key = cipher.decrypt(stored.sharedApiKeyCiphertext());
+    }
+    return new ProbeTarget(url, key);
+  }
+
+  record ProbeTarget(String baseUrl, String apiKey) {}
 
   private String defaultBaseUrl(ModelProvider provider) {
     return provider == ModelProvider.OPENAI

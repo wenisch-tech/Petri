@@ -123,6 +123,28 @@ final class OpenAiCompatibleTransport {
     }
   }
 
+  /** Calls {@code GET <baseUrl>/models} with an unsaved URL and key; returns the HTTP status. */
+  int probe(String baseUrl, String apiKey) {
+    URI uri = endpoint(baseUrl, "/models");
+    HttpRequest.Builder request = HttpRequest.newBuilder(uri)
+        .timeout(timeout)
+        .header("Accept", "application/json");
+    if (apiKey != null && !apiKey.isBlank()) request.header("Authorization", bearer(apiKey));
+    try {
+      HttpResponse<InputStream> response =
+          httpClient.send(request.GET().build(), HttpResponse.BodyHandlers.ofInputStream());
+      try (InputStream input = response.body()) {
+        input.readNBytes(1024);
+      }
+      return response.statusCode();
+    } catch (InterruptedException exception) {
+      Thread.currentThread().interrupt();
+      throw new ModelClientException("The check was interrupted", exception);
+    } catch (IOException exception) {
+      throw new ModelClientException(describe(exception, uri), exception);
+    }
+  }
+
   void postSse(ModelProvider provider, String resource, String json, Consumer<String> eventData) {
     postSse(provider, null, resource, json, eventData);
   }
