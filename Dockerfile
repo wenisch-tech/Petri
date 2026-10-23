@@ -15,6 +15,21 @@ RUN gcc -O2 -static -o /petri-confine /src/petri-confine.c
 # database is downloaded at scan time into Petri's data volume, so the image never ships a stale one.
 FROM aquasec/trivy:0.76.0@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222 AS trivy
 
+# Trivy v0.76.1 still embeds oras.land/oras-go/v2 v2.6.2, which has open advisories fixed in v2.6.4.
+# Until upstream bumps it, the shipped binary is built from the release tag with oras-go raised.
+FROM golang:1.27-alpine AS trivy-build
+ARG TRIVY_VERSION=0.76.1
+ARG ORAS_GO_VERSION=2.6.4
+ARG APK_MIRROR
+RUN if [ -n "$APK_MIRROR" ]; then sed -i "s#https\?://[^/]*/alpine#${APK_MIRROR%/}#" /etc/apk/repositories; fi \
+ && apk add --no-cache git
+RUN git clone --depth 1 --branch "v${TRIVY_VERSION}" https://github.com/aquasecurity/trivy.git /src
+WORKDIR /src
+RUN go get "oras.land/oras-go/v2@v${ORAS_GO_VERSION}" \
+ && CGO_ENABLED=0 go build -trimpath \
+      -ldflags "-s -w -X github.com/aquasecurity/trivy/pkg/version/app.ver=${TRIVY_VERSION}" \
+      -o /trivy ./cmd/trivy
+
 # Vulnerability database, supplied in the image at /opt/trivy-db so that scans work without any
 # registry access (air-gapped installations switch the scanner to "offline" under Administration >
 # Vulnerability scanning). It is only as current as the build; an online instance refreshes it at
@@ -40,7 +55,7 @@ RUN --mount=type=secret,id=trivy_username,required=false \
 # agents install further Alpine packages into an unprivileged toolchain prefix on /app/data.
 FROM eclipse-temurin:25-jdk-alpine
 COPY --from=confine /petri-confine /usr/local/bin/petri-confine
-COPY --from=trivy /usr/local/bin/trivy /usr/local/bin/trivy
+COPY --from=trivy-build /trivy /usr/local/bin/trivy
 COPY --from=trivy-db /seed/ /opt/trivy-db/
 
 ARG APK_MIRROR

@@ -29,6 +29,10 @@ apk add --no-cache --upgrade 'libpng>=1.6.59-r0' 'zlib>=1.3.2-r1'
 # step a no-op once the base image already carries a fixed version.
 apk add --no-cache --repository "${ALPINE_BASE}/edge/main" 'libexpat>=2.9.0-r0'
 
+# curl/libcurl: security floor 8.23.0-r0. Alpine v3.24 still ships 8.22.0-r0, so both come from
+# edge/main until v3.24 has caught up; the constraint makes this a no-op once the base is fixed.
+apk add --no-cache --upgrade --repository "${ALPINE_BASE}/edge/main" 'curl>=8.23.0-r0' 'libcurl>=8.23.0-r0'
+
 PETRI_UID="${PETRI_UID:-65532}"
 addgroup -g "$PETRI_UID" -S petri
 adduser -u "$PETRI_UID" -S -G petri -h /home/petri -s /bin/bash petri
