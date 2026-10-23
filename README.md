@@ -28,6 +28,15 @@ Petri is written in Java 25 on Spring Boot, runs on a single node with an embedd
 PostgreSQL, and works with OpenAI, LiteLLM, Ollama and any OpenAI-compatible endpoint.
 
 <p align="center">
+  <img src="docs/images/petri-tour.gif" alt="A tour of Petri: the project dashboard, the vulnerability view with Trivy findings and one-click fixes, pipeline runs, open pull requests and the browser workspace" width="900">
+</p>
+
+<p align="center"><sub>
+  A tour of Petri: the project dashboard, vulnerability scanning with fixes, pipelines, pull
+  requests and the workspace.
+</sub></p>
+
+<p align="center">
   <img src="docs/images/petri-workflow-demo.gif" alt="A gated Petri workflow: the prompt is sent, the plan is approved, files are applied, the evidence gate sends the work back once, and the Petri net shows every acceptance criterion verified" width="900">
 </p>
 
