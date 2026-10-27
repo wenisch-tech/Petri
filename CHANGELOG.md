@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.23.2 - 2026-10-27
+
+### [0.23.2](https://github.com/wenisch-tech/Petri/compare/v0.23.1...v0.23.2) (2026-10-27)
+
+
+### Bug Fixes
+
+* **deps:** update dependency org.springframework.boot:spring-boot-starter-parent to v4.1.2 ([#8](https://github.com/wenisch-tech/Petri/issues/8)) ([4342c29](https://github.com/wenisch-tech/Petri/commit/4342c29ed0a8729f42427f86febf65a7e3d84b42))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.23.2
+
+
 ## v0.23.1 - 2026-10-25
 
 ### [0.23.1](https://github.com/wenisch-tech/Petri/compare/v0.23.0...v0.23.1) (2026-10-25)
