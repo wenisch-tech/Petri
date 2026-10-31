@@ -12,7 +12,7 @@
     "alpinejs": "3.17.4",
     "dompurify": "3.4.17",
     "highlight.js": "11.11.1",
-    "lucide": "1.56.0",
+    "lucide": "1.63.0",
     "marked": "14.0.0",
     "monaco-editor": "^0.55.1"
   },
