@@ -88,6 +88,7 @@
   <a th:href="@{/projects/{id}/settings/roles(id=${projectId})}" th:classappend="${active == 'roles'} ? 'is-active'" th:attr="aria-current=${active == 'roles'} ? 'page'"><i data-lucide="Cpu"></i> Model settings</a>
   <a th:href="@{/projects/{id}/settings/environment(id=${projectId})}" th:classappend="${active == 'environment'} ? 'is-active'" th:attr="aria-current=${active == 'environment'} ? 'page'"><i data-lucide="SquareTerminal"></i> Environment</a>
   <a th:href="@{/projects/{id}/settings/package-sources(id=${projectId})}" th:classappend="${active == 'packages'} ? 'is-active'" th:attr="aria-current=${active == 'packages'} ? 'page'"><i data-lucide="Package"></i> Package sources</a>
+  <a th:href="@{/projects/{id}/settings/kubernetes(id=${projectId})}" th:classappend="${active == 'kubernetes'} ? 'is-active'" th:attr="aria-current=${active == 'kubernetes'} ? 'page'"><i data-lucide="Cloud"></i> Kubernetes</a>
   <a th:href="@{/projects/{id}/settings/mcp(id=${projectId})}" th:classappend="${active == 'mcp'} ? 'is-active'" th:attr="aria-current=${active == 'mcp'} ? 'page'"><i data-lucide="PlugZap"></i> MCP</a>
 </nav>
 
@@ -109,6 +110,7 @@
   <a href="/sandbox-profiles" th:classappend="${active == 'sandboxes'} ? 'is-active'"><i data-lucide="Box"></i> Test sandboxes</a>
   <a href="/git-provider-instances" th:classappend="${active == 'git-instances'} ? 'is-active'"><i data-lucide="ServerCog"></i> Git providers</a>
   <a href="/admin/package-sources" th:classappend="${active == 'packages'} ? 'is-active'"><i data-lucide="Package"></i> Package sources</a>
+  <a href="/admin/kubernetes" th:classappend="${active == 'kubernetes'} ? 'is-active'"><i data-lucide="Cloud"></i> Kubernetes workspaces</a>
   <a href="/admin/vulnerability-scanning" th:classappend="${active == 'scanning'} ? 'is-active'"><i data-lucide="ShieldAlert"></i> Vulnerability scanning</a>
   <a href="/admin/actions" th:classappend="${active == 'actions'} ? 'is-active'"><i data-lucide="Workflow"></i> Actions</a>
   <a href="/admin/mcp-servers" th:classappend="${active == 'mcp-servers'} ? 'is-active'"><i data-lucide="PlugZap"></i> MCP servers</a>

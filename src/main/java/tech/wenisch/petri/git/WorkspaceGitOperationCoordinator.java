@@ -1,7 +1,6 @@
 package tech.wenisch.petri.git;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.List;
 import java.util.UUID;
@@ -9,6 +8,8 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.locks.ReentrantLock;
 import java.util.function.Supplier;
 import org.springframework.stereotype.Component;
+import tech.wenisch.petri.workspace.ActiveWorktree;
+import tech.wenisch.petri.workspace.WorkspaceHost;
 import tech.wenisch.petri.workspace.WorktreeLocator;
 import tech.wenisch.petri.agent.orchestration.WorkflowReservationService;
 
@@ -16,15 +17,13 @@ import tech.wenisch.petri.agent.orchestration.WorkflowReservationService;
 public class WorkspaceGitOperationCoordinator {
   private final ConcurrentHashMap<String, ReentrantLock> locks = new ConcurrentHashMap<>();
   private final WorktreeLocator worktrees;
-  private final GitCommandRunner git;
   private final ProjectWorktreeRepository records;
   private final WorkflowReservationService reservations;
 
   public WorkspaceGitOperationCoordinator(
-      WorktreeLocator worktrees, GitCommandRunner git, ProjectWorktreeRepository records,
+      WorktreeLocator worktrees, ProjectWorktreeRepository records,
       WorkflowReservationService reservations) {
     this.worktrees = worktrees;
-    this.git = git;
     this.records = records;
     this.reservations = reservations;
   }
@@ -57,17 +56,18 @@ public class WorkspaceGitOperationCoordinator {
   }
 
   public boolean rebaseInProgress(UUID worktreeId) {
-    Path root = worktrees.requireActiveWorktree(worktreeId);
-    return gitPathExists(root, "rebase-merge") || gitPathExists(root, "rebase-apply");
+    ActiveWorktree active = worktrees.resolveActiveWorktree(worktreeId);
+    return gitPathExists(active.host(), active.root(), "rebase-merge")
+        || gitPathExists(active.host(), active.root(), "rebase-apply");
   }
 
-  private boolean gitPathExists(Path root, String name) {
+  private boolean gitPathExists(WorkspaceHost host, Path root, String name) {
     try {
-      GitCommandResult result = git.run(root, List.of("rev-parse", "--git-path", name));
+      GitCommandResult result = host.git().run(root, List.of("rev-parse", "--git-path", name));
       if (!result.succeeded() || result.output().isBlank()) return false;
       Path path = Path.of(result.output().strip());
       if (!path.isAbsolute()) path = root.resolve(path).normalize();
-      return Files.exists(path);
+      return host.layout().stat(path).exists();
     } catch (IOException exception) {
       throw new IllegalStateException("Could not inspect Git operation state", exception);
     }

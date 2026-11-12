@@ -38,6 +38,7 @@ public class PackageInstallService {
   private final Duration timeout;
   private final boolean enabled;
   private final tech.wenisch.petri.packages.PackageEnvironment packages;
+  private final tech.wenisch.petri.kubernetes.KubernetesSettingsService kubernetes;
   private final ReentrantLock installLock = new ReentrantLock();
 
   PackageInstallService(
@@ -46,7 +47,9 @@ public class PackageInstallService {
       TestSandboxProfileService profiles,
       @Value("${petri.tests.install-timeout:10m}") Duration timeout,
       @Value("${petri.tests.executor:podman}") String executor,
-      tech.wenisch.petri.packages.PackageEnvironment packages) {
+      tech.wenisch.petri.packages.PackageEnvironment packages,
+      tech.wenisch.petri.kubernetes.KubernetesSettingsService kubernetes) {
+    this.kubernetes = kubernetes;
     this.packages = packages;
     this.state = state;
     this.toolchain = toolchain;
@@ -64,6 +67,11 @@ public class PackageInstallService {
       throw new IllegalStateException(
           "Package installs are disabled: tests run in an isolated Podman sandbox "
               + "(set PETRI_TESTS_EXECUTOR=local to run them in Petri's own Alpine container)");
+    }
+    if (kubernetes.enabled(worktrees.get(worktreeId).projectId())) {
+      throw new IllegalStateException("Package installs are disabled for this project: its "
+          + "workspace runs in a Kubernetes pod. Use a workspace image that already contains the "
+          + "tools (Project settings > Kubernetes workspace).");
     }
     List<String> names = PackageNamePolicy.validate(packages);
     String safeReason = reason == null ? null : reason.strip();

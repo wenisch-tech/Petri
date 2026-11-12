@@ -19,6 +19,7 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import tech.wenisch.petri.workspace.WorkspaceHost;
 import tech.wenisch.petri.workspace.WorkspacePaths;
 
 /** Executes approved repository code exclusively in a rootless Podman sandbox. */
@@ -63,7 +64,8 @@ class TestCommandRunner implements TestExecutor {
 
   @Override
   public TestCommandResult run(
-      UUID projectId, Path worktree, TestCommand command, TestSandboxProfileView profile)
+      WorkspaceHost host, UUID projectId, Path worktree, TestCommand command,
+      TestSandboxProfileView profile)
       throws IOException {
     Path safeWorktree = paths.requireExistingPath(worktree);
     Path cache = paths.directory("test-caches", projectId.toString());

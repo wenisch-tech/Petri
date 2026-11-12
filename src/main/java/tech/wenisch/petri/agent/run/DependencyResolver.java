@@ -13,8 +13,14 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
+import java.util.UUID;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.stereotype.Component;
 import tech.wenisch.petri.agent.run.TrivyScanService.Resolution;
+import tech.wenisch.petri.packages.PackageEnvironment;
+import tech.wenisch.petri.workspace.WorkspaceHost;
+import tech.wenisch.petri.workspace.WorkspaceLayout;
 
 /**
  * Prepares a project for a dependency scan with whatever package manager it uses: it finds the
@@ -31,57 +37,203 @@ class DependencyResolver {
   static final String FAILED = "failed";
   static final String SKIPPED = "skipped";
 
-  private static final Set<String> SKIP_DIRECTORIES = Set.of(
+  static final Set<String> SKIP_DIRECTORIES = Set.of(
       ".git", "node_modules", "target", "build", ".gradle", ".idea", ".venv", "venv",
       "__pycache__", "dist", "out", ".next", ".cache");
-  private static final long MAX_BYTES = 500L * 1024 * 1024;
-  private static final int MAX_FILES = 80_000;
+  static final long MAX_BYTES = 500L * 1024 * 1024;
+  static final int MAX_FILES = 80_000;
   private static final int MAX_DEPTH = 6;
   private static final Duration STEP_TIMEOUT = Duration.ofMinutes(8);
   private static final Duration BUDGET = Duration.ofMinutes(15);
 
   private final LocalToolchain toolchain;
   private final Confinement confinement;
+  private final CommandEnvironment commandEnvironment;
+  private final TestSandboxProfileService profiles;
+  private final PackageEnvironment packages;
+
+  @Autowired
+  DependencyResolver(
+      LocalToolchain toolchain, Confinement confinement, CommandEnvironment commandEnvironment,
+      TestSandboxProfileService profiles, ObjectProvider<PackageEnvironment> packages) {
+    this.toolchain = toolchain;
+    this.confinement = confinement;
+    this.commandEnvironment = commandEnvironment;
+    this.profiles = profiles;
+    this.packages = packages.getIfAvailable();
+  }
 
   DependencyResolver(LocalToolchain toolchain, Confinement confinement) {
     this.toolchain = toolchain;
     this.confinement = confinement;
+    this.commandEnvironment = CommandEnvironment.none();
+    this.profiles = null;
+    this.packages = null;
   }
 
-  /** Copies the project without VCS data and build output; false when it is too large to copy. */
-  boolean copy(Path source, Path destination) throws IOException {
-    long[] total = {0, 0};
-    boolean[] tooLarge = {false};
-    Files.walkFileTree(source, new SimpleFileVisitor<>() {
-      @Override
-      public FileVisitResult preVisitDirectory(Path dir, BasicFileAttributes attributes)
-          throws IOException {
-        if (!dir.equals(source) && SKIP_DIRECTORIES.contains(dir.getFileName().toString())) {
-          return FileVisitResult.SKIP_SUBTREE;
-        }
-        Files.createDirectories(destination.resolve(source.relativize(dir).toString()));
-        return FileVisitResult.CONTINUE;
-      }
+  /** Where a resolution step runs: in Petri's own container, or in the project's Kubernetes pod. */
+  interface StepRunner {
+    /** Whether the tool can be started. */
+    boolean hasTool(String tool);
 
-      @Override
-      public FileVisitResult visitFile(Path file, BasicFileAttributes attributes) throws IOException {
-        if (!attributes.isRegularFile()) return FileVisitResult.CONTINUE;
-        total[0] += attributes.size();
-        total[1]++;
-        if (total[0] > MAX_BYTES || total[1] > MAX_FILES) {
-          tooLarge[0] = true;
-          return FileVisitResult.TERMINATE;
-        }
-        Files.copy(file, destination.resolve(source.relativize(file).toString()),
-            StandardCopyOption.COPY_ATTRIBUTES);
-        return FileVisitResult.CONTINUE;
+    /** Whether the project's wrapper script (mvnw, gradlew) can be started. */
+    boolean executable(Path directory, String wrapper);
+
+    /** Writes a small file where the step's tool can read it (a path as the runner sees it). */
+    void writeFile(Path file, String content) throws IOException;
+
+    TestCommandResult run(String ecosystem, Path directory, List<String> command,
+        Map<String, String> environment, Duration timeout) throws IOException;
+  }
+
+  /** Steps run in Petri's container under the same confinement as test runs. */
+  private final class LocalRunner implements StepRunner {
+    private final Path root;
+    private final Path cache;
+    private final Path home;
+
+    private LocalRunner(Path root, Path cache, Path home) {
+      this.root = root;
+      this.cache = cache;
+      this.home = home;
+    }
+
+    @Override public boolean hasTool(String tool) { return available(tool); }
+
+    @Override public boolean executable(Path directory, String wrapper) {
+      return Files.isExecutable(directory.resolve(wrapper));
+    }
+
+    @Override public void writeFile(Path file, String content) throws IOException {
+      Files.writeString(file, content);
+    }
+
+    @Override
+    public TestCommandResult run(String ecosystem, Path directory, List<String> command,
+        Map<String, String> environment, Duration timeout) throws IOException {
+      List<String> argv = confinement.available()
+          ? confinement.wrap(List.of(), List.of(root, cache, home), command)
+          : command;
+      return BoundedProcess.run(argv, directory, toolchain.environment(home, environment), timeout,
+          16 * 1024, ecosystem + "-resolve");
+    }
+  }
+
+  /** Steps run in the pod, on a copy of the project that lives in the pod's scratch space. */
+  private final class PodRunner implements StepRunner {
+    private final WorkspaceHost host;
+    private final UUID projectId;
+    private final Path localRoot;
+    private final Path podRoot;
+    private final Path podHome;
+    private final Path podCache;
+    private Map<String, String> base;
+
+    private PodRunner(WorkspaceHost host, UUID projectId, Path localRoot, Path podRoot, Path podHome,
+        Path podCache) {
+      this.host = host;
+      this.projectId = projectId;
+      this.localRoot = localRoot;
+      this.podRoot = podRoot;
+      this.podHome = podHome;
+      this.podCache = podCache;
+    }
+
+    @Override public boolean hasTool(String tool) { return host.processes().hasTool(tool); }
+
+    @Override public boolean executable(Path directory, String wrapper) {
+      try {
+        return host.layout().stat(podPath(directory).resolve(wrapper)).executable();
+      } catch (IOException exception) {
+        return false;
       }
-    });
-    return !tooLarge[0];
+    }
+
+    @Override public void writeFile(Path file, String content) throws IOException {
+      Path staging = Files.createTempDirectory("petri-pod-file-");
+      try {
+        Files.writeString(staging.resolve(file.getFileName().toString()), content);
+        host.archives().uploadTree(staging, file.getParent());
+      } finally {
+        deleteQuietly(staging);
+      }
+    }
+
+    private Path podPath(Path local) {
+      return podRoot.resolve(localRoot.relativize(local).toString()).normalize();
+    }
+
+    /** The environment every step starts from: as in a terminal command of the pod. */
+    private Map<String, String> base() throws IOException {
+      if (base != null) return base;
+      Map<String, String> env = new LinkedHashMap<>();
+      env.put("HOME", podHome.toString());
+      env.put("CI", "true");
+      env.put("LC_ALL", "C.UTF-8");
+      env.putAll(commandEnvironment.extra(profiles == null ? Map.of() : profiles.environmentFor(projectId)));
+      if (packages != null) env.putAll(packages.remote(projectId, host, podHome, podCache));
+      env.putAll(LocalToolchain.temporaryDirectoryEnvironment(podHome));
+      base = env;
+      return env;
+    }
+
+    @Override
+    public TestCommandResult run(String ecosystem, Path directory, List<String> command,
+        Map<String, String> environment, Duration timeout) throws IOException {
+      Map<String, String> env = new LinkedHashMap<>(base());
+      env.putAll(environment);
+      return host.processes().exec(podPath(directory), command, env, timeout, 16 * 1024,
+          "kubernetes-pod", null);
+    }
+  }
+
+  private static void deleteQuietly(Path directory) {
+    try (var walk = Files.walk(directory)) {
+      walk.sorted(java.util.Comparator.reverseOrder()).forEach(path -> path.toFile().delete());
+    } catch (IOException ignored) {
+      // scratch space
+    }
+  }
+
+  /**
+   * Resolves the project's dependencies inside its Kubernetes pod, where the project's own tools and
+   * package sources are, and brings the produced lockfiles back. {@code localCopy} is a copy of
+   * {@code podTarget} in Petri that the scan reads; it is updated with what the tools wrote.
+   */
+  List<Resolution> resolveInPod(WorkspaceHost host, Path podTarget, Path localCopy) {
+    UUID projectId = host.projectId();
+    WorkspaceLayout layout = host.layout();
+    Path work = null;
+    try {
+      work = layout.createTemporaryDirectory("petri-resolve-");
+      Path podProject = work.resolve("project");
+      if (!host.files().copyTree(podTarget, podProject, SKIP_DIRECTORIES, MAX_BYTES, MAX_FILES)) {
+        return List.of(new Resolution("project", ".", SKIPPED,
+            "the project is too large to copy, so dependencies were not resolved and only committed "
+                + "lockfiles were read"));
+      }
+      Path cache = layout.testCaches(projectId);
+      PodRunner runner = new PodRunner(host, projectId, localCopy, podProject, work, cache);
+      List<Resolution> steps = resolve(localCopy, cache, work, runner);
+      if (steps.stream().anyMatch(step -> RESOLVED.equals(step.status()))) {
+        // The tools wrote lockfiles (and the like) into the pod's copy: bring those back.
+        host.archives().downloadTree(podProject, localCopy, SKIP_DIRECTORIES, MAX_BYTES, MAX_FILES);
+      }
+      return steps;
+    } catch (IOException | RuntimeException exception) {
+      return List.of(new Resolution("project", ".", FAILED,
+          "dependencies could not be resolved in the pod: " + exception.getMessage()));
+    } finally {
+      if (work != null) layout.deleteTemporary(work);
+    }
   }
 
   /** Runs the resolver of every package manager found under {@code root}. */
   List<Resolution> resolve(Path root, Path cache, Path home) {
+    return resolve(root, cache, home, new LocalRunner(root, cache, home));
+  }
+
+  List<Resolution> resolve(Path root, Path cache, Path home, StepRunner runner) {
     List<Resolution> steps = new ArrayList<>();
     long deadline = System.nanoTime() + BUDGET.toNanos();
     List<Path> directories = new ArrayList<>();
@@ -95,14 +247,14 @@ class DependencyResolver {
       String label = root.relativize(directory).toString();
       if (label.isEmpty()) label = ".";
       if (has(directory, "pom.xml") && !ancestorHas(root, directory, "pom.xml")) {
-        steps.add(run("maven", label, directory, root, cache, home, deadline, maven(directory, cache)));
+        steps.add(run(runner, "maven", label, directory, deadline, maven(runner, directory, cache)));
       }
       if ((has(directory, "build.gradle") || has(directory, "build.gradle.kts")
           || has(directory, "settings.gradle") || has(directory, "settings.gradle.kts"))
           && !ancestorHas(root, directory, "build.gradle", "build.gradle.kts", "settings.gradle",
               "settings.gradle.kts")) {
-        steps.add(run("gradle", label, directory, root, cache, home, deadline,
-            gradle(directory, home, cache)));
+        steps.add(run(runner, "gradle", label, directory, deadline,
+            gradle(runner, directory, home, cache)));
       }
       if (has(directory, "package.json")) {
         if (hasAny(directory, "package-lock.json", "npm-shrinkwrap.json", "yarn.lock",
@@ -110,23 +262,23 @@ class DependencyResolver {
             || ancestorHas(root, directory, "package-lock.json", "yarn.lock", "pnpm-lock.yaml")) {
           steps.add(new Resolution("npm", label, NOT_NEEDED, "a lockfile is present"));
         } else {
-          steps.add(run("npm", label, directory, root, cache, home, deadline, npm(directory, cache)));
+          steps.add(run(runner, "npm", label, directory, deadline, npm(runner, directory, cache)));
         }
       }
       if (has(directory, "Cargo.toml") && !hasAny(directory, "Cargo.lock")
           && !ancestorHas(root, directory, "Cargo.lock")) {
-        steps.add(run("cargo", label, directory, root, cache, home, deadline,
-            tool("cargo", directory, null, List.of("cargo", "generate-lockfile"), cache, "cargo")));
+        steps.add(run(runner, "cargo", label, directory, deadline,
+            tool(runner, "cargo", directory, null, List.of("cargo", "generate-lockfile"), cache, "cargo")));
       }
       if (has(directory, "composer.json") && !hasAny(directory, "composer.lock")) {
-        steps.add(run("composer", label, directory, root, cache, home, deadline,
-            tool("composer", directory, null, List.of("composer", "update", "--no-install",
+        steps.add(run(runner, "composer", label, directory, deadline,
+            tool(runner, "composer", directory, null, List.of("composer", "update", "--no-install",
                 "--no-scripts", "--no-plugins", "--no-interaction", "--no-progress"), cache,
                 "composer")));
       }
       if (has(directory, "Gemfile") && !hasAny(directory, "Gemfile.lock")) {
-        steps.add(run("bundler", label, directory, root, cache, home, deadline,
-            tool("bundle", directory, null, List.of("bundle", "lock"), cache, "bundler")));
+        steps.add(run(runner, "bundler", label, directory, deadline,
+            tool(runner, "bundle", directory, null, List.of("bundle", "lock"), cache, "bundler")));
       }
       if (has(directory, "go.mod")) {
         steps.add(new Resolution("go", label, NOT_NEEDED, "go.mod lists the module graph"));
@@ -143,58 +295,59 @@ class DependencyResolver {
 
   // --- commands ---------------------------------------------------------------------------------
 
-  private Prepared maven(Path directory, Path cache) {
+  private Prepared maven(StepRunner runner, Path directory, Path cache) {
     Path repository = cache.resolve("maven");
     List<String> tail = List.of("--batch-mode", "--no-transfer-progress", "-q", "dependency:resolve",
         "-Dmaven.repo.local=" + repository);
-    List<String> command = withWrapper(directory, "mvnw", "mvn", tail);
+    List<String> command = withWrapper(runner, directory, "mvnw", "mvn", tail);
     Map<String, String> env = new LinkedHashMap<>();
     env.put("MAVEN_OPTS", "-Dmaven.repo.local=" + repository);
     return new Prepared("maven", command, env,
         "no mvnw in the project and no mvn installed; install Maven with install_packages");
   }
 
-  private Prepared gradle(Path directory, Path home, Path cache) {
+  private Prepared gradle(StepRunner runner, Path directory, Path home, Path cache) {
     // Gradle only writes a lockfile for configurations that opt in; an init script opts every
     // project of the build in, and the lockfile is what the scanner reads.
     Path script = home.resolve("petri-lock.init.gradle");
     try {
-      Files.writeString(script, "allprojects {\n  dependencyLocking { lockAllConfigurations() }\n}\n");
+      runner.writeFile(script, "allprojects {\n  dependencyLocking { lockAllConfigurations() }\n}\n");
     } catch (IOException exception) {
       return new Prepared("gradle", null, Map.of(), "could not prepare the Gradle init script");
     }
     List<String> tail = List.of("--no-daemon", "--quiet", "--init-script", script.toString(),
         "dependencies", "--write-locks");
-    List<String> command = withWrapper(directory, "gradlew", "gradle", tail);
+    List<String> command = withWrapper(runner, directory, "gradlew", "gradle", tail);
     // One Gradle home per project cache, shared with test runs; configured remotes are placed in it.
     return new Prepared("gradle", command, Map.of("GRADLE_USER_HOME", cache.resolve("gradle").toString()),
         "no gradlew in the project and no gradle installed; install Gradle with install_packages");
   }
 
-  private Prepared npm(Path directory, Path cache) {
+  private Prepared npm(StepRunner runner, Path directory, Path cache) {
     Map<String, String> env = new LinkedHashMap<>();
     env.put("npm_config_cache", cache.resolve("npm").toString());
     env.put("npm_config_update_notifier", "false");
-    return tool("npm", directory, env,
+    return tool(runner, "npm", directory, env,
         List.of("npm", "install", "--package-lock-only", "--ignore-scripts", "--no-audit",
             "--no-fund", "--no-progress"), cache, "npm");
   }
 
   private Prepared tool(
-      String executable, Path directory, Map<String, String> env, List<String> command,
+      StepRunner runner, String executable, Path directory, Map<String, String> env, List<String> command,
       Path cache, String ecosystem) {
     Map<String, String> values = env == null ? new LinkedHashMap<>() : new LinkedHashMap<>(env);
     if ("cargo".equals(ecosystem)) values.put("CARGO_HOME", cache.resolve("cargo").toString());
     if ("composer".equals(ecosystem)) values.put("COMPOSER_HOME", cache.resolve("composer").toString());
-    boolean available = available(executable);
+    boolean available = runner.hasTool(executable);
     return new Prepared(ecosystem, available ? command : null, values,
         executable + " is not installed in this Petri instance; install it with install_packages");
   }
 
-  private List<String> withWrapper(Path directory, String wrapper, String tool, List<String> tail) {
+  private List<String> withWrapper(
+      StepRunner runner, Path directory, String wrapper, String tool, List<String> tail) {
     List<String> command = new ArrayList<>();
-    if (Files.isExecutable(directory.resolve(wrapper))) command.add("./" + wrapper);
-    else if (available(tool)) command.add(tool);
+    if (runner.executable(directory, wrapper)) command.add("./" + wrapper);
+    else if (runner.hasTool(tool)) command.add(tool);
     else return null;
     command.addAll(tail);
     return command;
@@ -211,8 +364,8 @@ class DependencyResolver {
   }
 
   private Resolution run(
-      String ecosystem, String label, Path directory, Path root, Path cache, Path home,
-      long deadline, Prepared prepared) {
+      StepRunner runner, String ecosystem, String label, Path directory, long deadline,
+      Prepared prepared) {
     if (prepared.command() == null) {
       return new Resolution(ecosystem, label, TOOL_MISSING, prepared.missing());
     }
@@ -220,12 +373,8 @@ class DependencyResolver {
       return new Resolution(ecosystem, label, SKIPPED, "the time budget for resolution was used up");
     }
     try {
-      List<String> argv = confinement.available()
-          ? confinement.wrap(List.of(), List.of(root, cache, home), prepared.command())
-          : prepared.command();
-      Map<String, String> environment = toolchain.environment(home, prepared.environment());
-      TestCommandResult result = BoundedProcess.run(
-          argv, directory, environment, STEP_TIMEOUT, 16 * 1024, ecosystem + "-resolve");
+      TestCommandResult result =
+          runner.run(ecosystem, directory, prepared.command(), prepared.environment(), STEP_TIMEOUT);
       if (result.timedOut()) {
         return new Resolution(ecosystem, label, FAILED,
             "did not finish within " + STEP_TIMEOUT.toMinutes() + " minutes");

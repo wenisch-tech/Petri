@@ -63,7 +63,7 @@ class TestCommandRunnerTest {
     Path worktree = paths.directory("runs", "worktree");
     TestCommandRunner runner = new TestCommandRunner(paths, "petri-missing-podman-runtime");
 
-    assertThatThrownBy(() -> runner.run(UUID.randomUUID(), worktree,
+    assertThatThrownBy(() -> runner.run(null, UUID.randomUUID(), worktree,
         new TestCommand(TestBuildSystem.GRADLE, List.of("./gradlew", "test")), profile(true)))
         .isInstanceOf(java.io.IOException.class)
         .hasMessageContaining("require rootless Podman");

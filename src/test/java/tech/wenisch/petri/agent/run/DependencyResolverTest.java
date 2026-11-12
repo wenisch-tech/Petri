@@ -28,7 +28,14 @@ class DependencyResolverTest {
     Files.writeString(source.resolve("target/a.class"), "x");
     Path copy = Files.createDirectories(temp.resolve("copy"));
 
-    assertThat(resolver.copy(source, copy)).isTrue();
+    tech.wenisch.petri.agent.tool.WorkspaceFileService files =
+        new tech.wenisch.petri.agent.tool.WorkspaceFileService(
+            new tech.wenisch.petri.config.PetriProperties(null, null,
+                new tech.wenisch.petri.config.PetriProperties.Workspace(
+                    temp.toString(), java.time.Duration.ofSeconds(5), 4096, 1024, 4096, 2, null, null),
+                null));
+    assertThat(files.copyTree(source, copy, DependencyResolver.SKIP_DIRECTORIES,
+        DependencyResolver.MAX_BYTES, DependencyResolver.MAX_FILES)).isTrue();
 
     assertThat(copy.resolve("pom.xml")).exists();
     assertThat(copy.resolve("src/main/A.java")).exists();

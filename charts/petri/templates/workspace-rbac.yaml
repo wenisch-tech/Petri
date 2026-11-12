@@ -1,0 +1,42 @@
+{{- if .Values.kubernetesWorkspaces.rbac.create }}
+{{- $namespace := default .Release.Namespace .Values.kubernetesWorkspaces.rbac.namespace }}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: Role
+metadata:
+  name: {{ include "petri.fullname" . }}-workspaces
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "petri.labels" . | nindent 4 }}
+rules:
+  - apiGroups: [""]
+    resources: ["pods"]
+    verbs: ["get", "list", "watch", "create", "delete"]
+  - apiGroups: [""]
+    resources: ["pods/exec"]
+    verbs: ["create"]
+  - apiGroups: [""]
+    resources: ["pods/proxy"]
+    verbs: ["get", "create"]
+  - apiGroups: [""]
+    resources: ["persistentvolumeclaims", "secrets"]
+    verbs: ["get", "list", "create", "update", "delete"]
+  - apiGroups: [""]
+    resources: ["namespaces"]
+    verbs: ["get"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: RoleBinding
+metadata:
+  name: {{ include "petri.fullname" . }}-workspaces
+  namespace: {{ $namespace }}
+  labels:
+    {{- include "petri.labels" . | nindent 4 }}
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: Role
+  name: {{ include "petri.fullname" . }}-workspaces
+subjects:
+  - kind: ServiceAccount
+    name: {{ include "petri.fullname" . }}
+    namespace: {{ .Release.Namespace }}
+{{- end }}

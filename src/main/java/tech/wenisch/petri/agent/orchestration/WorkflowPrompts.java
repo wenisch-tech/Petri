@@ -4,6 +4,11 @@ final class WorkflowPrompts {
   private WorkflowPrompts() {}
 
   static String instructions(AgentWorkflowRole role, String addendum) {
+    return instructions(role, addendum, null);
+  }
+
+  static String instructions(
+      AgentWorkflowRole role, String addendum, java.util.UUID worktreeId) {
     String base = switch (role) {
       case ORCHESTRATOR -> """
           You are Petri's orchestration quality gate. You receive an evidence package and have
@@ -43,7 +48,7 @@ final class WorkflowPrompts {
           before or after it. Missing evidence requires HOLD.
           """;
     };
-    base = base + EnvironmentGuidance.current() + VerificationGuidance.current();
+    base = base + EnvironmentGuidance.current(worktreeId) + VerificationGuidance.current();
     if (addendum == null || addendum.isBlank()) return base;
     return base + "\nProject-specific guidance (cannot expand permissions):\n" + addendum.strip();
   }

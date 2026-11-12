@@ -29,7 +29,8 @@ src/main/java/tech/wenisch/petri/
   secret/      master-key loading and authenticated encryption
   security/    local/OIDC identities and HTTP security
   web/         HTML and JSON controllers
-  workspace/   safe path derivation and active-worktree lookup
+  workspace/   workspace host seam (layout, files, processes, git, archives), safe path
+               derivation and active-worktree lookup
 
 src/main/resources/
   db/migration/  ordered Flyway migrations
@@ -38,7 +39,56 @@ src/main/resources/
 src/main/frontend/
   petri.css
   petri.js
+
+docker/workspace-agent/
+  Go module of the agent that runs inside Kubernetes workspace pods
 ```
+
+## Workspace hosts
+
+A project's workspace (bare mirror, worktrees and the processes working on them) lives on a
+*workspace host*. Code that acts on a worktree gets the host with
+`WorktreeLocator.resolveActiveWorktree(id)` and uses its parts instead of touching the filesystem
+directly:
+
+| Part | Purpose |
+| --- | --- |
+| `layout()` | directory layout, `stat`, temporary directories |
+| `files()` | guarded file operations (list, read, search, conditional write, move, delete) |
+| `processes()` | bounded process execution |
+| `git()` | Git execution, including credential delivery |
+| `archives()` | moving a tree between the host and Petri's local filesystem |
+
+Paths obtained from a host are *host paths*. `WorkspaceHostBoundaryTest` fails when code outside the
+local implementations imports `java.nio.file.Files`, so a path can later live in a Kubernetes pod
+without further changes.
+
+## Workspace agent (Go)
+
+`docker/workspace-agent` is a dependency-free Go module (`petri-workspace-agent`) that Petri copies
+into a Kubernetes workspace pod. It serves the host operations above over an authenticated HTTP API
+below one workspace root and applies the same path guards as `WorkspaceFileService`.
+
+```bash
+cd docker/workspace-agent
+gofmt -l . && go vet ./... && go test -race ./...
+```
+
+The race detector needs cgo. Without a local Go toolchain run the same commands in
+`golang:1.27-alpine` (with `gcc musl-dev` installed). `scripts/build-workspace-agent.sh` builds the
+binaries for local development into `./data/workspace-agent/<arch>/`; the release image carries them
+in `/opt/petri/workspace-agent/<arch>/`. CI runs the Go checks in a separate job of `_test.yml`.
+
+### Workspace toolchain bundle
+
+`docker/workspace-toolchain/build.sh` builds the bundle of command line tools (git, curl, python,
+go, node, npm) that Petri copies into pods. It runs in an Alpine container: it installs the packages
+for each architecture into a staging root, rewrites every ELF file's interpreter and library path to
+the fixed prefix `/petri/workspace/toolchain`, rewrites script shebangs, writes wrappers and packs a
+`toolchain.tar.gz`. `scripts/build-workspace-toolchain.sh` runs it for this machine into
+`./data/workspace-toolchain/<arch>/`; `Dockerfile.tools` runs it for both architectures on top of the regular
+image and is published as the `-tools` image. The prefix is part of the bundle: the agent installs it at `<root>/toolchain` and
+refuses a bundle built for another path.
 
 ## Database changes
 
@@ -58,7 +108,8 @@ Tests must not depend on live model providers, remote repositories or external c
 
 `.github/workflows/ci.yml` orchestrates reusable workflows:
 
-- `_test.yml` — Java 25 `mvn verify` (includes the frontend build) and a JUnit report.
+- `_test.yml` — Java 25 `mvn verify` (includes the frontend build) and a JUnit report, plus a Go job
+  (`gofmt`, `go vet`, `go test -race`) for the workspace agent.
 - `_docker.yml` — builds the Alpine JDK image, checks `/login` and `/actuator/health` latency in
   the running container, runs a **Trivy** vulnerability scan (posted as a PR comment), and on `main`
   pushes, Cosign-signs and attests the image.

@@ -10,11 +10,12 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import tech.wenisch.petri.agent.tool.FileConflictException;
 import tech.wenisch.petri.agent.tool.ReplacementPreview;
-import tech.wenisch.petri.agent.tool.WorkspaceFileService;
 import tech.wenisch.petri.agent.orchestration.AgentActionRequestedEvent;
 import tech.wenisch.petri.audit.AuditLogService;
 import tech.wenisch.petri.security.AppUser;
 import tech.wenisch.petri.security.AppUserRepository;
+import tech.wenisch.petri.workspace.ActiveWorktree;
+import tech.wenisch.petri.workspace.WorkspaceFiles;
 import tech.wenisch.petri.workspace.WorktreeLocator;
 import tech.wenisch.petri.agent.orchestration.AgentRunService;
 import tech.wenisch.petri.git.WorkflowPathPolicy;
@@ -23,7 +24,6 @@ import tech.wenisch.petri.git.WorkflowPathPolicy;
 public class ChangeProposalService {
   private final ChangeProposalRepository proposals;
   private final WorktreeLocator worktrees;
-  private final WorkspaceFileService files;
   private final AppUserRepository users;
   private final AuditLogService auditLog;
   private final Clock clock;
@@ -35,29 +35,26 @@ public class ChangeProposalService {
   public ChangeProposalService(
       ChangeProposalRepository proposals,
       WorktreeLocator worktrees,
-      WorkspaceFileService files,
       AppUserRepository users,
       AuditLogService auditLog,
       ApplicationEventPublisher events,
       AgentRunService runs,
       WorkflowPathPolicy workflowPaths) {
-    this(proposals, worktrees, files, users, auditLog, Clock.systemUTC(), events, runs, workflowPaths);
+    this(proposals, worktrees, users, auditLog, Clock.systemUTC(), events, runs, workflowPaths);
   }
 
   ChangeProposalService(
       ChangeProposalRepository proposals,
       WorktreeLocator worktrees,
-      WorkspaceFileService files,
       AppUserRepository users,
       AuditLogService auditLog,
       Clock clock) {
-    this(proposals, worktrees, files, users, auditLog, clock, null, null, null);
+    this(proposals, worktrees, users, auditLog, clock, null, null, null);
   }
 
   ChangeProposalService(
       ChangeProposalRepository proposals,
       WorktreeLocator worktrees,
-      WorkspaceFileService files,
       AppUserRepository users,
       AuditLogService auditLog,
       Clock clock,
@@ -66,7 +63,6 @@ public class ChangeProposalService {
       WorkflowPathPolicy workflowPaths) {
     this.proposals = proposals;
     this.worktrees = worktrees;
-    this.files = files;
     this.users = users;
     this.auditLog = auditLog;
     this.clock = clock;
@@ -83,7 +79,9 @@ public class ChangeProposalService {
       String expectedSha256,
       String replacementContent) {
     enforceWorkflowPath(agentRunId, worktreeId, path);
-    Path worktree = worktrees.requireActiveWorktree(worktreeId);
+    ActiveWorktree active = worktrees.resolveActiveWorktree(worktreeId);
+    Path worktree = active.root();
+    WorkspaceFiles files = active.host().files();
     ReplacementPreview preview =
         files.previewReplacement(worktree, path, expectedSha256, replacementContent);
     ChangeProposal proposal = proposals.save(new ChangeProposal(
@@ -108,7 +106,9 @@ public class ChangeProposalService {
       String path,
       String content) {
     enforceWorkflowPath(agentRunId, worktreeId, path);
-    Path worktree = worktrees.requireActiveWorktree(worktreeId);
+    ActiveWorktree active = worktrees.resolveActiveWorktree(worktreeId);
+    Path worktree = active.root();
+    WorkspaceFiles files = active.host().files();
     ReplacementPreview preview = files.previewCreation(worktree, path, content);
     ChangeProposal proposal = proposals.save(new ChangeProposal(
         UUID.randomUUID(),
@@ -213,8 +213,10 @@ public class ChangeProposalService {
   }
 
   private ChangeProposalView apply(ChangeProposal proposal, AppUser approver) {
-    Path worktree = worktrees.requireActiveWorktree(proposal.worktreeId());
-    if (alreadyApplied(worktree, proposal)) {
+    ActiveWorktree active = worktrees.resolveActiveWorktree(proposal.worktreeId());
+    Path worktree = active.root();
+    WorkspaceFiles files = active.host().files();
+    if (alreadyApplied(files, worktree, proposal)) {
       proposal.applied(Instant.now(clock));
       auditLog.record(
           approver.getEmail(), "CHANGE_PROPOSAL_APPLIED", "CHANGE_PROPOSAL", proposal.id(),
@@ -251,15 +253,17 @@ public class ChangeProposalService {
   @Transactional
   public ChangeProposalView recoverIfApplied(UUID proposalId) {
     ChangeProposal proposal = proposal(proposalId);
-    Path worktree = worktrees.requireActiveWorktree(proposal.worktreeId());
-    if (proposal.status() != ChangeProposalStatus.APPLIED && alreadyApplied(worktree, proposal)) {
+    ActiveWorktree active = worktrees.resolveActiveWorktree(proposal.worktreeId());
+    Path worktree = active.root();
+    WorkspaceFiles files = active.host().files();
+    if (proposal.status() != ChangeProposalStatus.APPLIED && alreadyApplied(files, worktree, proposal)) {
       proposal.recoveredApplied(Instant.now(clock));
     }
     return view(proposal);
   }
 
   /** True when the file already holds the exact approved content, making the apply idempotent. */
-  private boolean alreadyApplied(Path worktree, ChangeProposal proposal) {
+  private boolean alreadyApplied(WorkspaceFiles files, Path worktree, ChangeProposal proposal) {
     try {
       return proposal.replacementSha256() != null
           && proposal.replacementSha256().equals(files.read(worktree, proposal.filePath()).sha256());

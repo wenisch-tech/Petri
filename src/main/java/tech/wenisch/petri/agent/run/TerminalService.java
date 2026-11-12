@@ -7,6 +7,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
 import tech.wenisch.petri.git.ProjectWorktreeService;
+import tech.wenisch.petri.workspace.ActiveWorktree;
 import tech.wenisch.petri.workspace.WorktreeLocator;
 
 /** Terminal commands for the workspace panel and for the agent's {@code run_command} tool. */
@@ -21,10 +22,13 @@ public class TerminalService {
   private final TerminalRunner runner;
   private final WorktreeLocator worktrees;
   private final ProjectWorktreeService projectWorktrees;
+  private final tech.wenisch.petri.kubernetes.KubernetesSettingsService kubernetes;
   private final ProjectSandboxSettingRepository settings;
 
   TerminalService(TerminalStateService state, TerminalRunner runner, WorktreeLocator worktrees,
-      ProjectWorktreeService projectWorktrees, ProjectSandboxSettingRepository settings) {
+      ProjectWorktreeService projectWorktrees, ProjectSandboxSettingRepository settings,
+      tech.wenisch.petri.kubernetes.KubernetesSettingsService kubernetes) {
+    this.kubernetes = kubernetes;
     this.state = state;
     this.runner = runner;
     this.worktrees = worktrees;
@@ -34,8 +38,14 @@ public class TerminalService {
 
   public boolean available() { return runner.available(); }
 
-  public TerminalCommandView request(UUID worktreeId, UUID agentRunId, String command, String reason) {
+  /** A project whose workspace is a Kubernetes pod needs no local confinement. */
+  private void requireAvailable(UUID worktreeId) {
+    if (kubernetes.enabled(projectWorktrees.get(worktreeId).projectId())) return;
     if (!runner.available()) throw new IllegalStateException(runner.unavailableReason());
+  }
+
+  public TerminalCommandView request(UUID worktreeId, UUID agentRunId, String command, String reason) {
+    requireAvailable(worktreeId);
     String safe = validate(command);
     String safeReason = reason == null ? null : reason.strip();
     if (safeReason != null && safeReason.length() > 1000) safeReason = safeReason.substring(0, 1000);
@@ -44,7 +54,7 @@ public class TerminalService {
 
   /** Runs a command typed by the signed-in user; the user is the approver. */
   public TerminalCommandView runForUser(UUID worktreeId, String actorEmail, String command) {
-    if (!runner.available()) throw new IllegalStateException(runner.unavailableReason());
+    requireAvailable(worktreeId);
     TerminalCommandView created = state.createForUser(worktreeId, actorEmail, validate(command));
     return execute(created.id());
   }
@@ -85,10 +95,9 @@ public class TerminalService {
   private TerminalCommandView run(TerminalCommandView started) {
     UUID id = started.id();
     try {
-      java.nio.file.Path worktree = worktrees.requireActiveWorktree(started.worktreeId());
-      UUID projectId = projectWorktrees.get(started.worktreeId()).projectId();
-      return state.complete(id,
-          runner.run(projectId, worktree, started.command(), text -> state.progress(id, text)));
+      ActiveWorktree active = worktrees.resolveActiveWorktree(started.worktreeId());
+      return state.complete(id, runner.run(active.host(), active.projectId(), active.root(),
+          started.command(), text -> state.progress(id, text)));
     } catch (IOException | RuntimeException exception) {
       log.warn("Terminal command {} could not run", id, exception);
       return state.error(id, "Command could not be started: "

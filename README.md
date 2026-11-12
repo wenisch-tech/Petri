@@ -90,6 +90,8 @@ PostgreSQL, and works with OpenAI, LiteLLM, Ollama and any OpenAI-compatible end
 
 - **Workspace UI:** lazy file explorer, Monaco tabs with persistent drafts, optimistic saves and
   conflict-safe reloads, side-by-side or inline diffs.
+- **Kubernetes workspaces:** per project, the repository, terminal, tests and agent tools can live in a
+  pod on your own cluster (any image with `sh` and `git`), with a volume that outlives the idle-stopped pod.
 - **Terminal panel** below the editor; agents get an approval-gated `run_command` tool (per-project
   auto-approve) whose commands run as an OS-level user confined to the worktree.
 - **Live workflow panel** shown as a Petri net with per-goal verification, status, attempts and cancel; it stays on *Done* until the
@@ -217,6 +219,7 @@ The full reference, including limits, timeouts and OIDC setup, is in
 | GitHub / GitLab / Forgejo | [Git provider accounts](docs/git-provider-accounts.md) |
 | Model loop and approvals | [Agent workflow](docs/agent-workflow.md) |
 | Multi-agent gates | [Gated orchestration](docs/gated-orchestration.md) |
+| Workspaces in a Kubernetes pod | [Kubernetes workspaces](docs/kubernetes-workspaces.md) |
 | Test isolation | [Test sandboxes](docs/test-sandboxes.md) |
 | Skills and actions | [Skills](docs/skills.md) |
 | Automations and vulnerability fixes | [Automations](docs/automations.md) |

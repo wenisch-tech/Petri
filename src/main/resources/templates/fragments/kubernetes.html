@@ -1,0 +1,98 @@
+<!doctype html>
+<html xmlns:th="http://www.thymeleaf.org">
+<body>
+
+<!-- How Petri reaches the cluster. `cfg` is a KubernetesWorkspaceConfig; secrets are never rendered. -->
+<th:block th:fragment="clusterFields(cfg)">
+  <div x-data="{ mode: '[[${cfg.authMode == null ? 'KUBECONFIG' : cfg.authMode}]]' }" class="space-y-4">
+    <div>
+      <span class="label">Access to the cluster</span>
+      <div class="flex flex-wrap gap-4">
+        <label class="check"><input type="radio" name="authMode" value="KUBECONFIG" x-model="mode"><span>Kubeconfig file</span></label>
+        <label class="check"><input type="radio" name="authMode" value="TOKEN" x-model="mode"><span>API server URL and token</span></label>
+        <label class="check"><input type="radio" name="authMode" value="IN_CLUSTER" x-model="mode"><span>Petri's own service account</span></label>
+      </div>
+    </div>
+    <div x-show="mode === 'KUBECONFIG'" x-cloak>
+      <label class="label" for="k8s-kubeconfig">Kubeconfig</label>
+      <textarea id="k8s-kubeconfig" name="kubeconfig" rows="8" class="field font-mono text-sm" spellcheck="false" autocomplete="off"
+                th:placeholder="${cfg.kubeconfigSet} ? 'A kubeconfig is stored. Leave empty to keep it, or paste a new one to replace it.' : 'Paste the contents of the kubeconfig file'"></textarea>
+      <span class="hint">Encrypted at rest and never shown again. Use a context whose credentials can create pods, volume claims and secrets in the namespace below (for example <code>kubectl config view --raw --minify</code>).</span>
+      <label class="check mt-2" th:if="${cfg.kubeconfigSet}"><input type="checkbox" name="clearKubeconfig" value="true"><span>Remove the stored kubeconfig</span></label>
+    </div>
+    <div x-show="mode === 'TOKEN'" x-cloak class="space-y-3">
+      <div class="form-grid">
+        <div>
+          <label class="label" for="k8s-url">API server URL</label>
+          <input id="k8s-url" class="field font-mono text-sm" name="apiServerUrl" th:value="${cfg.apiServerUrl}" placeholder="https://kubernetes.example.com:6443" autocomplete="off" spellcheck="false">
+        </div>
+        <div>
+          <label class="label" for="k8s-token">Bearer token</label>
+          <input id="k8s-token" class="field" type="password" name="token" autocomplete="new-password"
+                 th:placeholder="${cfg.tokenSet} ? 'A token is stored. Leave empty to keep it.' : 'Service account token'">
+          <label class="check mt-2" th:if="${cfg.tokenSet}"><input type="checkbox" name="clearToken" value="true"><span>Remove the stored token</span></label>
+        </div>
+      </div>
+      <div>
+        <label class="label" for="k8s-ca">Cluster CA certificate <span class="label-optional">(optional, PEM)</span></label>
+        <textarea id="k8s-ca" name="caPem" rows="4" class="field font-mono text-sm" spellcheck="false" th:text="${cfg.caPem}"></textarea>
+      </div>
+      <label class="check"><input type="checkbox" name="insecure" value="true" th:checked="${cfg.insecure}"><span>Do not verify the API server's certificate</span></label>
+    </div>
+    <p x-show="mode === 'IN_CLUSTER'" x-cloak class="hint">Uses the service account of the pod Petri runs in. Enable it in the Helm chart (<code>kubernetesWorkspaces.rbac.create</code>).</p>
+  </div>
+</th:block>
+
+<!-- The workspace pod. In a project, empty fields inherit the instance value shown as placeholder. -->
+<th:block th:fragment="podFields(cfg, inst)">
+  <div class="form-grid">
+    <div>
+      <label class="label" for="k8s-image">Docker image</label>
+      <input id="k8s-image" class="field font-mono text-sm" name="image" th:value="${cfg.image}" th:placeholder="${inst != null && inst.image != null} ? ${inst.image} : 'registry.example.com/team/workspace:1.0'" autocomplete="off" spellcheck="false">
+      <span class="hint">Needs <code>sh</code> and <code>git</code>. Add JDK, Node or other tools your projects build with.</span>
+    </div>
+    <div>
+      <label class="label" for="k8s-namespace">Namespace</label>
+      <input id="k8s-namespace" class="field" name="namespace" th:value="${cfg.namespace}" th:placeholder="${inst != null && inst.namespace != null} ? ${inst.namespace} : 'petri-workspaces'" autocomplete="off">
+    </div>
+    <div>
+      <label class="label" for="k8s-pvc">Volume size</label>
+      <input id="k8s-pvc" class="field" name="pvcSize" th:value="${cfg.pvcSize}" th:placeholder="${inst != null && inst.pvcSize != null} ? ${inst.pvcSize} : '10Gi'" autocomplete="off">
+      <span class="hint">Holds the repository and all its worktrees; it is kept when the pod stops.</span>
+    </div>
+    <div>
+      <label class="label" for="k8s-class">Storage class <span class="label-optional">(optional)</span></label>
+      <input id="k8s-class" class="field" name="storageClass" th:value="${cfg.storageClass}" th:placeholder="${inst != null && inst.storageClass != null} ? ${inst.storageClass} : 'cluster default'" autocomplete="off">
+    </div>
+    <div><label class="label" for="k8s-cpu-req">CPU request</label><input id="k8s-cpu-req" class="field" name="cpuRequest" th:value="${cfg.cpuRequest}" th:placeholder="${inst != null && inst.cpuRequest != null} ? ${inst.cpuRequest} : '500m'" autocomplete="off"></div>
+    <div><label class="label" for="k8s-cpu-lim">CPU limit</label><input id="k8s-cpu-lim" class="field" name="cpuLimit" th:value="${cfg.cpuLimit}" th:placeholder="${inst != null && inst.cpuLimit != null} ? ${inst.cpuLimit} : '2'" autocomplete="off"></div>
+    <div><label class="label" for="k8s-mem-req">Memory request</label><input id="k8s-mem-req" class="field" name="memoryRequest" th:value="${cfg.memoryRequest}" th:placeholder="${inst != null && inst.memoryRequest != null} ? ${inst.memoryRequest} : '1Gi'" autocomplete="off"></div>
+    <div><label class="label" for="k8s-mem-lim">Memory limit</label><input id="k8s-mem-lim" class="field" name="memoryLimit" th:value="${cfg.memoryLimit}" th:placeholder="${inst != null && inst.memoryLimit != null} ? ${inst.memoryLimit} : '4Gi'" autocomplete="off"></div>
+    <div>
+      <label class="label" for="k8s-uid">Run as user ID <span class="label-optional">(optional)</span></label>
+      <input id="k8s-uid" class="field" type="number" min="0" name="runAsUser" th:value="${cfg.runAsUser}" th:placeholder="${inst != null && inst.runAsUser != null} ? ${inst.runAsUser} : 'image default'">
+    </div>
+    <div>
+      <label class="label" for="k8s-fsgroup">File system group <span class="label-optional">(optional)</span></label>
+      <input id="k8s-fsgroup" class="field" type="number" min="0" name="fsGroup" th:value="${cfg.fsGroup}" th:placeholder="${inst != null && inst.fsGroup != null} ? ${inst.fsGroup} : 'none'">
+      <span class="hint">Set it when the volume is not writable by the image's user.</span>
+    </div>
+    <div>
+      <label class="label" for="k8s-idle">Stop the pod after (minutes without use)</label>
+      <input id="k8s-idle" class="field" type="number" min="1" max="10080" name="idleTimeoutMinutes" th:value="${cfg.idleTimeoutMinutes}" th:placeholder="${inst != null && inst.idleTimeoutMinutes != null} ? ${inst.idleTimeoutMinutes} : '60'">
+    </div>
+    <div>
+      <label class="label" for="k8s-toolchain">Bundled tools <span class="label-optional">(git, python, go, curl, node, npm)</span></label>
+      <select id="k8s-toolchain" class="field" name="toolchain">
+        <option value="" th:selected="${cfg.toolchainMode == null}" th:text="${inst != null && inst.toolchainMode != null} ? 'Same as the default (' + ${#strings.toLowerCase(inst.toolchainMode)} + ')' : 'Same as the default (fallback)'">Default</option>
+        <option value="FALLBACK" th:selected="${cfg.toolchainMode == 'FALLBACK'}">Fallback: use them where the image has none</option>
+        <option value="PREFER" th:selected="${cfg.toolchainMode == 'PREFER'}">Prefer: use them before the image's own tools</option>
+        <option value="OFF" th:selected="${cfg.toolchainMode == 'OFF'}">Off: the image must bring every tool</option>
+      </select>
+      <span class="hint">Petri's <code>-tools</code> image carries these tools and copies them into the pod's volume once, so a plain image with only a shell works even without internet access. Without that image, pods use only their own tools.</span>
+    </div>
+  </div>
+</th:block>
+
+</body>
+</html>

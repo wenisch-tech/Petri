@@ -38,6 +38,10 @@ spec:
       labels:
         {{- include "petri.selectorLabels" $root | nindent 8 }}
     spec:
+      {{- if $root.Values.kubernetesWorkspaces.rbac.create }}
+      serviceAccountName: {{ include "petri.fullname" $root }}
+      automountServiceAccountToken: true
+      {{- end }}
       terminationGracePeriodSeconds: {{ $root.Values.terminationGracePeriodSeconds }}
       {{- with $root.Values.imagePullSecrets }}
       imagePullSecrets:

@@ -213,7 +213,8 @@ public class AgentRunService {
         workflow.executionWorktreeId(), snapshot.provider(), snapshot.model(), safePrompt,
         snapshot.maxModelTurns(), snapshot.maxOutputTokens(), snapshot.contextWindowTokens(),
         snapshot.reasoningEffort(), snapshot.textVerbosity(),
-        WorkflowPrompts.instructions(snapshot.role(), snapshot.promptAddendum()),
+        WorkflowPrompts.instructions(snapshot.role(), snapshot.promptAddendum(),
+            workflow.executionWorktreeId()),
         workflow.createdBy(), now);
     stage.useProviderInstance(snapshot.providerInstanceId());
     AgentRun run = runs.save(stage);

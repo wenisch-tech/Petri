@@ -2,14 +2,14 @@ package tech.wenisch.petri.git;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import tech.wenisch.petri.workspace.ActiveWorktree;
+import tech.wenisch.petri.workspace.RawFile;
 import tech.wenisch.petri.workspace.WorktreeLocator;
 
 /** Read-only Git status and diff access for the active, safe Petri worktree. */
@@ -17,15 +17,13 @@ import tech.wenisch.petri.workspace.WorktreeLocator;
 public class WorkspaceGitDiffService {
   private static final int MAX_DIFF_BYTES = 1_000_000;
   private final WorktreeLocator worktrees;
-  private final GitCommandRunner git;
 
-  public WorkspaceGitDiffService(WorktreeLocator worktrees, GitCommandRunner git) {
+  public WorkspaceGitDiffService(WorktreeLocator worktrees) {
     this.worktrees = worktrees;
-    this.git = git;
   }
 
   public List<WorkspaceChangeView> changes(UUID worktreeId) {
-    Path root = worktrees.requireActiveWorktree(worktreeId);
+    ActiveWorktree root = worktrees.resolveActiveWorktree(worktreeId);
     GitCommandResult result = run(root, List.of("status", "--porcelain=v1", "-z", "--untracked-files=all"));
     if (!result.succeeded()) throw new IllegalStateException("Git failed to inspect workspace changes");
     List<WorkspaceChangeView> changes = new ArrayList<>();
@@ -54,7 +52,7 @@ public class WorkspaceGitDiffService {
 
   WorkspaceChangeView scopedChange(
       UUID worktreeId, WorkspaceChangeView change, WorkspaceDiffScope scope) {
-    Path root = worktrees.requireActiveWorktree(worktreeId);
+    ActiveWorktree root = worktrees.resolveActiveWorktree(worktreeId);
     ChangeStats stats = stats(
         root, change.path(), change.previousPath(), change.status(), scope);
     return new WorkspaceChangeView(
@@ -64,7 +62,7 @@ public class WorkspaceGitDiffService {
 
   public WorkspaceDiffView diff(
       UUID worktreeId, String requestedPath, WorkspaceDiffScope requestedScope) {
-    Path root = worktrees.requireActiveWorktree(worktreeId);
+    ActiveWorktree root = worktrees.resolveActiveWorktree(worktreeId);
     String path = safePath(requestedPath);
     WorkspaceDiffScope scope = requestedScope == null ? WorkspaceDiffScope.COMBINED : requestedScope;
     WorkspaceChangeView change = changes(worktreeId).stream()
@@ -101,18 +99,18 @@ public class WorkspaceGitDiffService {
         binary ? null : before.text(), binary ? null : after.text(), unified);
   }
 
-  private Content fromIndex(Path root, String path) {
+  private Content fromIndex(ActiveWorktree root, String path) {
     GitCommandResult result = run(root, List.of("show", ":" + path));
     if (!result.succeeded()) return Content.empty();
     return content(result.output(), result.truncated());
   }
 
-  private ChangeStats stats(Path root, String path, String previousPath, WorkspaceChangeStatus status) {
+  private ChangeStats stats(ActiveWorktree root, String path, String previousPath, WorkspaceChangeStatus status) {
     return stats(root, path, previousPath, status, WorkspaceDiffScope.COMBINED);
   }
 
   private ChangeStats stats(
-      Path root,
+      ActiveWorktree root,
       String path,
       String previousPath,
       WorkspaceChangeStatus status,
@@ -141,35 +139,27 @@ public class WorkspaceGitDiffService {
     }
   }
 
-  private Content fromHead(Path root, String path) {
+  private Content fromHead(ActiveWorktree root, String path) {
     GitCommandResult result = run(root, List.of("show", "HEAD:" + path));
     if (!result.succeeded()) return Content.empty();
     return content(result.output(), result.truncated());
   }
 
-  private Content fromWorktree(Path root, String path) {
-    try {
-      Path file = root.resolve(path).normalize();
-      if (!file.startsWith(root) || Files.isSymbolicLink(file)
-          || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return Content.empty();
-      long size = Files.size(file);
-      if (size > MAX_DIFF_BYTES) return new Content(null, false, true);
-      byte[] bytes = Files.readAllBytes(file);
-      if (bytes.length > MAX_DIFF_BYTES) return new Content(null, false, true);
-      String text = new String(bytes, StandardCharsets.UTF_8);
-      return new Content(text, text.indexOf('\0') >= 0, false);
-    } catch (IOException exception) {
-      throw new IllegalStateException("Could not read changed workspace file", exception);
-    }
+  private Content fromWorktree(ActiveWorktree root, String path) {
+    RawFile file = root.host().files().readRaw(root.root(), path, MAX_DIFF_BYTES);
+    if (file.tooLarge()) return new Content(null, false, true);
+    if (!file.present()) return Content.empty();
+    String text = new String(file.bytes(), StandardCharsets.UTF_8);
+    return new Content(text, text.indexOf('\0') >= 0, false);
   }
 
   private static Content content(String value, boolean truncated) {
     return new Content(value, value.indexOf('\0') >= 0, truncated);
   }
 
-  private GitCommandResult run(Path root, List<String> arguments) {
+  private GitCommandResult run(ActiveWorktree root, List<String> arguments) {
     try {
-      return git.run(root, arguments);
+      return root.host().git().run(root.root(), arguments);
     } catch (IOException exception) {
       throw new IllegalStateException("Could not run Git", exception);
     }

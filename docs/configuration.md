@@ -71,6 +71,19 @@ Test timeout, output, CPU, memory, PIDs, image and network settings are managed 
 | `PETRI_SKILLS_ROOT` | `./skills` | Operator-controlled skill directory. |
 | `PETRI_MAX_SKILL_BYTES` | `200000` | Maximum `SKILL.md` size. |
 
+## Kubernetes workspaces
+
+Cluster credentials, the image and pod settings are configured in the UI (see
+[Kubernetes workspaces](kubernetes-workspaces.md)). These variables tune the behaviour:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `PETRI_KUBERNETES_AGENT_DIR` | `/opt/petri/workspace-agent` | Directory with the workspace agent binaries, `<dir>/<amd64\|arm64>/petri-workspace-agent`. The image includes them; `scripts/build-workspace-agent.sh` builds them for development (`./data/workspace-agent` is also searched). |
+| `PETRI_KUBERNETES_TOOLCHAIN_DIR` | `/opt/petri/workspace-toolchain` | Directory with the bundled tools, `<dir>/<amd64\|arm64>/toolchain.tar.gz` and `toolchain.version`, copied into pods that use them ([Bundled tools](kubernetes-workspaces.md#bundled-tools)). Only the `-tools` image includes them (without them pods start with their image's tools alone); `scripts/build-workspace-toolchain.sh` builds them for development (`./data/workspace-toolchain` is also searched). |
+| `PETRI_KUBERNETES_POD_START_TIMEOUT` | `5m` | How long Petri waits for a workspace pod to start. |
+| `PETRI_KUBERNETES_REAPER_INTERVAL_MS` | `60000` | How often idle pods are looked for. |
+| `PETRI_KUBERNETES_POLL_INTERVAL_MS` | `1000` | Polling interval while a pod starts. |
+
 Provider URLs and credentials are normally configured at `/model-settings` and persisted in the database.
 
 ## OIDC

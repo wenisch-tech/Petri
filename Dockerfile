@@ -30,6 +30,20 @@ RUN go get "oras.land/oras-go/v2@v${ORAS_GO_VERSION}" \
       -ldflags "-s -w -X github.com/aquasecurity/trivy/pkg/version/app.ver=${TRIVY_VERSION}" \
       -o /trivy ./cmd/trivy
 
+# Workspace agent: a stdlib-only Go binary that runs inside Kubernetes workspace pods and serves the
+# file, process and archive operations of a project whose workspace lives on a cluster. Petri copies
+# it into the pod at start, so both Linux architectures are built and one image serves any node.
+FROM golang:1.27-alpine AS workspace-agent
+ARG BUILD_VERSION=dev
+WORKDIR /src
+COPY docker/workspace-agent/ ./
+RUN go vet ./... \
+ && for arch in amd64 arm64; do \
+      CGO_ENABLED=0 GOOS=linux GOARCH=$arch go build -trimpath \
+        -ldflags "-s -w -X main.version=${BUILD_VERSION}" \
+        -o /out/$arch/petri-workspace-agent . ; \
+    done
+
 # Vulnerability database, supplied in the image at /opt/trivy-db so that scans work without any
 # registry access (air-gapped installations switch the scanner to "offline" under Administration >
 # Vulnerability scanning). It is only as current as the build; an online instance refreshes it at
@@ -57,6 +71,7 @@ FROM eclipse-temurin:25-jdk-alpine
 COPY --from=confine /petri-confine /usr/local/bin/petri-confine
 COPY --from=trivy-build /trivy /usr/local/bin/trivy
 COPY --from=trivy-db /seed/ /opt/trivy-db/
+COPY --from=workspace-agent /out/ /opt/petri/workspace-agent/
 
 ARG APK_MIRROR
 COPY scripts/alpine-runtime.sh /tmp/alpine-runtime.sh

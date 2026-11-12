@@ -69,3 +69,24 @@ Unix user, filesystem (including `./data`) and network. Package installs fetch a
 package code, so each is a user-approved proposal: names are strictly validated, apk runs without a
 shell as an unprivileged user into a separate prefix, and the only automatic path is the explicit
 per-project *Auto-approve package installs* setting. Keep the Podman executor for untrusted code.
+
+## Kubernetes workspaces
+
+A project can run its workspace in a pod ([Kubernetes workspaces](kubernetes-workspaces.md)). Cluster
+credentials (kubeconfig or token) are encrypted like other secrets, never shown again, and only named
+in the audit log by mode, namespace and image. Petri talks to the pod's agent through the Kubernetes
+API server, so the pod needs no exposed port; the agent additionally requires a random per-pod token
+held in a Kubernetes secret, and confines every path to the workspace volume with the same symlink,
+`.git` and hash checks as the local workspace. Git credentials reach the pod only as environment
+variables of a single command, through an askpass helper. The pod is the isolation boundary for
+repository code: give it a namespace, quotas and network policy that suit untrusted code, and note
+that anyone who can read secrets or exec into pods in that namespace can reach the workspace.
+Credentials with broad rights (such as a cluster-admin kubeconfig) let the project owner run code
+with those rights through the pod API, so prefer a token limited to the workspace namespace.
+
+Package sources with credentials (Maven, npm and the like) are rendered per command, copied into a
+private scratch directory of the pod with owner-only permissions, and removed when the command ends.
+Only a placed Gradle, Cargo or Composer configuration stays on the volume, holding the same
+credentials until the next command replaces or removes it. The bundled tools are part of Petri's own
+image. The agent unpacks them without any setuid bit and refuses a bundle that would write outside
+its directory; they run as the pod's unprivileged user.

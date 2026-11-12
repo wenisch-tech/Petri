@@ -1,88 +1,85 @@
 package tech.wenisch.petri.git;
 
 import java.io.IOException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
 import org.springframework.stereotype.Service;
+import tech.wenisch.petri.workspace.ActiveWorktree;
+import tech.wenisch.petri.workspace.WorkspaceHost;
 import tech.wenisch.petri.workspace.WorktreeLocator;
 
 /** Creates immutable Git trees without changing the worktree or its real index. */
 @Service
 public class WorkflowGitBaselineService {
   private final WorktreeLocator worktrees;
-  private final GitCommandRunner git;
 
-  public WorkflowGitBaselineService(WorktreeLocator worktrees, GitCommandRunner git) {
+  public WorkflowGitBaselineService(WorktreeLocator worktrees) {
     this.worktrees = worktrees;
-    this.git = git;
   }
 
   public Baseline create(UUID worktreeId, UUID workflowId) {
-    Path root = worktrees.requireActiveWorktree(worktreeId);
-    String head = require(root, List.of("rev-parse", "HEAD"), Map.of()).strip();
+    ActiveWorktree active = worktrees.resolveActiveWorktree(worktreeId);
+    WorkspaceHost host = active.host();
+    Path root = active.root();
+    String head = require(host, root, List.of("rev-parse", "HEAD"), Map.of()).strip();
     Path index = null;
     try {
-      index = Files.createTempFile("petri-workflow-index-", ".tmp");
-      Files.deleteIfExists(index);
+      index = host.layout().temporaryDirectory().resolve("petri-workflow-index-" + UUID.randomUUID() + ".tmp");
       Map<String, String> environment = Map.of("GIT_INDEX_FILE", index.toString());
-      require(root, List.of("read-tree", "HEAD"), environment);
-      require(root, List.of("add", "-A", "--", "."), environment);
-      String tree = require(root, List.of("write-tree"), environment).strip();
-      require(root, List.of("update-ref", ref(workflowId), tree), Map.of());
+      require(host, root, List.of("read-tree", "HEAD"), environment);
+      require(host, root, List.of("add", "-A", "--", "."), environment);
+      String tree = require(host, root, List.of("write-tree"), environment).strip();
+      require(host, root, List.of("update-ref", ref(workflowId), tree), Map.of());
       return new Baseline(head, tree);
     } catch (IOException exception) {
       throw new GitOperationException("Could not create workflow baseline", exception);
     } finally {
-      if (index != null) {
-        try { Files.deleteIfExists(index); } catch (IOException ignored) { }
-      }
+      if (index != null) host.layout().deleteTemporary(index);
     }
   }
 
   public String diff(UUID worktreeId, UUID workflowId, List<String> touchedPaths) {
     if (touchedPaths == null || touchedPaths.isEmpty()) return "";
-    Path root = worktrees.requireActiveWorktree(worktreeId);
-    Baseline current = snapshot(root);
+    ActiveWorktree active = worktrees.resolveActiveWorktree(worktreeId);
+    Path root = active.root();
+    Baseline current = snapshot(active.host(), root);
     List<String> arguments = new ArrayList<>(List.of(
         "diff", "--no-ext-diff", "--binary", "--find-renames", ref(workflowId), current.tree(), "--"));
     for (String path : touchedPaths) arguments.add(safePath(path));
-    return require(root, arguments, Map.of());
+    return require(active.host(), root, arguments, Map.of());
   }
 
   public void release(UUID worktreeId, UUID workflowId) {
-    Path root = worktrees.requireActiveWorktree(worktreeId);
+    ActiveWorktree active = worktrees.resolveActiveWorktree(worktreeId);
     try {
-      git.run(root, List.of("update-ref", "-d", ref(workflowId)));
+      active.host().git().run(active.root(), List.of("update-ref", "-d", ref(workflowId)));
     } catch (IOException exception) {
       throw new GitOperationException("Could not release workflow baseline", exception);
     }
   }
 
-  private Baseline snapshot(Path root) {
+  private Baseline snapshot(WorkspaceHost host, Path root) {
     Path index = null;
     try {
-      index = Files.createTempFile("petri-workflow-current-", ".tmp");
-      Files.deleteIfExists(index);
+      index = host.layout().temporaryDirectory().resolve("petri-workflow-current-" + UUID.randomUUID() + ".tmp");
       Map<String, String> environment = Map.of("GIT_INDEX_FILE", index.toString());
-      require(root, List.of("read-tree", "HEAD"), environment);
-      require(root, List.of("add", "-A", "--", "."), environment);
-      return new Baseline(null, require(root, List.of("write-tree"), environment).strip());
+      require(host, root, List.of("read-tree", "HEAD"), environment);
+      require(host, root, List.of("add", "-A", "--", "."), environment);
+      return new Baseline(null, require(host, root, List.of("write-tree"), environment).strip());
     } catch (IOException exception) {
       throw new GitOperationException("Could not snapshot workflow changes", exception);
     } finally {
-      if (index != null) {
-        try { Files.deleteIfExists(index); } catch (IOException ignored) { }
-      }
+      if (index != null) host.layout().deleteTemporary(index);
     }
   }
 
-  private String require(Path root, List<String> arguments, Map<String, String> environment) {
+  private String require(
+      WorkspaceHost host, Path root, List<String> arguments, Map<String, String> environment) {
     try {
-      GitCommandResult result = git.run(root, arguments, environment, List.of());
+      GitCommandResult result = host.git().run(root, arguments, environment, List.of());
       if (!result.succeeded()) {
         throw new GitOperationException("Git failed while preparing workflow evidence"
             + (result.output().isBlank() ? "" : ": " + result.output().strip()));

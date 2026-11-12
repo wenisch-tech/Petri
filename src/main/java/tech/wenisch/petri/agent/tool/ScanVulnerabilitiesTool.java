@@ -8,6 +8,7 @@ import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
 import tech.wenisch.petri.agent.run.TrivyScanService;
+import tech.wenisch.petri.workspace.ActiveWorktree;
 import tech.wenisch.petri.workspace.WorktreeLocator;
 
 /**
@@ -50,10 +51,10 @@ public class ScanVulnerabilitiesTool implements AgentTool {
 
   @Override
   public Object execute(ToolExecutionContext context, Map<String, Object> input) {
-    Path worktree = worktrees.requireActiveWorktree(context.worktreeId());
+    ActiveWorktree active = worktrees.resolveActiveWorktree(context.worktreeId());
     TrivyScanService.Result result;
     try {
-      result = trivy.scan(worktree, ToolInputs.string(input, "path", null, 500),
+      result = trivy.scan(active.host(), active.root(), ToolInputs.string(input, "path", null, 500),
           strings(input.get("scanners")), strings(input.get("severities")),
           Boolean.TRUE.equals(input.get("ignoreUnfixed")), true);
     } catch (IOException exception) {

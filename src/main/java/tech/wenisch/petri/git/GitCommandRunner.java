@@ -20,10 +20,11 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 import tech.wenisch.petri.config.PetriProperties;
 import tech.wenisch.petri.config.TlsSettings;
+import tech.wenisch.petri.workspace.WorkspaceGit;
 import tech.wenisch.petri.workspace.WorkspacePaths;
 
 @Component
-public class GitCommandRunner {
+public class GitCommandRunner implements WorkspaceGit {
   private static final Pattern URL_USER_INFO =
       Pattern.compile("(?i)(https?://)[^/@\\s]+@");
 
@@ -44,11 +45,13 @@ public class GitCommandRunner {
     this(paths, properties, TlsSettings.verifying());
   }
 
-  GitCommandResult run(Path workingDirectory, List<String> arguments) throws IOException {
+  @Override
+  public GitCommandResult run(Path workingDirectory, List<String> arguments) throws IOException {
     return run(workingDirectory, arguments, Map.of(), List.of());
   }
 
-  GitCommandResult run(
+  @Override
+  public GitCommandResult run(
       Path workingDirectory,
       List<String> arguments,
       Map<String, String> environment,
@@ -92,6 +95,15 @@ public class GitCommandRunner {
     }
   }
 
+  @Override
+  public GitCommandResult runWithCredential(
+      Path workingDirectory, List<String> arguments, GitCredentialMaterial credential)
+      throws IOException {
+    try (GitAskPassSession askPass = new GitAskPassSession(paths.temporaryDirectory(), credential)) {
+      return run(workingDirectory, arguments, askPass.environment(), List.of(credential.secret()));
+    }
+  }
+
   private CapturedOutput capture(InputStream input) throws IOException {
     ByteArrayOutputStream retained = new ByteArrayOutputStream(Math.min(outputLimit, 8192));
     byte[] buffer = new byte[8192];
@@ -128,7 +140,7 @@ public class GitCommandRunner {
     }
   }
 
-  private static void requireSafeArguments(List<String> arguments, Collection<String> secrets) {
+  public static void requireSafeArguments(List<String> arguments, Collection<String> secrets) {
     if (arguments == null || arguments.isEmpty()) {
       throw new IllegalArgumentException("A Git subcommand is required");
     }
@@ -143,7 +155,7 @@ public class GitCommandRunner {
     }
   }
 
-  private static String redact(String output, Collection<String> secrets) {
+  public static String redact(String output, Collection<String> secrets) {
     String sanitized = URL_USER_INFO.matcher(output).replaceAll("$1***@");
     for (String secret : secrets) {
       if (secret != null && !secret.isEmpty()) sanitized = sanitized.replace(secret, "********");

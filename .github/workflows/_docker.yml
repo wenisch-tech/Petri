@@ -66,6 +66,15 @@ jobs:
             BUILD_REVISION=${{ github.sha }}
             BAKE_TRIVY_DB=true
 
+      - name: Build Docker image with the workspace toolchain (local)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The classic builder reads the base image from the local Docker daemon.
+          docker build --file Dockerfile.tools \
+            --build-arg BASE_IMAGE="${{ inputs.image }}:${{ inputs.version }}" \
+            --tag "${{ inputs.image }}:${{ inputs.version }}-tools" .
+
       - name: Make container check script executable
         run: chmod +x scripts/check-container-endpoints.sh
 
@@ -197,6 +206,12 @@ jobs:
           docker push "$image:main"
           docker push "$image:sha-$short_sha"
 
+          # The same image plus the workspace toolchain (Dockerfile.tools).
+          for tag in "$version" latest main "sha-$short_sha"; do
+            [ "$tag" = "$version" ] || docker tag "$image:$version-tools" "$image:$tag-tools"
+            docker push "$image:$tag-tools"
+          done
+
       - name: Install Cosign
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
         uses: sigstore/cosign-installer@v4.1.2
@@ -211,7 +226,8 @@ jobs:
           version="${{ inputs.version }}"
           short_sha="${GITHUB_SHA::7}"
           digest=$(docker inspect --format='{{index .RepoDigests 0}}' "$image:$version" | cut -d@ -f2)
-          for tag in "$image:$version" "$image:latest" "$image:main" "$image:sha-$short_sha"; do
+          for tag in "$image:$version" "$image:latest" "$image:main" "$image:sha-$short_sha" \
+              "$image:$version-tools" "$image:latest-tools" "$image:main-tools" "$image:sha-$short_sha-tools"; do
             cosign sign --yes "$tag"
           done
           echo "digest=$digest" >> "$GITHUB_OUTPUT"

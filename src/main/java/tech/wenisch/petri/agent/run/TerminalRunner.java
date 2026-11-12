@@ -10,6 +10,9 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import tech.wenisch.petri.workspace.WorkspaceHost;
+import tech.wenisch.petri.workspace.WorkspaceHostKind;
+import tech.wenisch.petri.workspace.WorkspaceLayout;
 import tech.wenisch.petri.workspace.WorkspacePaths;
 
 /**
@@ -68,15 +71,45 @@ class TerminalRunner {
   }
 
   TestCommandResult run(
-      UUID projectId, Path worktree, String command, java.util.function.Consumer<String> progress)
+      WorkspaceHost host, UUID projectId, Path worktree, String command, java.util.function.Consumer<String> progress)
       throws IOException {
+    if (host.kind() == WorkspaceHostKind.KUBERNETES) {
+      return runRemote(host, projectId, worktree, command, progress);
+    }
     Path safeWorktree = paths.requireExistingPath(worktree);
-    if ("local".equalsIgnoreCase(executor)) return runLocal(projectId, safeWorktree, command, progress);
+    if ("local".equalsIgnoreCase(executor)) return runLocal(host, projectId, safeWorktree, command, progress);
     return runPodman(projectId, safeWorktree, command, progress);
   }
 
+  /** Runs the command in the project's Kubernetes pod, which is the sandbox. */
+  private TestCommandResult runRemote(
+      WorkspaceHost host, UUID projectId, Path worktree, String command,
+      java.util.function.Consumer<String> progress) throws IOException {
+    WorkspaceLayout layout = host.layout();
+    Path home = layout.createTemporaryDirectory("petri-term-");
+    try {
+      Path cache = layout.testCaches(projectId);
+      Path scratch = layout.worktreeTemporaryDirectory(worktree);
+      Map<String, String> env = new java.util.LinkedHashMap<>();
+      env.put("HOME", home.toString());
+      env.put("CI", "true");
+      env.put("LC_ALL", "C.UTF-8");
+      env.putAll(commandEnvironment.extra(profiles.environmentFor(projectId)));
+      // The configured package sources, as in a local run: the generated configuration wins over
+      // variables a user could set.
+      if (packages != null) env.putAll(packages.remote(projectId, host, home, cache));
+      env.put("MAVEN_OPTS", "-Dmaven.repo.local=" + cache.resolve("maven"));
+      env.put("GRADLE_USER_HOME", cache.resolve("gradle").toString());
+      env.putAll(LocalToolchain.temporaryDirectoryEnvironment(scratch));
+      return host.processes().exec(
+          worktree, List.of("sh", "-c", command), env, timeout, outputLimit, "kubernetes-pod", progress);
+    } finally {
+      layout.deleteTemporary(home);
+    }
+  }
+
   private TestCommandResult runLocal(
-      UUID projectId, Path worktree, String command, java.util.function.Consumer<String> progress)
+      WorkspaceHost host, UUID projectId, Path worktree, String command, java.util.function.Consumer<String> progress)
       throws IOException {
     if (!confinement.available()) throw new IllegalStateException(unavailableReason());
     Path home = Files.createTempDirectory(paths.temporaryDirectory(), "petri-term-");
@@ -94,7 +127,8 @@ class TerminalRunner {
       Map<String, String> env = toolchain.environment(home, extra, profiles.environmentFor(projectId), projectId);
       List<String> argv = confinement.wrap(
           List.of(worktree, home, cache, scratch), List.of("/bin/sh", "-c", command));
-      return BoundedProcess.run(argv, worktree, env, timeout, outputLimit, "terminal-landlock", progress);
+      return host.processes().exec(
+          worktree, argv, env, timeout, outputLimit, "terminal-landlock", progress);
     } finally {
       deleteQuietly(home);
     }

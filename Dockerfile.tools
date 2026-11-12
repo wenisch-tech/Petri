@@ -1,0 +1,26 @@
+# syntax=docker/dockerfile:1.27@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+
+# Petri with the workspace toolchain: the regular Petri image plus a self-contained bundle of git, curl,
+# python with pip, go, node and npm for each CPU architecture. Petri copies the bundle into Kubernetes
+# workspace pods whose image lacks these tools, once per volume, so a bare image with only a shell becomes
+# a complete workspace even on a cluster without internet access. The regular image does not carry it
+# (about 0.4 GB smaller); Petri then starts pods without the bundled tools.
+#
+# Build the regular image first, then this one on top of it:
+#   docker build -t petri .
+#   docker build -f Dockerfile.tools --build-arg BASE_IMAGE=petri -t petri-tools .
+#
+#   --build-arg APK_MIRROR=https://mirror.example.com/alpine   the Alpine mirror the build uses
+#   --build-arg WORKSPACE_TOOLCHAIN_PACKAGES="git go ..."       choose the Alpine packages that are bundled
+ARG BASE_IMAGE=ghcr.io/wenisch-tech/petri:latest
+
+# The bundle is built from the Alpine release of this build, for both architectures.
+FROM alpine:3.24 AS workspace-toolchain
+ARG APK_MIRROR
+ARG WORKSPACE_TOOLCHAIN_PACKAGES="git curl python3 py3-pip go nodejs npm ca-certificates-bundle"
+COPY docker/workspace-toolchain/build.sh /build/build.sh
+RUN if [ -n "$APK_MIRROR" ]; then sed -i "s#https\?://[^/]*/alpine#${APK_MIRROR%/}#" /etc/apk/repositories; fi \
+ && PACKAGES="$WORKSPACE_TOOLCHAIN_PACKAGES" sh /build/build.sh
+
+FROM ${BASE_IMAGE}
+COPY --from=workspace-toolchain /out/ /opt/petri/workspace-toolchain/

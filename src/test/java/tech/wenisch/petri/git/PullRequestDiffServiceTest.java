@@ -11,6 +11,7 @@ import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tech.wenisch.petri.config.PetriProperties;
+import tech.wenisch.petri.workspace.TestWorkspaceHosts;
 import tech.wenisch.petri.workspace.WorkspacePaths;
 
 class PullRequestDiffServiceTest {
@@ -43,8 +44,8 @@ class PullRequestDiffServiceTest {
     git(mirror, "update-ref", "refs/remotes/origin/main", "refs/heads/main");
     git(mirror, "update-ref", "refs/petri/pr/7", head);
 
-    PullRequestDiffService service = new PullRequestDiffService(paths,
-        new GitCommandRunner(paths, properties));
+    PullRequestDiffService service = new PullRequestDiffService(TestWorkspaceHosts.resolver(
+        TestWorkspaceHosts.host(paths, null, null, new GitCommandRunner(paths, properties), null)));
     PullRequestDiffService.PullRequestDiff diff = service.diff(projectId, 7, "main", 100_000);
 
     assertThat(diff.headSha()).isEqualTo(head);

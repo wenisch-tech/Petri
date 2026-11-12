@@ -8,6 +8,7 @@ import java.util.Map;
 import java.util.UUID;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Component;
+import tech.wenisch.petri.workspace.WorkspaceHost;
 import tech.wenisch.petri.workspace.WorkspacePaths;
 
 /**
@@ -31,14 +32,14 @@ class LocalContainerTestExecutor implements TestExecutor {
 
   @Override
   public TestCommandResult run(
-      UUID projectId, Path worktree, TestCommand command, TestSandboxProfileView profile)
+      WorkspaceHost host, UUID projectId, Path worktree, TestCommand command, TestSandboxProfileView profile)
       throws IOException {
-    return run(projectId, worktree, command, profile, null);
+    return run(host, projectId, worktree, command, profile, null);
   }
 
   @Override
   public TestCommandResult run(
-      UUID projectId, Path worktree, TestCommand command, TestSandboxProfileView profile,
+      WorkspaceHost host, UUID projectId, Path worktree, TestCommand command, TestSandboxProfileView profile,
       java.util.function.Consumer<String> progress) throws IOException {
     if (!profile.buildSystems().contains(command.buildSystem())) {
       throw new IllegalArgumentException("Build system is not allowed by the sandbox profile");
@@ -58,8 +59,9 @@ class LocalContainerTestExecutor implements TestExecutor {
       List<String> argv = confinement.available()
           ? confinement.wrap(List.of(safeWorktree, cache, home, scratch), command.arguments())
           : command.arguments();
-      return BoundedProcess.run(argv, safeWorktree,
-          toolchain.environment(home, extra, profile.environment(), projectId), profile.timeout(), profile.outputLimitBytes(),
+      return host.processes().exec(safeWorktree, argv,
+          toolchain.environment(home, extra, profile.environment(), projectId), profile.timeout(),
+          profile.outputLimitBytes(),
           confinement.available() ? "local-container-landlock" : "local-container", progress);
     } finally {
       deleteQuietly(home);

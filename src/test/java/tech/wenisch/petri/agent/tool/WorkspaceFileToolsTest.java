@@ -13,6 +13,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
 import tech.wenisch.petri.config.PetriProperties;
+import tech.wenisch.petri.workspace.TestWorkspaceHosts;
 import tech.wenisch.petri.workspace.WorktreeLocator;
 
 class WorkspaceFileToolsTest {
@@ -47,11 +48,11 @@ class WorkspaceFileToolsTest {
             null),
         null);
     files = new WorkspaceFileService(properties);
-    WorktreeLocator locator = ignored -> worktree;
+    WorktreeLocator locator = TestWorkspaceHosts.locator(worktree, TestWorkspaceHosts.filesOnly(files));
     registry = new AgentToolRegistry(List.of(
-        new ListFilesTool(locator, files),
-        new ReadFileTool(locator, files),
-        new SearchFilesTool(locator, files)));
+        new ListFilesTool(locator),
+        new ReadFileTool(locator),
+        new SearchFilesTool(locator)));
     worktreeId = UUID.randomUUID();
   }
 

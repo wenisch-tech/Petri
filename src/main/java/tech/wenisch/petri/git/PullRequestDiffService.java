@@ -7,19 +7,20 @@ import java.util.List;
 import java.util.UUID;
 import java.util.regex.Pattern;
 import org.springframework.stereotype.Service;
-import tech.wenisch.petri.workspace.WorkspacePaths;
+import tech.wenisch.petri.workspace.WorkspaceGit;
+import tech.wenisch.petri.workspace.WorkspaceHost;
+import tech.wenisch.petri.workspace.WorkspaceHostResolver;
+import tech.wenisch.petri.workspace.WorkspaceLayout;
 
 /** Read-only diff of a fetched pull request against its base branch, taken from the mirror. */
 @Service
 public class PullRequestDiffService {
   private static final Pattern BASE_BRANCH = Pattern.compile("[A-Za-z0-9._][A-Za-z0-9._/-]{0,254}");
 
-  private final WorkspacePaths paths;
-  private final GitCommandRunner git;
+  private final WorkspaceHostResolver hosts;
 
-  public PullRequestDiffService(WorkspacePaths paths, GitCommandRunner git) {
-    this.paths = paths;
-    this.git = git;
+  public PullRequestDiffService(WorkspaceHostResolver hosts) {
+    this.hosts = hosts;
   }
 
   /**
@@ -35,6 +36,9 @@ public class PullRequestDiffService {
       throw new IllegalArgumentException("Base branch name is invalid");
     }
     try {
+      WorkspaceHost host = hosts.forProject(projectId);
+      WorkspaceLayout paths = host.layout();
+      WorkspaceGit git = host.git();
       Path mirror = paths.mirror(projectId);
       String head = "refs/petri/pr/" + number;
       GitCommandResult sha = git.run(paths.root(), List.of(
@@ -75,6 +79,9 @@ public class PullRequestDiffService {
   public String sinceCommit(UUID projectId, long number, String previousSha, int maxBytes) {
     if (previousSha == null || !previousSha.matches("[0-9a-f]{7,64}")) return null;
     try {
+      WorkspaceHost host = hosts.forProject(projectId);
+      WorkspaceLayout paths = host.layout();
+      WorkspaceGit git = host.git();
       Path mirror = paths.mirror(projectId);
       GitCommandResult known = git.run(paths.root(), List.of(
           "--git-dir=" + mirror, "rev-parse", "--verify", "--quiet", previousSha + "^{commit}"));

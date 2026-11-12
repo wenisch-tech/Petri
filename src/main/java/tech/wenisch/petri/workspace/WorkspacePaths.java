@@ -4,27 +4,31 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.LinkOption;
 import java.nio.file.Path;
+import java.nio.file.attribute.BasicFileAttributes;
 import java.util.UUID;
 import org.springframework.stereotype.Component;
 import tech.wenisch.petri.config.PetriProperties;
 
 @Component
-public class WorkspacePaths {
+public class WorkspacePaths implements WorkspaceLayout {
   private final Path configuredRoot;
 
   public WorkspacePaths(PetriProperties properties) {
     this.configuredRoot = Path.of(properties.workspace().root()).toAbsolutePath().normalize();
   }
 
+  @Override
   public Path root() throws IOException {
     Files.createDirectories(configuredRoot);
     return configuredRoot.toRealPath();
   }
 
+  @Override
   public Path mirror(UUID projectId) throws IOException {
     return directory("mirrors", projectId + ".git");
   }
 
+  @Override
   public Path runWorktree(UUID projectId, UUID runId) throws IOException {
     Path projectRuns = directory("runs", projectId.toString());
     Path candidate = projectRuns.resolve(runId.toString()).normalize();
@@ -34,6 +38,7 @@ public class WorkspacePaths {
     return candidate;
   }
 
+  @Override
   public Path temporaryDirectory() throws IOException {
     return directory("tmp");
   }
@@ -43,6 +48,7 @@ public class WorkspacePaths {
    * the per-command home), is private to that worktree and is removed with it. Named after the
    * worktree directory, which is its UUID.
    */
+  @Override
   public Path worktreeTemporaryDirectory(Path worktree) throws IOException {
     String name = worktree.getFileName().toString();
     UUID.fromString(name);
@@ -50,6 +56,7 @@ public class WorkspacePaths {
   }
 
   /** Best-effort removal of a worktree's scratch space once the worktree is gone. */
+  @Override
   public void removeWorktreeTemporaryDirectory(UUID worktreeId) {
     try {
       Path candidate = root().resolve("worktree-tmp").resolve(worktreeId.toString());
@@ -59,6 +66,49 @@ public class WorkspacePaths {
       }
     } catch (IOException | RuntimeException ignored) {
       // scratch space only; a leftover directory is harmless
+    }
+  }
+
+  @Override
+  public Path testCaches(UUID projectId) throws IOException {
+    return directory("test-caches", projectId.toString());
+  }
+
+  @Override
+  public Path createTemporaryDirectory(String prefix) throws IOException {
+    return Files.createTempDirectory(temporaryDirectory(), prefix);
+  }
+
+  @Override
+  public void deleteTemporary(Path path) {
+    try {
+      Path root = root();
+      Path candidate = path.toAbsolutePath().normalize();
+      boolean allowed = candidate.startsWith(root.resolve("tmp")) || candidate.startsWith(root.resolve("worktree-tmp"));
+      if (!allowed || !Files.exists(candidate, LinkOption.NOFOLLOW_LINKS)) return;
+      try (var walk = Files.walk(candidate)) {
+        walk.sorted(java.util.Comparator.reverseOrder()).forEach(entry -> entry.toFile().delete());
+      }
+    } catch (IOException | RuntimeException ignored) {
+      // scratch space only; a leftover directory is harmless
+    }
+  }
+
+  @Override
+  public HostStat stat(Path path) throws IOException {
+    if (!Files.exists(path, LinkOption.NOFOLLOW_LINKS)) return HostStat.missing();
+    BasicFileAttributes attributes =
+        Files.readAttributes(path, BasicFileAttributes.class, LinkOption.NOFOLLOW_LINKS);
+    HostStat.Type type = attributes.isSymbolicLink() ? HostStat.Type.SYMLINK
+        : attributes.isDirectory() ? HostStat.Type.DIRECTORY
+        : attributes.isRegularFile() ? HostStat.Type.FILE : HostStat.Type.OTHER;
+    return new HostStat(true, type, attributes.size(), Files.isExecutable(path));
+  }
+
+  @Override
+  public boolean isEmptyDirectory(Path directory) throws IOException {
+    try (var children = Files.list(directory)) {
+      return children.findAny().isEmpty();
     }
   }
 
@@ -86,6 +136,7 @@ public class WorkspacePaths {
     return resolved;
   }
 
+  @Override
   public Path requireExistingPath(Path path) throws IOException {
     Path root = root();
     Path candidate = path.toAbsolutePath().normalize();

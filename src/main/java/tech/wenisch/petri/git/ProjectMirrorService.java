@@ -3,7 +3,6 @@ package tech.wenisch.petri.git;
 import java.io.IOException;
 import java.net.URI;
 import java.net.URISyntaxException;
-import java.nio.file.Files;
 import java.nio.file.Path;
 import java.security.Principal;
 import java.util.List;
@@ -16,28 +15,27 @@ import tech.wenisch.petri.project.Project;
 import tech.wenisch.petri.project.ProjectRepository;
 import tech.wenisch.petri.security.AppUser;
 import tech.wenisch.petri.security.AppUserRepository;
-import tech.wenisch.petri.workspace.WorkspacePaths;
+import tech.wenisch.petri.workspace.HostStat;
+import tech.wenisch.petri.workspace.WorkspaceHost;
+import tech.wenisch.petri.workspace.WorkspaceHostResolver;
 
 @Service
 public class ProjectMirrorService {
   private final ProjectRepository projects;
   private final ProjectGitCredentialResolver credentials;
-  private final GitCommandRunner git;
-  private final WorkspacePaths paths;
+  private final WorkspaceHostResolver hosts;
   private final AuditLogService auditLog;
   private final AppUserRepository users;
 
   public ProjectMirrorService(
       ProjectRepository projects,
       ProjectGitCredentialResolver credentials,
-      GitCommandRunner git,
-      WorkspacePaths paths,
+      WorkspaceHostResolver hosts,
       AuditLogService auditLog,
       AppUserRepository users) {
     this.projects = projects;
     this.credentials = credentials;
-    this.git = git;
-    this.paths = paths;
+    this.hosts = hosts;
     this.auditLog = auditLog;
     this.users = users;
   }
@@ -45,8 +43,9 @@ public class ProjectMirrorService {
   public ProjectMirrorStatus status(UUID projectId) {
     project(projectId);
     try {
-      Path mirror = paths.mirror(projectId);
-      return new ProjectMirrorStatus(isInitialized(mirror));
+      WorkspaceHost host = hosts.forProject(projectId);
+      Path mirror = host.layout().mirror(projectId);
+      return new ProjectMirrorStatus(isInitialized(host, mirror));
     } catch (IOException exception) {
       throw new GitOperationException("Could not inspect project mirror", exception);
     }
@@ -61,9 +60,10 @@ public class ProjectMirrorService {
     AppUser actor = actor(actorEmail);
     validateRepositoryLocation(project.getRepositoryUri());
     try {
-      Path mirror = paths.mirror(projectId);
-      boolean initialized = isInitialized(mirror);
-      if (!initialized && directoryHasContent(mirror)) {
+      WorkspaceHost host = hosts.forProject(projectId);
+      Path mirror = host.layout().mirror(projectId);
+      boolean initialized = isInitialized(host, mirror);
+      if (!initialized && !host.layout().isEmptyDirectory(mirror)) {
         throw new GitOperationException("Project mirror directory is not empty but has no Git mirror");
       }
 
@@ -71,15 +71,13 @@ public class ProjectMirrorService {
       if (credential.isPresent() && !isHttps(project.getRepositoryUri())) {
         throw new GitOperationException("Stored credentials can only be used with HTTPS repositories");
       }
-      GitCommandResult result = credential.isPresent()
-          ? runAuthenticated(project, mirror, initialized, credential.orElseThrow())
-          : run(project, mirror, initialized, Map.of(), List.of());
+      GitCommandResult result = run(host, project, mirror, initialized, credential);
       if (!result.succeeded()) {
         String reason = result.timedOut() ? "Git operation timed out" : "Git operation failed";
         String details = result.output().isBlank() ? "" : ": " + result.output().strip();
         throw new GitOperationException(reason + details);
       }
-      configureBranchRefs(project, mirror, initialized);
+      configureBranchRefs(host, project, mirror, initialized);
       auditLog.record(
           actor.getEmail(),
           initialized ? "PROJECT_MIRROR_FETCHED" : "PROJECT_MIRROR_CLONED",
@@ -107,8 +105,9 @@ public class ProjectMirrorService {
       throw new IllegalArgumentException("Invalid pull request ref");
     }
     try {
-      Path mirror = paths.mirror(projectId);
-      requireSuccess(runRemote(projectId, paths.root(), List.of(
+      WorkspaceHost host = hosts.forProject(projectId);
+      Path mirror = host.layout().mirror(projectId);
+      requireSuccess(runRemote(projectId, host.layout().root(), List.of(
           "--git-dir=" + mirror, "fetch", "--no-tags", "origin",
           "+" + providerRef + ":" + localRef)), "fetch pull request");
     } catch (IOException exception) {
@@ -123,54 +122,34 @@ public class ProjectMirrorService {
     if (credential.isPresent() && !isHttps(project.getRepositoryUri())) {
       throw new GitOperationException("Stored credentials can only be used with HTTPS repositories");
     }
-    if (credential.isEmpty()) return git.run(workingDirectory, arguments);
-    GitCredentialMaterial material = credential.orElseThrow();
-    try (GitAskPassSession askPass =
-        new GitAskPassSession(paths.temporaryDirectory(), material)) {
-      return git.run(workingDirectory, arguments, askPass.environment(), List.of(material.secret()));
-    }
-  }
-
-  private GitCommandResult runAuthenticated(
-      Project project,
-      Path mirror,
-      boolean initialized,
-      GitCredentialMaterial credential) throws IOException {
-    try (GitAskPassSession askPass =
-        new GitAskPassSession(paths.temporaryDirectory(), credential)) {
-      return run(
-          project,
-          mirror,
-          initialized,
-          askPass.environment(),
-          List.of(credential.secret()));
-    }
+    WorkspaceHost host = hosts.forProject(projectId);
+    if (credential.isEmpty()) return host.git().run(workingDirectory, arguments);
+    return host.git().runWithCredential(workingDirectory, arguments, credential.orElseThrow());
   }
 
   private GitCommandResult run(
+      WorkspaceHost host,
       Project project,
       Path mirror,
       boolean initialized,
-      Map<String, String> environment,
-      List<String> secrets) throws IOException {
+      Optional<GitCredentialMaterial> credential) throws IOException {
     if (!initialized) {
-      return git.run(paths.root(), List.of(
+      return network(host, credential, List.of(
           "clone", "--bare",
           "--config", "remote.origin.mirror=false",
           "--config", "remote.origin.fetch=+refs/heads/*:refs/remotes/origin/*",
-          "--", project.getRepositoryUri(), mirror.toString()),
-          environment, secrets);
+          "--", project.getRepositoryUri(), mirror.toString()));
     }
     String branch = project.getDefaultBranch();
-    String localBefore = objectId(mirror, "refs/heads/" + branch);
-    String remoteBefore = objectId(mirror, "refs/remotes/origin/" + branch);
-    GitCommandResult result = git.run(paths.root(), List.of(
-        "--git-dir=" + mirror, "fetch", "--prune", "origin"), environment, secrets);
+    String localBefore = objectId(host, mirror, "refs/heads/" + branch);
+    String remoteBefore = objectId(host, mirror, "refs/remotes/origin/" + branch);
+    GitCommandResult result = network(host, credential, List.of(
+        "--git-dir=" + mirror, "fetch", "--prune", "origin"));
     if (result.succeeded() && localBefore != null && localBefore.equals(remoteBefore)
-        && !branchCheckedOut(mirror, branch)) {
-      String remoteAfter = objectId(mirror, "refs/remotes/origin/" + branch);
+        && !branchCheckedOut(host, mirror, branch)) {
+      String remoteAfter = objectId(host, mirror, "refs/remotes/origin/" + branch);
       if (remoteAfter != null) {
-        requireSuccess(git.run(paths.root(), List.of(
+        requireSuccess(host.git().run(host.layout().root(), List.of(
             "--git-dir=" + mirror, "update-ref", "refs/heads/" + branch,
             remoteAfter, localBefore)), "fast-forward default branch");
       }
@@ -178,13 +157,21 @@ public class ProjectMirrorService {
     return result;
   }
 
-  private void configureBranchRefs(
+  private static GitCommandResult network(
+      WorkspaceHost host, Optional<GitCredentialMaterial> credential, List<String> arguments)
+      throws IOException {
+    return credential.isPresent()
+        ? host.git().runWithCredential(host.layout().root(), arguments, credential.orElseThrow())
+        : host.git().run(host.layout().root(), arguments);
+  }
+
+  private void configureBranchRefs(WorkspaceHost host, 
       Project project, Path mirror, boolean previouslyInitialized) throws IOException {
-    GitCommandResult mirrorMode = git.run(
-        paths.root(), List.of("--git-dir=" + mirror, "config", "--get", "remote.origin.mirror"));
+    GitCommandResult mirrorMode = host.git().run(
+        host.layout().root(), List.of("--git-dir=" + mirror, "config", "--get", "remote.origin.mirror"));
     if (mirrorMode.succeeded() && "true".equalsIgnoreCase(mirrorMode.output().strip())) {
-      String symbolicHead = symbolicHeadBranch(mirror);
-      GitCommandResult heads = git.run(paths.root(), List.of(
+      String symbolicHead = symbolicHeadBranch(host, mirror);
+      GitCommandResult heads = host.git().run(host.layout().root(), List.of(
           "--git-dir=" + mirror, "for-each-ref", "--format=%(refname:short) %(objectname)",
           "refs/heads"));
       requireSuccess(heads, "inspect mirrored branches");
@@ -193,87 +180,87 @@ public class ProjectMirrorService {
         if (separator <= 0) continue;
         String branch = line.substring(0, separator);
         String object = line.substring(separator + 1);
-        requireSuccess(git.run(paths.root(), List.of(
+        requireSuccess(host.git().run(host.layout().root(), List.of(
             "--git-dir=" + mirror, "update-ref", "refs/petri/mirror-backup/" + branch, object)),
             "back up mirrored branch " + branch);
-        requireSuccess(git.run(paths.root(), List.of(
+        requireSuccess(host.git().run(host.layout().root(), List.of(
             "--git-dir=" + mirror, "update-ref", "refs/remotes/origin/" + branch, object)),
             "initialize remote branch " + branch);
         if (!branch.equals(project.getDefaultBranch()) && !branch.equals(symbolicHead)) {
-          requireSuccess(git.run(paths.root(), List.of(
+          requireSuccess(host.git().run(host.layout().root(), List.of(
               "--git-dir=" + mirror, "update-ref", "-d", "refs/heads/" + branch)),
               "separate mirrored branch " + branch);
         }
       }
-      requireSuccess(git.run(paths.root(), List.of(
+      requireSuccess(host.git().run(host.layout().root(), List.of(
           "--git-dir=" + mirror, "config", "remote.origin.mirror", "false")),
           "disable mirror ref updates");
     }
-    git.run(paths.root(), List.of(
+    host.git().run(host.layout().root(), List.of(
         "--git-dir=" + mirror, "config", "--unset-all", "remote.origin.fetch"));
-    requireSuccess(git.run(paths.root(), List.of(
+    requireSuccess(host.git().run(host.layout().root(), List.of(
         "--git-dir=" + mirror, "config", "--add", "remote.origin.fetch",
         "+refs/heads/*:refs/remotes/origin/*")), "configure remote branch fetch");
-    ensureDefaultLocalBranch(project, mirror);
-    if (!previouslyInitialized) separateInitialLocalBranches(project, mirror);
+    ensureDefaultLocalBranch(host, project, mirror);
+    if (!previouslyInitialized) separateInitialLocalBranches(host, project, mirror);
   }
 
-  private void separateInitialLocalBranches(Project project, Path mirror) throws IOException {
-    if (objectId(mirror, "refs/heads/" + project.getDefaultBranch()) == null) return;
-    GitCommandResult heads = git.run(paths.root(), List.of(
+  private void separateInitialLocalBranches(WorkspaceHost host, Project project, Path mirror) throws IOException {
+    if (objectId(host, mirror, "refs/heads/" + project.getDefaultBranch()) == null) return;
+    GitCommandResult heads = host.git().run(host.layout().root(), List.of(
         "--git-dir=" + mirror, "for-each-ref", "--format=%(refname:short)", "refs/heads"));
     requireSuccess(heads, "inspect initial local branches");
     for (String branch : heads.output().lines().map(String::strip).toList()) {
       if (branch.isBlank() || branch.equals(project.getDefaultBranch())) continue;
-      requireSuccess(git.run(paths.root(), List.of(
+      requireSuccess(host.git().run(host.layout().root(), List.of(
           "--git-dir=" + mirror, "update-ref", "-d", "refs/heads/" + branch)),
           "separate initial branch " + branch);
     }
   }
 
-  private String symbolicHeadBranch(Path mirror) throws IOException {
-    GitCommandResult result = git.run(paths.root(), List.of(
+  private String symbolicHeadBranch(WorkspaceHost host, Path mirror) throws IOException {
+    GitCommandResult result = host.git().run(host.layout().root(), List.of(
         "--git-dir=" + mirror, "symbolic-ref", "--quiet", "--short", "HEAD"));
     return result.succeeded() && !result.output().isBlank() ? result.output().strip() : null;
   }
 
-  private String objectId(Path mirror, String reference) throws IOException {
-    GitCommandResult result = git.run(paths.root(), List.of(
+  private String objectId(WorkspaceHost host, Path mirror, String reference) throws IOException {
+    GitCommandResult result = host.git().run(host.layout().root(), List.of(
         "--git-dir=" + mirror, "rev-parse", "--verify", "--quiet", reference + "^{commit}"));
     return result.succeeded() && !result.output().isBlank() ? result.output().strip() : null;
   }
 
-  private boolean branchCheckedOut(Path mirror, String branch) throws IOException {
-    GitCommandResult result = git.run(paths.root(), List.of(
+  private boolean branchCheckedOut(WorkspaceHost host, Path mirror, String branch) throws IOException {
+    GitCommandResult result = host.git().run(host.layout().root(), List.of(
         "--git-dir=" + mirror, "worktree", "list", "--porcelain"));
     return result.succeeded() && result.output().contains("branch refs/heads/" + branch);
   }
 
-  private void ensureDefaultLocalBranch(Project project, Path mirror) throws IOException {
+  private void ensureDefaultLocalBranch(WorkspaceHost host, Project project, Path mirror) throws IOException {
     String branch = project.getDefaultBranch();
-    GitCommandResult local = git.run(paths.root(), List.of(
+    GitCommandResult local = host.git().run(host.layout().root(), List.of(
         "--git-dir=" + mirror, "rev-parse", "--verify", "--quiet",
         "refs/heads/" + branch + "^{commit}"));
     if (local.succeeded()) {
-      requireSuccess(git.run(paths.root(), List.of(
+      requireSuccess(host.git().run(host.layout().root(), List.of(
           "--git-dir=" + mirror, "config", "branch." + branch + ".remote", "origin")),
           "configure default branch remote");
-      requireSuccess(git.run(paths.root(), List.of(
+      requireSuccess(host.git().run(host.layout().root(), List.of(
           "--git-dir=" + mirror, "config", "branch." + branch + ".merge", "refs/heads/" + branch)),
           "configure default branch upstream");
       return;
     }
-    GitCommandResult remote = git.run(paths.root(), List.of(
+    GitCommandResult remote = host.git().run(host.layout().root(), List.of(
         "--git-dir=" + mirror, "rev-parse", "--verify", "--quiet",
         "refs/remotes/origin/" + branch + "^{commit}"));
     if (!remote.succeeded()) return;
-    requireSuccess(git.run(paths.root(), List.of(
+    requireSuccess(host.git().run(host.layout().root(), List.of(
         "--git-dir=" + mirror, "update-ref", "refs/heads/" + branch,
         remote.output().strip())), "create local default branch");
-    requireSuccess(git.run(paths.root(), List.of(
+    requireSuccess(host.git().run(host.layout().root(), List.of(
         "--git-dir=" + mirror, "config", "branch." + branch + ".remote", "origin")),
         "configure default branch remote");
-    requireSuccess(git.run(paths.root(), List.of(
+    requireSuccess(host.git().run(host.layout().root(), List.of(
         "--git-dir=" + mirror, "config", "branch." + branch + ".merge", "refs/heads/" + branch)),
         "configure default branch upstream");
   }
@@ -295,15 +282,10 @@ public class ProjectMirrorService {
         .orElseThrow(() -> new IllegalArgumentException("Unknown user"));
   }
 
-  private static boolean isInitialized(Path mirror) {
-    return Files.isRegularFile(mirror.resolve("HEAD"))
-        && Files.isDirectory(mirror.resolve("objects"));
-  }
-
-  private static boolean directoryHasContent(Path directory) throws IOException {
-    try (var children = Files.list(directory)) {
-      return children.findAny().isPresent();
-    }
+  private static boolean isInitialized(WorkspaceHost host, Path mirror) throws IOException {
+    HostStat head = host.layout().stat(mirror.resolve("HEAD"));
+    HostStat objects = host.layout().stat(mirror.resolve("objects"));
+    return head.isFile() && objects.isDirectory();
   }
 
   private static void validateRepositoryLocation(String location) {

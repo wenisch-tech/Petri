@@ -1,0 +1,83 @@
+<!doctype html>
+<html lang="en" xmlns:th="http://www.thymeleaf.org">
+<head th:replace="~{fragments/layout :: head(|${project.name} Kubernetes workspace|)}"></head>
+<body>
+<header th:replace="~{fragments/layout :: topbar('projects')}"></header>
+
+<th:block th:fragment="content">
+<main class="page-narrow">
+  <a class="back-link" href="/projects"><i data-lucide="ArrowLeft"></i> Projects</a>
+  <div class="page-header">
+    <div>
+      <h1 class="page-title" th:text="${project.name}">Project</h1>
+      <p class="page-description">Run this project's repository, terminal, tests and agent tools in a pod on a Kubernetes cluster instead of Petri's own container.</p>
+    </div>
+  </div>
+
+  <nav th:replace="~{fragments/layout :: projectSettingsTabs(${project.id}, 'kubernetes')}"></nav>
+
+  <div th:replace="~{fragments/layout :: alert('success', ${notice})}"></div>
+  <div th:replace="~{fragments/layout :: alert('error', ${error})}"></div>
+
+  <section class="card mb-6" th:if="${cfg.enabled}">
+    <div class="card-body space-y-3">
+      <div class="flex flex-wrap items-center gap-3">
+        <h2 class="section-title !mb-0">Pod</h2>
+        <span class="pill" th:text="${state != null} ? ${state.phase} : 'STOPPED'">STOPPED</span>
+      </div>
+      <dl class="text-sm leading-6 text-ink-300" th:if="${state != null}">
+        <div th:if="${state.image != null}">Image: <code th:text="${state.image}">image</code></div>
+        <div th:if="${state.nodeName != null}">Node: <code th:text="${state.nodeName}">node</code></div>
+        <div th:if="${state.startedAt != null}">Started: <span th:text="${#temporals.format(state.startedAt, 'yyyy-MM-dd HH:mm')}">time</span></div>
+        <div th:if="${state.lastUsedAt != null}">Last used: <span th:text="${#temporals.format(state.lastUsedAt, 'yyyy-MM-dd HH:mm')}">time</span></div>
+        <div th:if="${state.lastError != null}" class="text-red-400">Last error: <span th:text="${state.lastError}">error</span></div>
+      </dl>
+      <p class="hint" th:if="${state == null || state.phase.name() == 'STOPPED'}">The pod starts on first use and stops after it was idle. The volume with your repository is kept.</p>
+      <div class="flex flex-wrap gap-2">
+        <form method="post" th:action="@{/projects/{id}/settings/kubernetes/start(id=${project.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-ghost" type="submit"><i data-lucide="Play"></i> Start now</button></form>
+        <form method="post" th:action="@{/projects/{id}/settings/kubernetes/stop(id=${project.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-ghost" type="submit"><i data-lucide="Square"></i> Stop</button></form>
+        <form method="post" th:action="@{/projects/{id}/settings/kubernetes/test(id=${project.id})}"><input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}"><button class="btn-ghost" type="submit"><i data-lucide="Activity"></i> Test connection</button></form>
+      </div>
+    </div>
+  </section>
+
+  <form method="post" th:action="@{/projects/{id}/settings/kubernetes(id=${project.id})}" autocomplete="off">
+    <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+    <section class="card mb-6" x-data="{ own: [[${cfg.clusterOverride}]] }">
+      <div class="card-body space-y-4">
+        <label class="check"><input type="checkbox" name="enabled" value="true" th:checked="${cfg.enabled}"><span>Run this project's workspace in a Kubernetes pod <span class="hint !mt-0">Switching needs a project without branch worktrees; the repository is cloned again on the new host.</span></span></label>
+        <div class="rounded-lg border border-ink-700/70 bg-raised px-4 py-3 text-xs leading-5 text-ink-300" th:unless="${instanceReady}">
+          No default cluster is configured. An administrator sets it under Administration &gt; Kubernetes, or use this project's own cluster below.
+        </div>
+        <label class="check"><input type="checkbox" name="clusterOverride" value="true" x-model="own" th:checked="${cfg.clusterOverride}"><span>Use this project's own cluster instead of the default</span></label>
+        <div x-show="own" x-cloak>
+          <th:block th:replace="~{fragments/kubernetes :: clusterFields(${cfg})}"></th:block>
+        </div>
+        <h2 class="section-title">Pod</h2>
+        <th:block th:replace="~{fragments/kubernetes :: podFields(${cfg}, ${instance})}"></th:block>
+        <div class="rounded-lg border border-ink-700/70 bg-raised px-4 py-3 text-xs leading-5 text-ink-300">
+          <p class="font-medium text-ink-100">What changes in a pod</p>
+          <p class="mt-1">The pod is the sandbox: commands, tests and git run there. Package installs are disabled, so the image must contain the tools. Sandbox profiles still set the test timeout, output limit and variables; their image and resource limits do not apply. Package sources are not applied yet.</p>
+        </div>
+      </div>
+      <div class="card-footer">
+        <button class="btn-primary" type="submit"><i data-lucide="Save"></i> Save</button>
+      </div>
+    </section>
+  </form>
+
+  <section class="card" th:if="${state != null && !cfg.enabled}">
+    <div class="card-body space-y-3">
+      <h2 class="section-title">Delete the workspace volume</h2>
+      <p class="hint">Removes the pod, the volume with the repository and the credentials from the cluster. This cannot be undone.</p>
+      <form method="post" th:action="@{/projects/{id}/settings/kubernetes/delete-data(id=${project.id})}">
+        <input type="hidden" th:name="${_csrf.parameterName}" th:value="${_csrf.token}">
+        <label class="check"><input type="checkbox" name="confirm" value="true" required><span>Yes, delete the workspace data</span></label>
+        <button class="btn-ghost mt-2" type="submit"><i data-lucide="Trash2"></i> Delete data</button>
+      </form>
+    </div>
+  </section>
+</main>
+</th:block>
+</body>
+</html>

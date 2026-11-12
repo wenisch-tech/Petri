@@ -1,8 +1,6 @@
 package tech.wenisch.petri.git;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -20,7 +18,10 @@ import tech.wenisch.petri.project.Project;
 import tech.wenisch.petri.project.ProjectRepository;
 import tech.wenisch.petri.security.AppUser;
 import tech.wenisch.petri.security.AppUserRepository;
-import tech.wenisch.petri.workspace.WorkspacePaths;
+import tech.wenisch.petri.workspace.ActiveWorktree;
+import tech.wenisch.petri.workspace.RawFile;
+import tech.wenisch.petri.workspace.WorkspaceHost;
+import tech.wenisch.petri.workspace.WorkspaceHostResolver;
 import tech.wenisch.petri.workspace.WorktreeLocator;
 import tech.wenisch.petri.git.provider.ProjectProviderSourceRepository;
 import tech.wenisch.petri.git.provider.ProjectCredentialMode;
@@ -32,8 +33,7 @@ public class WorkspaceGitService {
   private final ProjectWorktreeService worktrees;
   private final ProjectMirrorService mirrors;
   private final WorktreeLocator locator;
-  private final WorkspacePaths paths;
-  private final GitCommandRunner git;
+  private final WorkspaceHostResolver hosts;
   private final WorkspaceGitDiffService diffs;
   private final WorkspaceGitOperationCoordinator operations;
   private final AgentRunService agentRuns;
@@ -48,8 +48,7 @@ public class WorkspaceGitService {
       ProjectWorktreeService worktrees,
       ProjectMirrorService mirrors,
       WorktreeLocator locator,
-      WorkspacePaths paths,
-      GitCommandRunner git,
+      WorkspaceHostResolver hosts,
       WorkspaceGitDiffService diffs,
       WorkspaceGitOperationCoordinator operations,
       AgentRunService agentRuns,
@@ -62,8 +61,7 @@ public class WorkspaceGitService {
     this.worktrees = worktrees;
     this.mirrors = mirrors;
     this.locator = locator;
-    this.paths = paths;
-    this.git = git;
+    this.hosts = hosts;
     this.diffs = diffs;
     this.operations = operations;
     this.agentRuns = agentRuns;
@@ -76,7 +74,7 @@ public class WorkspaceGitService {
   @Transactional(readOnly = true)
   public List<GitBranchView> branches(UUID projectId) {
     Project project = project(projectId);
-    Path mirror = mirror(projectId);
+    Repo mirror = mirror(projectId);
     if (!mirrors.status(projectId).initialized()) return List.of();
     Map<String, ProjectWorktree> bound = new HashMap<>();
     for (ProjectWorktree worktree : worktreeRecords.findByProjectIdAndStatusOrderByCreatedAtDesc(
@@ -117,7 +115,7 @@ public class WorkspaceGitService {
       UUID projectId, String requestedName, String requestedStartPoint, String actorEmail) {
     return operations.project(projectId, () -> {
       Project project = project(projectId);
-      Path mirror = mirror(projectId);
+      Repo mirror = mirror(projectId);
       requireInitialized(projectId);
       String name = validBranch(mirror, requestedName);
       if (refExists(mirror, "refs/heads/" + name)) {
@@ -139,7 +137,7 @@ public class WorkspaceGitService {
       UUID projectId, String requestedName, String commitSha, String actorEmail) {
     return operations.project(projectId, () -> {
       project(projectId);
-      Path mirror = mirror(projectId);
+      Repo mirror = mirror(projectId);
       requireInitialized(projectId);
       String name = validBranch(mirror, requestedName);
       if (commitSha == null || !commitSha.matches("[0-9a-f]{40}")) {
@@ -161,7 +159,7 @@ public class WorkspaceGitService {
       UUID projectId, String requestedName, GitBranchKind kind, String actorEmail) {
     return operations.project(projectId, () -> {
       project(projectId);
-      Path mirror = mirror(projectId);
+      Repo mirror = mirror(projectId);
       requireInitialized(projectId);
       String name = validBranch(mirror, requestedName);
       ProjectWorktree existing = activeBranchWorktree(projectId, name);
@@ -194,7 +192,7 @@ public class WorkspaceGitService {
       String actorEmail) {
     return operations.project(projectId, () -> {
       Project project = project(projectId);
-      Path mirror = mirror(projectId);
+      Repo mirror = mirror(projectId);
       String name = validBranch(mirror, requestedName);
       if (!name.equals(confirmation)) {
         throw new IllegalArgumentException("Type the exact branch name to confirm deletion");
@@ -228,11 +226,11 @@ public class WorkspaceGitService {
   @Transactional(readOnly = true)
   public WorkspaceGitStatusView status(UUID worktreeId) {
     ProjectWorktree record = record(worktreeId);
-    Path root = locator.requireActiveWorktree(worktreeId);
+    Repo root = repo(worktreeId);
     String head = output(root, List.of("rev-parse", "HEAD"));
     String upstream = record.upstreamBranch();
     if (upstream == null && record.branchName() != null) upstream = upstream(root, record.branchName());
-    BranchDistance distance = BranchDistance.of(git, root, upstream);
+    BranchDistance distance = BranchDistance.of(root.host().git(), root.path(), upstream);
     List<WorkspaceChangeView> all = diffs.changes(worktreeId);
     List<String> conflicts = all.stream()
         .filter(value -> value.status() == WorkspaceChangeStatus.CONFLICT)
@@ -259,7 +257,7 @@ public class WorkspaceGitService {
   public WorkspaceGitStatusView stage(UUID worktreeId, List<String> requestedPaths, String actorEmail) {
     return operations.worktree(worktreeId, () -> {
       requireNoActiveExecution(worktreeId);
-      Path root = locator.requireActiveWorktree(worktreeId);
+      Repo root = repo(worktreeId);
       List<String> paths = validPaths(requestedPaths);
       List<String> arguments = new ArrayList<>(List.of("add", "--"));
       arguments.addAll(paths);
@@ -272,7 +270,7 @@ public class WorkspaceGitService {
   public WorkspaceGitStatusView unstage(UUID worktreeId, List<String> requestedPaths, String actorEmail) {
     return operations.worktree(worktreeId, () -> {
       requireNoActiveExecution(worktreeId);
-      Path root = locator.requireActiveWorktree(worktreeId);
+      Repo root = repo(worktreeId);
       List<String> paths = validPaths(requestedPaths);
       List<String> arguments = new ArrayList<>(List.of("reset", "-q", "HEAD", "--"));
       arguments.addAll(paths);
@@ -285,7 +283,7 @@ public class WorkspaceGitService {
   public WorkspaceGitStatusView discard(UUID worktreeId, List<String> requestedPaths, String actorEmail) {
     return operations.worktree(worktreeId, () -> {
       requireNoActiveExecution(worktreeId);
-      Path root = locator.requireActiveWorktree(worktreeId);
+      Repo root = repo(worktreeId);
       List<String> paths = validPaths(requestedPaths);
       Map<String, WorkspaceChangeView> changes = new HashMap<>();
       for (WorkspaceChangeView change : diffs.changes(worktreeId)) changes.put(change.path(), change);
@@ -320,7 +318,7 @@ public class WorkspaceGitService {
 
   public CommitContext commitContext(UUID worktreeId, boolean includeUnstaged, int maxChars) {
     return operations.worktree(worktreeId, () -> {
-      Path root = locator.requireActiveWorktree(worktreeId);
+      Repo root = repo(worktreeId);
       WorkspaceGitStatusView status = status(worktreeId);
       List<WorkspaceChangeView> files = new ArrayList<>(status.staged());
       if (includeUnstaged) {
@@ -348,17 +346,12 @@ public class WorkspaceGitService {
         int shown = 0;
         for (WorkspaceChangeView change : status.untracked()) {
           if (shown++ >= 10 || change.binary()) continue;
-          Path file = root.resolve(change.path()).normalize();
-          try {
-            if (!file.startsWith(root) || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)
-                || Files.size(file) > 200_000) continue;
-            String text = new String(Files.readAllBytes(file), java.nio.charset.StandardCharsets.UTF_8);
-            if (text.indexOf('\0') >= 0) continue;
-            diff.append("\nnew file: ").append(change.path()).append('\n')
-                .append(text.length() > 3_000 ? text.substring(0, 3_000) + "\n[...]" : text).append('\n');
-          } catch (IOException ignored) {
-            // an unreadable new file just has no preview
-          }
+          RawFile raw = root.host().files().readRaw(root.path(), change.path(), 200_000);
+          if (!raw.present()) continue;
+          String text = new String(raw.bytes(), java.nio.charset.StandardCharsets.UTF_8);
+          if (text.indexOf('\0') >= 0) continue;
+          diff.append("\nnew file: ").append(change.path()).append('\n')
+              .append(text.length() > 3_000 ? text.substring(0, 3_000) + "\n[...]" : text).append('\n');
         }
       }
       boolean truncated = diff.length() > maxChars;
@@ -403,9 +396,9 @@ public class WorkspaceGitService {
   public PullRequestContext pullRequestContext(UUID worktreeId, String requestedTarget, int maxDiffChars) {
     ProjectWorktree record = record(worktreeId);
     requireBranch(record);
-    Path root = locator.requireActiveWorktree(worktreeId);
+    Repo root = repo(worktreeId);
     Project project = project(record.projectId());
-    Path mirror = mirror(record.projectId());
+    Repo mirror = mirror(record.projectId());
     List<String> remotes = refs(mirror, "refs/remotes/origin").stream()
         .filter(value -> !"HEAD".equals(value)).toList();
     String target = requestedTarget == null || requestedTarget.isBlank()
@@ -478,7 +471,7 @@ public class WorkspaceGitService {
       UUID worktreeId, String requestedMessage, boolean stageAll, String actorEmail) {
     return operations.worktree(worktreeId, () -> {
       requireNoActiveExecution(worktreeId);
-      Path root = locator.requireActiveWorktree(worktreeId);
+      Repo root = repo(worktreeId);
       String message = required(requestedMessage, "Commit message", 10_000);
       if (stageAll) requireSuccess(run(root, List.of("add", "-A")), "stage all changes");
       if (status(worktreeId).staged().isEmpty()) {
@@ -502,7 +495,7 @@ public class WorkspaceGitService {
       requireNoActiveExecution(worktreeId);
       requireClean(worktreeId);
       mirrors.synchronize(record.projectId(), actorEmail);
-      Path root = locator.requireActiveWorktree(worktreeId);
+      Repo root = repo(worktreeId);
       String upstream = record.upstreamBranch() == null
           ? "origin/" + record.branchName() : record.upstreamBranch();
       requireSuccess(run(root, List.of("merge", "--ff-only", upstream)), "fast-forward branch");
@@ -517,7 +510,7 @@ public class WorkspaceGitService {
       requireBranch(record);
       requireNoActiveExecution(worktreeId);
       requireClean(worktreeId);
-      Path root = locator.requireActiveWorktree(worktreeId);
+      Repo root = repo(worktreeId);
       String target = requestedTarget == null || requestedTarget.isBlank()
           ? record.upstreamBranch() : requestedTarget.strip();
       if (target == null) throw new IllegalStateException("Branch has no upstream to rebase onto");
@@ -541,13 +534,13 @@ public class WorkspaceGitService {
       if (!before.conflicts().isEmpty()) {
         throw new IllegalStateException("Resolve and stage every conflict before continuing");
       }
-      Path root = locator.requireActiveWorktree(worktreeId);
+      Repo root = repo(worktreeId);
       String email = actor(actorEmail).getEmail();
       int separator = email.indexOf('@');
       String name = separator > 0 ? email.substring(0, separator) : email;
       GitCommandResult result;
       try {
-        result = git.run(root, List.of(
+        result = root.host().git().run(root.path(), List.of(
                 "-c", "user.name=" + name, "-c", "user.email=" + email,
                 "rebase", "--continue"),
             Map.of("GIT_EDITOR", "true"), List.of());
@@ -566,7 +559,7 @@ public class WorkspaceGitService {
       if (!operations.rebaseInProgress(worktreeId)) {
         throw new IllegalStateException("No rebase is in progress");
       }
-      Path root = locator.requireActiveWorktree(worktreeId);
+      Repo root = repo(worktreeId);
       requireSuccess(run(root, List.of("rebase", "--abort")), "abort rebase");
       audit(actorEmail, "GIT_REBASE_ABORTED", worktreeId, "Aborted Git rebase");
       return status(worktreeId);
@@ -581,7 +574,7 @@ public class WorkspaceGitService {
       requireBranch(record);
       requireNoActiveExecution(worktreeId);
       requireClean(worktreeId);
-      Path root = locator.requireActiveWorktree(worktreeId);
+      Repo root = repo(worktreeId);
       // Mirrors are cloned with remote.origin.mirror=true, which git refuses to combine with refspecs.
       List<String> arguments = new ArrayList<>(List.of("-c", "remote.origin.mirror=false", "push"));
       if (forceWithLease) arguments.add("--force-with-lease");
@@ -621,7 +614,7 @@ public class WorkspaceGitService {
           || remoteUrl.chars().anyMatch(Character::isWhitespace)) {
         throw new IllegalArgumentException("Invalid remote URL");
       }
-      Path root = locator.requireActiveWorktree(worktreeId);
+      Repo root = repo(worktreeId);
       String branch = validBranch(mirror(record.projectId()), remoteBranch);
       GitCommandResult pushed = remote(record.projectId(), root, List.of(
           "-c", "remote.origin.mirror=false", "push", remoteUrl, "HEAD:refs/heads/" + branch));
@@ -682,7 +675,7 @@ public class WorkspaceGitService {
     return List.copyOf(values);
   }
 
-  private String validBranch(Path mirror, String requested) {
+  private String validBranch(Repo mirror, String requested) {
     String name = required(requested, "Branch name", 255);
     GitCommandResult result = run(mirror, List.of(
         "--git-dir=" + mirror, "check-ref-format", "--branch", name));
@@ -692,7 +685,7 @@ public class WorkspaceGitService {
     return name;
   }
 
-  private String normalizeStartPoint(Path mirror, String requested, String fallback) {
+  private String normalizeStartPoint(Repo mirror, String requested, String fallback) {
     String value = requested == null || requested.isBlank() ? fallback : requested.strip();
     if (value.startsWith("origin/")) {
       String remote = value.substring("origin/".length());
@@ -703,7 +696,7 @@ public class WorkspaceGitService {
     throw new IllegalArgumentException("Unknown branch start point");
   }
 
-  private String normalizeRebaseTarget(Path root, UUID projectId, String requested) {
+  private String normalizeRebaseTarget(Repo root, UUID projectId, String requested) {
     String value = required(requested, "Branch name", 255);
     if (value.startsWith("origin/")) {
       String remote = value.substring("origin/".length());
@@ -719,7 +712,7 @@ public class WorkspaceGitService {
     throw new IllegalArgumentException("Unknown rebase target");
   }
 
-  private void configureUpstream(Path mirror, String branch, String upstream) {
+  private void configureUpstream(Repo mirror, String branch, String upstream) {
     requireSuccess(run(mirror, List.of(
         "--git-dir=" + mirror, "config", "branch." + branch + ".remote", "origin")),
         "configure branch remote");
@@ -728,13 +721,13 @@ public class WorkspaceGitService {
         "refs/heads/" + upstream)), "configure branch upstream");
   }
 
-  private String upstream(Path root, String branch) {
+  private String upstream(Repo root, String branch) {
     GitCommandResult result = run(root, List.of(
         "rev-parse", "--abbrev-ref", "--symbolic-full-name", branch + "@{upstream}"));
     return result.succeeded() && !result.output().isBlank() ? result.output().strip() : null;
   }
 
-  private int[] distance(Path root, String local, String upstream) {
+  private int[] distance(Repo root, String local, String upstream) {
     GitCommandResult result = run(root, List.of(
         "rev-list", "--left-right", "--count", local + "..." + upstream));
     if (!result.succeeded()) return new int[] {0, 0};
@@ -747,7 +740,7 @@ public class WorkspaceGitService {
     }
   }
 
-  private List<String> refs(Path mirror, String namespace) {
+  private List<String> refs(Repo mirror, String namespace) {
     GitCommandResult result = run(mirror, List.of(
         "--git-dir=" + mirror, "for-each-ref", "--format=%(refname)", namespace));
     requireSuccess(result, "list branches");
@@ -757,7 +750,7 @@ public class WorkspaceGitService {
         .map(value -> value.substring(prefix.length())).toList();
   }
 
-  private boolean refExists(Path mirror, String reference) {
+  private boolean refExists(Repo mirror, String reference) {
     return run(mirror, List.of(
         "--git-dir=" + mirror, "show-ref", "--verify", "--quiet", reference)).succeeded();
   }
@@ -789,31 +782,37 @@ public class WorkspaceGitService {
     }
   }
 
-  private Path mirror(UUID projectId) {
+  private Repo mirror(UUID projectId) {
     try {
-      return paths.mirror(projectId);
+      WorkspaceHost host = hosts.forProject(projectId);
+      return new Repo(host, host.layout().mirror(projectId));
     } catch (IOException exception) {
       throw new GitOperationException("Could not resolve project mirror", exception);
     }
   }
 
-  private GitCommandResult run(Path root, List<String> arguments) {
+  private Repo repo(UUID worktreeId) {
+    ActiveWorktree active = locator.resolveActiveWorktree(worktreeId);
+    return new Repo(active.host(), active.root());
+  }
+
+  private GitCommandResult run(Repo root, List<String> arguments) {
     try {
-      return git.run(root, arguments);
+      return root.host().git().run(root.path(), arguments);
     } catch (IOException exception) {
       throw new GitOperationException("Could not run Git", exception);
     }
   }
 
-  private GitCommandResult remote(UUID projectId, Path root, List<String> arguments) {
+  private GitCommandResult remote(UUID projectId, Repo root, List<String> arguments) {
     try {
-      return mirrors.runRemote(projectId, root, arguments);
+      return mirrors.runRemote(projectId, root.path(), arguments);
     } catch (IOException exception) {
       throw new GitOperationException("Could not run authenticated Git operation", exception);
     }
   }
 
-  private String output(Path root, List<String> arguments) {
+  private String output(Repo root, List<String> arguments) {
     GitCommandResult result = run(root, arguments);
     requireSuccess(result, "inspect repository");
     return result.output().strip();
@@ -842,5 +841,13 @@ public class WorkspaceGitService {
         worktree.id(), worktree.projectId(), worktree.gitRevision(), worktree.branchName(),
         worktree.upstreamBranch(), worktree.detached(), worktree.status(),
         worktree.createdAt(), worktree.removedAt());
+  }
+
+  /** A Git directory (worktree or mirror) together with the host it lives on. */
+  private record Repo(WorkspaceHost host, Path path) {
+    @Override
+    public String toString() {
+      return path.toString();
+    }
   }
 }

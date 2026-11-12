@@ -74,6 +74,12 @@ petri:
     max-search-results: ${PETRI_MAX_SEARCH_RESULTS:200}
     test-command-timeout: ${PETRI_TEST_COMMAND_TIMEOUT:10m}
     max-test-output-bytes: ${PETRI_MAX_TEST_OUTPUT_BYTES:2000000}
+  kubernetes:
+    agent-dir: ${PETRI_KUBERNETES_AGENT_DIR:/opt/petri/workspace-agent}
+    toolchain-dir: ${PETRI_KUBERNETES_TOOLCHAIN_DIR:/opt/petri/workspace-toolchain}
+    pod-start-timeout: ${PETRI_KUBERNETES_POD_START_TIMEOUT:5m}
+    reaper-interval-ms: ${PETRI_KUBERNETES_REAPER_INTERVAL_MS:60000}
+    poll-interval-ms: ${PETRI_KUBERNETES_POLL_INTERVAL_MS:1000}
   agent:
     open-ai-base-url: ${PETRI_OPENAI_BASE_URL:https://api.openai.com/v1}
     model-request-timeout: ${PETRI_MODEL_REQUEST_TIMEOUT:2m}

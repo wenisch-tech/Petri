@@ -4,6 +4,8 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 import org.springframework.stereotype.Component;
+import tech.wenisch.petri.workspace.ActiveWorktree;
+import tech.wenisch.petri.workspace.WorkspaceFiles;
 import tech.wenisch.petri.workspace.WorktreeLocator;
 
 @Component
@@ -21,11 +23,9 @@ public class SearchFilesTool implements AgentTool {
           List.of("query", "path", "maxResults")));
 
   private final WorktreeLocator worktrees;
-  private final WorkspaceFileService files;
 
-  public SearchFilesTool(WorktreeLocator worktrees, WorkspaceFileService files) {
+  public SearchFilesTool(WorktreeLocator worktrees) {
     this.worktrees = worktrees;
-    this.files = files;
   }
 
   @Override
@@ -33,7 +33,9 @@ public class SearchFilesTool implements AgentTool {
 
   @Override
   public Object execute(ToolExecutionContext context, Map<String, Object> input) {
-    Path worktree = worktrees.requireActiveWorktree(context.worktreeId());
+    ActiveWorktree active = worktrees.resolveActiveWorktree(context.worktreeId());
+    Path worktree = active.root();
+    WorkspaceFiles files = active.host().files();
     String path = ToolInputs.string(input, "path", ".", 4096);
     String query = ToolInputs.requiredString(input, "query", 500);
     int maxResults = ToolInputs.integer(input, "maxResults", 100, 1, 1000);

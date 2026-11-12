@@ -1,8 +1,6 @@
 package tech.wenisch.petri.git;
 
 import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
 import java.nio.file.Path;
 import java.time.Clock;
 import java.time.Instant;
@@ -16,7 +14,11 @@ import tech.wenisch.petri.project.Project;
 import tech.wenisch.petri.project.ProjectRepository;
 import tech.wenisch.petri.security.AppUser;
 import tech.wenisch.petri.security.AppUserRepository;
-import tech.wenisch.petri.workspace.WorkspacePaths;
+import tech.wenisch.petri.workspace.HostStat;
+import tech.wenisch.petri.workspace.WorkspaceGit;
+import tech.wenisch.petri.workspace.WorkspaceHost;
+import tech.wenisch.petri.workspace.WorkspaceHostResolver;
+import tech.wenisch.petri.workspace.WorkspaceLayout;
 
 @Service
 public class ProjectWorktreeService {
@@ -24,8 +26,7 @@ public class ProjectWorktreeService {
   private final ProjectRepository projects;
   private final AppUserRepository users;
   private final ProjectMirrorService mirrors;
-  private final GitCommandRunner git;
-  private final WorkspacePaths paths;
+  private final WorkspaceHostResolver hosts;
   private final AuditLogService auditLog;
   private final Clock clock;
 
@@ -35,10 +36,9 @@ public class ProjectWorktreeService {
       ProjectRepository projects,
       AppUserRepository users,
       ProjectMirrorService mirrors,
-      GitCommandRunner git,
-      WorkspacePaths paths,
+      WorkspaceHostResolver hosts,
       AuditLogService auditLog) {
-    this(worktrees, projects, users, mirrors, git, paths, auditLog, Clock.systemUTC());
+    this(worktrees, projects, users, mirrors, hosts, auditLog, Clock.systemUTC());
   }
 
   ProjectWorktreeService(
@@ -46,16 +46,14 @@ public class ProjectWorktreeService {
       ProjectRepository projects,
       AppUserRepository users,
       ProjectMirrorService mirrors,
-      GitCommandRunner git,
-      WorkspacePaths paths,
+      WorkspaceHostResolver hosts,
       AuditLogService auditLog,
       Clock clock) {
     this.worktrees = worktrees;
     this.projects = projects;
     this.users = users;
     this.mirrors = mirrors;
-    this.git = git;
-    this.paths = paths;
+    this.hosts = hosts;
     this.auditLog = auditLog;
     this.clock = clock;
   }
@@ -84,9 +82,12 @@ public class ProjectWorktreeService {
     }
     UUID runId = UUID.randomUUID();
     try {
+      WorkspaceHost host = hosts.forProject(projectId);
+      WorkspaceLayout paths = host.layout();
+      WorkspaceGit git = host.git();
       Path mirror = paths.mirror(projectId);
       String revision = resolveRevision(
-          mirror, requestedRevision, project.getDefaultBranch());
+          host, mirror, requestedRevision, project.getDefaultBranch());
       Path worktree = paths.runWorktree(projectId, runId);
       String relativePath = paths.root().relativize(worktree).toString();
       GitCommandResult result = git.run(
@@ -126,6 +127,9 @@ public class ProjectWorktreeService {
     }
     UUID worktreeId = UUID.randomUUID();
     try {
+      WorkspaceHost host = hosts.forProject(projectId);
+      WorkspaceLayout paths = host.layout();
+      WorkspaceGit git = host.git();
       Path mirror = paths.mirror(projectId);
       Path worktree = paths.runWorktree(projectId, worktreeId);
       String relativePath = paths.root().relativize(worktree).toString();
@@ -165,14 +169,18 @@ public class ProjectWorktreeService {
     Project project = project(record.projectId());
     AppUser actor = actor(actorEmail);
     try {
+      WorkspaceHost host = hosts.forProject(record.projectId());
+      WorkspaceLayout paths = host.layout();
+      WorkspaceGit git = host.git();
       Path expected = paths.runWorktree(record.projectId(), record.id());
       String expectedRelative = paths.root().relativize(expected).toString();
       if (!expectedRelative.equals(record.relativePath())) {
         throw new GitOperationException("Recorded worktree path does not match its safe derived path");
       }
       Path mirror = paths.mirror(record.projectId());
-      if (Files.exists(expected, LinkOption.NOFOLLOW_LINKS)) {
-        if (Files.isSymbolicLink(expected)) {
+      HostStat expectedStat = paths.stat(expected);
+      if (expectedStat.exists()) {
+        if (expectedStat.isSymlink()) {
           throw new GitOperationException("Refusing to remove a symbolic-link worktree path");
         }
         Path safeWorktree = paths.requireExistingPath(expected);
@@ -221,28 +229,28 @@ public class ProjectWorktreeService {
   }
 
   private String resolveRevision(
-      Path mirror, String requestedRevision, String configuredDefault) throws IOException {
+      WorkspaceHost host, Path mirror, String requestedRevision, String configuredDefault) throws IOException {
     if (requestedRevision != null && !requestedRevision.isBlank()) {
       return revision(requestedRevision, null);
     }
     String configured = revision(null, configuredDefault);
-    if (referenceExists(mirror, configured)) return configured;
+    if (referenceExists(host, mirror, configured)) return configured;
 
-    GitCommandResult symbolicHead = git.run(
-        paths.root(),
+    GitCommandResult symbolicHead = host.git().run(
+        host.layout().root(),
         List.of("--git-dir=" + mirror, "symbolic-ref", "--quiet", "--short", "HEAD"));
     if (symbolicHead.succeeded() && !symbolicHead.output().isBlank()) {
       String actualDefault = revision(symbolicHead.output().strip(), null);
-      if (referenceExists(mirror, actualDefault)) return actualDefault;
+      if (referenceExists(host, mirror, actualDefault)) return actualDefault;
     }
-    if (referenceExists(mirror, "HEAD")) return "HEAD";
+    if (referenceExists(host, mirror, "HEAD")) return "HEAD";
     throw new GitOperationException(
         "Project mirror has no resolvable default revision; configure an existing branch");
   }
 
-  private boolean referenceExists(Path mirror, String revision) throws IOException {
-    GitCommandResult result = git.run(
-        paths.root(),
+  private boolean referenceExists(WorkspaceHost host, Path mirror, String revision) throws IOException {
+    GitCommandResult result = host.git().run(
+        host.layout().root(),
         List.of(
             "--git-dir=" + mirror,
             "rev-parse",

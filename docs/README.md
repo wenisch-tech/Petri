@@ -11,6 +11,7 @@ Petri is a self-hosted agentic coding harness, multi-agent orchestrator and deve
 - [LLM providers](model-providers.md) — OpenAI, LiteLLM, Ollama and compatible local servers.
 - [Git mirrors and worktrees](git-workspaces.md) — repository setup, branch resolution and lifecycle.
 - [Git provider accounts](git-provider-accounts.md) — personal GitHub, GitLab and Forgejo connections and bulk import.
+- [Kubernetes workspaces](kubernetes-workspaces.md) — run a project's workspace in a pod on your cluster.
 - [Rootless Podman test sandboxes](test-sandboxes.md) — isolated test execution and administrator profiles.
 - [Agent workflow](agent-workflow.md) — model loop, tools, approvals, persistence and recovery.
 - [Skills](skills.md) — the Skills tab, running skills in the workspace and the Trivy vulnerability scan.

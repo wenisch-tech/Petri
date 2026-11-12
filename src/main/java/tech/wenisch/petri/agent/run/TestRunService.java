@@ -6,6 +6,7 @@ import java.util.UUID;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
+import tech.wenisch.petri.workspace.ActiveWorktree;
 import tech.wenisch.petri.workspace.WorktreeLocator;
 import tech.wenisch.petri.git.ProjectWorktreeService;
 
@@ -18,6 +19,7 @@ public class TestRunService {
   private final WorktreeLocator worktrees;
   private final TestCommandPolicy policy;
   private final TestExecutor runner;
+  private final RemoteWorkspaceTestExecutor remoteRunner;
   private final TestRunStateService state;
   private final ProjectWorktreeService projectWorktrees;
   private final TestSandboxProfileService sandboxProfiles;
@@ -26,12 +28,14 @@ public class TestRunService {
       WorktreeLocator worktrees,
       TestCommandPolicy policy,
       TestExecutor runner,
+      RemoteWorkspaceTestExecutor remoteRunner,
       TestRunStateService state,
       ProjectWorktreeService projectWorktrees,
       TestSandboxProfileService sandboxProfiles) {
     this.worktrees = worktrees;
     this.policy = policy;
     this.runner = runner;
+    this.remoteRunner = remoteRunner;
     this.state = state;
     this.projectWorktrees = projectWorktrees;
     this.sandboxProfiles = sandboxProfiles;
@@ -42,8 +46,8 @@ public class TestRunService {
   }
 
   public TestRunView request(UUID worktreeId, UUID agentRunId) {
-    Path worktree = worktrees.requireActiveWorktree(worktreeId);
-    return state.request(worktreeId, agentRunId, policy.detect(worktree));
+    ActiveWorktree active = worktrees.resolveActiveWorktree(worktreeId);
+    return state.request(worktreeId, agentRunId, policy.detect(active.host(), active.root()));
   }
 
   public TestRunView get(UUID testRunId, UUID expectedWorktreeId) {
@@ -95,16 +99,20 @@ public class TestRunService {
   private TestRunView run(UUID testRunId, TestRunClaim claim) {
     TestCommandResult result;
     try {
-      Path worktree = worktrees.requireActiveWorktree(claim.worktreeId());
-      TestCommand command = policy.command(worktree, claim.buildSystem());
+      ActiveWorktree active = worktrees.resolveActiveWorktree(claim.worktreeId());
+      Path worktree = active.root();
+      TestCommand command = policy.command(active.host(), worktree, claim.buildSystem());
       if (!command.display().equals(claim.commandDisplay())) {
         throw new IllegalStateException("Approved test command no longer matches policy");
       }
-      UUID projectId = projectWorktrees.get(claim.worktreeId()).projectId();
+      UUID projectId = active.projectId();
       TestSandboxProfileView profile = sandboxProfiles.resolve(projectId, claim.buildSystem());
       state.snapshot(testRunId, profile);
-      result = runner.run(projectId, worktree, command, profile,
-          text -> state.progress(testRunId, text));
+      result = active.host().kind() == tech.wenisch.petri.workspace.WorkspaceHostKind.KUBERNETES
+          ? remoteRunner.run(active.host(), projectId, worktree, command, profile,
+              text -> state.progress(testRunId, text))
+          : runner.run(active.host(), projectId, worktree, command, profile,
+              text -> state.progress(testRunId, text));
     } catch (IOException | RuntimeException exception) {
       log.warn("Approved test run {} could not be executed", testRunId, exception);
       return state.error(testRunId, claim.approverEmail(), safeFailure(exception));

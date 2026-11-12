@@ -1,71 +1,58 @@
 package tech.wenisch.petri.agent.run;
 
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
+import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
+import tech.wenisch.petri.workspace.HostStat;
+import tech.wenisch.petri.workspace.WorkspaceHost;
 
 @Component
 class TestCommandPolicy {
-  private final LocalToolchain toolchain;
-  private final boolean local;
 
-  TestCommandPolicy() {
-    this(null, "podman");
-  }
-
-  @Autowired
-  TestCommandPolicy(
-      LocalToolchain toolchain, @Value("${petri.tests.executor:podman}") String executor) {
-    this.toolchain = toolchain;
-    this.local = "local".equalsIgnoreCase(executor);
-  }
-
-  TestCommand detect(Path worktree) {
-    boolean mavenBuild = regular(worktree.resolve("pom.xml"));
-    boolean gradleBuild = regular(worktree.resolve("build.gradle"))
-        || regular(worktree.resolve("build.gradle.kts"));
-    boolean maven = mavenBuild && (executable(worktree.resolve("mvnw")) || installed("mvn"));
-    boolean gradle = gradleBuild && (executable(worktree.resolve("gradlew")) || installed("gradle"));
+  TestCommand detect(WorkspaceHost host, Path worktree) {
+    boolean mavenBuild = regular(host, worktree.resolve("pom.xml"));
+    boolean gradleBuild = regular(host, worktree.resolve("build.gradle"))
+        || regular(host, worktree.resolve("build.gradle.kts"));
+    boolean maven = mavenBuild && (executable(host, worktree.resolve("mvnw")) || installed(host, "mvn"));
+    boolean gradle = gradleBuild
+        && (executable(host, worktree.resolve("gradlew")) || installed(host, "gradle"));
     if (maven == gradle) {
       throw new IllegalArgumentException(maven
           ? "Worktree has ambiguous Maven and Gradle test entry points"
           : "Worktree needs a Maven or Gradle wrapper (or an installed mvn/gradle) "
               + "and a matching build file");
     }
-    return command(worktree, maven ? TestBuildSystem.MAVEN : TestBuildSystem.GRADLE);
+    return command(host, worktree, maven ? TestBuildSystem.MAVEN : TestBuildSystem.GRADLE);
   }
 
-  /** A build tool installed with install_packages; only meaningful for the local executor. */
-  private boolean installed(String tool) {
-    return local && toolchain != null && toolchain.hasTool(tool);
+  /** A build tool the host offers without a wrapper (locally: installed with install_packages). */
+  private static boolean installed(WorkspaceHost host, String tool) {
+    return host.processes().hasTool(tool);
   }
 
-  TestCommand command(Path worktree, TestBuildSystem buildSystem) {
+  TestCommand command(WorkspaceHost host, Path worktree, TestBuildSystem buildSystem) {
     return switch (buildSystem) {
       case MAVEN -> {
-        requireRegular(worktree.resolve("pom.xml"), "pom.xml");
-        if (!executable(worktree.resolve("mvnw")) && installed("mvn")) {
+        requireRegular(host, worktree.resolve("pom.xml"), "pom.xml");
+        if (!executable(host, worktree.resolve("mvnw")) && installed(host, "mvn")) {
           yield new TestCommand(
               TestBuildSystem.MAVEN, List.of("mvn", "--batch-mode", "--no-transfer-progress", "test"));
         }
-        requireExecutable(worktree.resolve("mvnw"), "mvnw");
+        requireExecutable(host, worktree.resolve("mvnw"), "mvnw");
         yield new TestCommand(
             TestBuildSystem.MAVEN,
             List.of("./mvnw", "--batch-mode", "--no-transfer-progress", "test"));
       }
       case GRADLE -> {
-        if (!regular(worktree.resolve("build.gradle"))
-            && !regular(worktree.resolve("build.gradle.kts"))) {
+        if (!regular(host, worktree.resolve("build.gradle"))
+            && !regular(host, worktree.resolve("build.gradle.kts"))) {
           throw new IllegalArgumentException("Gradle build file is missing or unsafe");
         }
-        if (!executable(worktree.resolve("gradlew")) && installed("gradle")) {
+        if (!executable(host, worktree.resolve("gradlew")) && installed(host, "gradle")) {
           yield new TestCommand(TestBuildSystem.GRADLE, List.of("gradle", "--no-daemon", "test"));
         }
-        requireExecutable(worktree.resolve("gradlew"), "gradlew");
+        requireExecutable(host, worktree.resolve("gradlew"), "gradlew");
         yield new TestCommand(
             TestBuildSystem.GRADLE,
             List.of("./gradlew", "--no-daemon", "test"));
@@ -73,20 +60,28 @@ class TestCommandPolicy {
     };
   }
 
-  private static void requireRegular(Path path, String name) {
-    if (!regular(path)) throw new IllegalArgumentException(name + " is missing or unsafe");
+  private static void requireRegular(WorkspaceHost host, Path path, String name) {
+    if (!regular(host, path)) throw new IllegalArgumentException(name + " is missing or unsafe");
   }
 
-  private static void requireExecutable(Path path, String name) {
-    requireRegular(path, name);
-    if (!Files.isExecutable(path)) throw new IllegalArgumentException(name + " is not executable");
+  private static void requireExecutable(WorkspaceHost host, Path path, String name) {
+    requireRegular(host, path, name);
+    if (!stat(host, path).executable()) throw new IllegalArgumentException(name + " is not executable");
   }
 
-  private static boolean executable(Path path) {
-    return regular(path) && Files.isExecutable(path);
+  private static boolean executable(WorkspaceHost host, Path path) {
+    return regular(host, path) && stat(host, path).executable();
   }
 
-  private static boolean regular(Path path) {
-    return Files.isRegularFile(path, LinkOption.NOFOLLOW_LINKS) && !Files.isSymbolicLink(path);
+  private static boolean regular(WorkspaceHost host, Path path) {
+    return stat(host, path).isFile();
+  }
+
+  private static HostStat stat(WorkspaceHost host, Path path) {
+    try {
+      return host.layout().stat(path);
+    } catch (IOException exception) {
+      throw new IllegalStateException("Could not inspect the worktree", exception);
+    }
   }
 }

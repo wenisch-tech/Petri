@@ -3,6 +3,7 @@ package tech.wenisch.petri.git;
 import java.io.IOException;
 import java.nio.file.Path;
 import java.util.List;
+import tech.wenisch.petri.workspace.WorkspaceGit;
 
 /**
  * Commits ahead of and behind the upstream. When the upstream does not exist (a branch that was
@@ -10,7 +11,7 @@ import java.util.List;
  * on no remote branch yet, so a fresh commit shows as {@code ↑1} instead of {@code ↑0}.
  */
 record BranchDistance(int ahead, int behind) {
-  static BranchDistance of(GitCommandRunner git, Path root, String upstream) {
+  static BranchDistance of(WorkspaceGit git, Path root, String upstream) {
     if (upstream != null) {
       BranchDistance distance = compare(git, root, upstream);
       if (distance != null) return distance;
@@ -18,7 +19,7 @@ record BranchDistance(int ahead, int behind) {
     return new BranchDistance(unpublished(git, root), 0);
   }
 
-  private static BranchDistance compare(GitCommandRunner git, Path root, String upstream) {
+  private static BranchDistance compare(WorkspaceGit git, Path root, String upstream) {
     GitCommandResult result = run(git, root, List.of(
         "rev-list", "--left-right", "--count", "HEAD..." + upstream));
     if (result == null || !result.succeeded()) return null;
@@ -31,7 +32,7 @@ record BranchDistance(int ahead, int behind) {
     }
   }
 
-  private static int unpublished(GitCommandRunner git, Path root) {
+  private static int unpublished(WorkspaceGit git, Path root) {
     GitCommandResult result = run(git, root, List.of(
         "rev-list", "--count", "HEAD", "--not", "--remotes"));
     if (result == null || !result.succeeded()) return 0;
@@ -42,7 +43,7 @@ record BranchDistance(int ahead, int behind) {
     }
   }
 
-  private static GitCommandResult run(GitCommandRunner git, Path root, List<String> arguments) {
+  private static GitCommandResult run(WorkspaceGit git, Path root, List<String> arguments) {
     try {
       return git.run(root, arguments);
     } catch (IOException exception) {

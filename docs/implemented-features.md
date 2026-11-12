@@ -69,6 +69,16 @@
 - Full persisted conversation reconstruction for stateless Chat Completions servers.
 - Configurable context-window snapshot per provider and message.
 
+## Kubernetes workspaces
+
+- A project can run its whole workspace in a pod on a Kubernetes cluster instead of Petri's container: mirror, branch worktrees, editor, git, terminal, agent tools, approved tests and vulnerability scans. It feels the same as a local workspace.
+- One pod and volume per project, started on first use and stopped when idle; the volume is kept. The cluster comes from an administrator default or a per-project override (kubeconfig, or URL and token), stored encrypted.
+- Petri copies a small static agent into the pod through the Kubernetes exec API and reaches it through the API server's pod proxy; no port is exposed.
+- A bundle of tools (git, curl, python with pip, go, node and npm) ships in the `-tools` variant of Petri's image (`Dockerfile.tools`); Petri copies it into the pod's volume once per release when it finds it, and starts pods without it otherwise, so a bare image with only a shell becomes a complete workspace without internet access.
+- Package sources, CA bundles, proxy variables and the instance, profile and project environment variables apply to every command, test and dependency resolution in the pod, as locally.
+- Vulnerability scans resolve dependencies in the pod on a throw-away copy and scan the resulting lockfiles in Petri, so repository build code never runs in Petri's container.
+- Details: [Kubernetes workspaces](kubernetes-workspaces.md).
+
 ## Workspace UI
 
 - Full-height project workspace with VS Code-style lazy file explorer, tabs and Monaco Editor.

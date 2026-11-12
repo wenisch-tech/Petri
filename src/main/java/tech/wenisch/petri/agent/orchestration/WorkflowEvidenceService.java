@@ -1,12 +1,5 @@
 package tech.wenisch.petri.agent.orchestration;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.LinkOption;
-import java.nio.file.Path;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
-import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -21,6 +14,8 @@ import tech.wenisch.petri.agent.run.TestRunService;
 import tech.wenisch.petri.agent.run.TestRunStatus;
 import tech.wenisch.petri.agent.run.TestRunView;
 import tech.wenisch.petri.git.WorkflowGitBaselineService;
+import tech.wenisch.petri.agent.tool.WorkspaceEntryMutation;
+import tech.wenisch.petri.workspace.ActiveWorktree;
 import tech.wenisch.petri.workspace.WorktreeLocator;
 
 @Service
@@ -131,22 +126,18 @@ class WorkflowEvidenceService {
     Map<String, ChangeProposalView> latest = new LinkedHashMap<>();
     proposals.stream().filter(value -> value.status() == ChangeProposalStatus.APPLIED)
         .forEach(value -> latest.put(value.filePath(), value));
-    Path root = worktrees.requireActiveWorktree(worktreeId);
+    ActiveWorktree active = worktrees.resolveActiveWorktree(worktreeId);
     Map<String, String> hashes = new LinkedHashMap<>();
     for (ChangeProposalView proposal : latest.values()) {
-      Path file = root.resolve(proposal.filePath()).normalize();
       try {
-        if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
-          hashes.put(proposal.filePath(), "EXTERNAL_CONFLICT");
-        } else if (Files.size(file) > 10_000_000L) {
+        WorkspaceEntryMutation entry = active.host().files().metadata(active.root(), proposal.filePath());
+        if (!"FILE".equals(entry.type()) || entry.size() > 10_000_000L || entry.sha256() == null) {
           hashes.put(proposal.filePath(), "EXTERNAL_CONFLICT");
         } else {
-          String hash = HexFormat.of().formatHex(
-              MessageDigest.getInstance("SHA-256").digest(Files.readAllBytes(file)));
-          hashes.put(proposal.filePath(), hash.equals(proposal.replacementSha256())
-              ? hash : "EXTERNAL_CONFLICT");
+          hashes.put(proposal.filePath(), entry.sha256().equals(proposal.replacementSha256())
+              ? entry.sha256() : "EXTERNAL_CONFLICT");
         }
-      } catch (IOException | NoSuchAlgorithmException exception) {
+      } catch (RuntimeException exception) {
         hashes.put(proposal.filePath(), "EXTERNAL_CONFLICT");
       }
     }

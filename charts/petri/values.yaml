@@ -144,3 +144,12 @@ startupProbe:
   periodSeconds: 5
   timeoutSeconds: 5
   failureThreshold: 30
+
+# Kubernetes workspaces: projects can run their workspace in a pod on a cluster. When Petri itself
+# runs in that cluster it can use its own service account instead of a kubeconfig; this creates the
+# account and the permissions it needs in the namespace the workspace pods run in.
+kubernetesWorkspaces:
+  rbac:
+    create: false
+    # Namespace of the workspace pods; defaults to the release namespace.
+    namespace: ""

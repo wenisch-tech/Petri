@@ -3,7 +3,10 @@ package tech.wenisch.petri.agent.orchestration;
 import java.util.Set;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.stereotype.Component;
+import java.util.UUID;
 import tech.wenisch.petri.agent.run.PackageInstallService;
+import tech.wenisch.petri.git.ProjectWorktreeService;
+import tech.wenisch.petri.kubernetes.KubernetesSettingsService;
 
 /**
  * Tells every agent what runtime it is working in and how package installs work. Registered as a
@@ -14,9 +17,14 @@ class EnvironmentGuidance {
   private static final AtomicReference<EnvironmentGuidance> CURRENT = new AtomicReference<>();
 
   private final PackageInstallService installs;
+  private final ProjectWorktreeService worktrees;
+  private final KubernetesSettingsService kubernetes;
 
-  EnvironmentGuidance(PackageInstallService installs) {
+  EnvironmentGuidance(PackageInstallService installs, ProjectWorktreeService worktrees,
+      KubernetesSettingsService kubernetes) {
     this.installs = installs;
+    this.worktrees = worktrees;
+    this.kubernetes = kubernetes;
     CURRENT.set(this);
   }
 
@@ -24,6 +32,46 @@ class EnvironmentGuidance {
   static String current() {
     EnvironmentGuidance value = CURRENT.get();
     return value == null ? "" : "\n" + value.text();
+  }
+
+  /** As {@link #current()}, describing the pod when the worktree's project runs in Kubernetes. */
+  static String current(UUID worktreeId) {
+    EnvironmentGuidance value = CURRENT.get();
+    return value == null ? "" : "\n" + value.text(worktreeId);
+  }
+
+  String text(UUID worktreeId) {
+    if (worktreeId != null) {
+      try {
+        UUID projectId = worktrees.get(worktreeId).projectId();
+        if (kubernetes.enabled(projectId)) {
+          var pod = kubernetes.effective(projectId).pod();
+          return podText(pod.image(), pod.toolchain());
+        }
+      } catch (RuntimeException ignored) {
+        // fall back to the general description
+      }
+    }
+    return text();
+  }
+
+  private static String podText(String image, tech.wenisch.petri.kubernetes.ToolchainMode toolchain) {
+    String text = """
+        Runtime environment: this project's workspace runs in a Kubernetes pod started from the
+        image %s. The install_packages tool is disabled: only tools that are already in that image
+        are available, so do not request package installs. run_command and run_tests execute with
+        sh in the worktree inside the pod; use the project's own build wrapper or the tools the
+        image provides. Temporary files: $TMPDIR is a directory private to this worktree that
+        survives between commands and is deleted with the worktree. Use it for scratch files,
+        downloads and generated scripts, never the repository.
+        """.formatted(image);
+    if (toolchain != null && toolchain.enabled()) {
+      text += """
+          In addition, git, curl, python3 with pip, go, node and npm come from a bundle that is on
+          the PATH, so they exist even if the image does not have them.
+          """;
+    }
+    return text;
   }
 
   String text() {

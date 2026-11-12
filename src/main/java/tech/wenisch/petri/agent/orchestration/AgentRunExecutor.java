@@ -267,12 +267,12 @@ public class AgentRunExecutor {
     String instructions = automation && state.instructionsSnapshot() != null
         ? state.instructionsSnapshot()
         : role == null
-            ? INSTRUCTIONS + EnvironmentGuidance.current() + VerificationGuidance.current()
+            ? INSTRUCTIONS + EnvironmentGuidance.current(state.worktreeId()) + VerificationGuidance.current()
             : state.instructionsSnapshot();
     if (instructions == null || instructions.isBlank()) {
       instructions = role == null
-          ? INSTRUCTIONS + EnvironmentGuidance.current() + VerificationGuidance.current()
-          : WorkflowPrompts.instructions(role, null);
+          ? INSTRUCTIONS + EnvironmentGuidance.current(state.worktreeId()) + VerificationGuidance.current()
+          : WorkflowPrompts.instructions(role, null, state.worktreeId());
     }
     var definitions = automation
         ? tools.definitions(state.automationTools() == null

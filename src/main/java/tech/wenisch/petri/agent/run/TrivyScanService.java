@@ -15,6 +15,8 @@ import java.util.Set;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import tech.wenisch.petri.vulnerability.TrivySettingsService;
+import tech.wenisch.petri.workspace.WorkspaceHost;
+import tech.wenisch.petri.workspace.WorkspaceHostKind;
 import tech.wenisch.petri.workspace.WorkspacePaths;
 import tools.jackson.core.JacksonException;
 import tools.jackson.databind.JsonNode;
@@ -90,30 +92,43 @@ public class TrivyScanService {
   }
 
   public Result scan(
-      Path worktree, String subPath, List<String> scanners, List<String> severities,
-      boolean ignoreUnfixed) throws IOException {
-    return scan(worktree, subPath, scanners, severities, ignoreUnfixed, true);
+      WorkspaceHost host, Path worktree, String subPath, List<String> scanners,
+      List<String> severities, boolean ignoreUnfixed) throws IOException {
+    return scan(host, worktree, subPath, scanners, severities, ignoreUnfixed, true);
   }
 
   public Result scan(
-      Path worktree, String subPath, List<String> scanners, List<String> severities,
-      boolean ignoreUnfixed, boolean resolveDependencies) throws IOException {
+      WorkspaceHost host, Path worktree, String subPath, List<String> scanners,
+      List<String> severities, boolean ignoreUnfixed, boolean resolveDependencies)
+      throws IOException {
     Path trivy = executable();
     if (trivy == null) {
       throw new IllegalStateException("Trivy is not installed in this Petri instance. The "
           + "official Petri image includes it; for a custom image add the trivy binary to PATH "
           + "or set petri.trivy.command.");
     }
-    Path root = paths.requireExistingPath(worktree);
+    // A tree on a remote host is copied to Petri first, so only local trees need local checks here.
+    boolean remote = host.kind() != WorkspaceHostKind.LOCAL;
+    Path root = remote ? worktree : paths.requireExistingPath(worktree);
     Path target = root;
     if (subPath != null && !subPath.isBlank() && !".".equals(subPath.strip())) {
-      target = root.resolve(subPath.strip()).normalize();
-      if (!target.startsWith(root) || !Files.isDirectory(target)) {
-        throw new IllegalArgumentException("path must be a directory inside the project");
-      }
-      target = target.toRealPath();
-      if (!target.startsWith(root.toRealPath())) {
-        throw new IllegalArgumentException("path must be a directory inside the project");
+      if (remote) {
+        Path relative = Path.of(subPath.strip()).normalize();
+        boolean git = java.util.stream.StreamSupport.stream(relative.spliterator(), false)
+            .anyMatch(segment -> ".git".equals(segment.toString()));
+        if (relative.isAbsolute() || relative.startsWith("..") || git) {
+          throw new IllegalArgumentException("path must be a directory inside the project");
+        }
+        target = root.resolve(relative);
+      } else {
+        target = root.resolve(subPath.strip()).normalize();
+        if (!target.startsWith(root) || !Files.isDirectory(target)) {
+          throw new IllegalArgumentException("path must be a directory inside the project");
+        }
+        target = target.toRealPath();
+        if (!target.startsWith(root.toRealPath())) {
+          throw new IllegalArgumentException("path must be a directory inside the project");
+        }
       }
     }
     List<String> kinds = scanners == null || scanners.isEmpty() ? List.of("vuln", "secret") : scanners;
@@ -142,11 +157,20 @@ public class TrivyScanService {
       // itself is never written to.
       Path scanRoot = target;
       List<Resolution> steps = List.of();
-      if (resolveDependencies) {
+      if (resolveDependencies || remote) {
         Path copy = Files.createDirectory(home.resolve("project"));
-        if (resolver.copy(target, copy)) {
+        if (host.archives().downloadTree(target, copy, DependencyResolver.SKIP_DIRECTORIES,
+            DependencyResolver.MAX_BYTES, DependencyResolver.MAX_FILES)) {
           scanRoot = copy;
-          steps = resolver.resolve(copy, cache, home);
+          if (resolveDependencies) {
+            // A project in a pod is resolved there, with the pod's tools and package sources, so
+            // repository build code never runs in Petri's container; the scan reads the copy that
+            // the tools' lockfiles are brought back into. A local project is resolved on the copy.
+            steps = remote ? resolver.resolveInPod(host, target, copy)
+                : resolver.resolve(copy, cache, home);
+          }
+        } else if (remote) {
+          throw new IllegalStateException("The project is too large to copy for scanning");
         } else {
           steps = List.of(new Resolution("project", ".", DependencyResolver.SKIPPED,
               "the project is too large to copy, so dependencies were not resolved and only "
@@ -172,7 +196,7 @@ public class TrivyScanService {
           ? confinement.wrap(List.of(scanRoot, trivy.getParent()), List.of(cache, home), argv)
           : argv;
       TestCommandResult run = BoundedProcess.run(wrapped, scanRoot,
-          toolchain.environment(home, extra), TIMEOUT, OUTPUT_LIMIT, "trivy");
+          toolchain.environment(home, extra, Map.of(), host.projectId()), TIMEOUT, OUTPUT_LIMIT, "trivy");
       String note = null;
       if (!run.timedOut() && run.exitCode() != 0 && !argv.contains("--skip-db-update")
           && cachedDatabase().present() && databaseUpdateFailed(run.output())) {
@@ -185,7 +209,7 @@ public class TrivyScanService {
             confinement.available()
                 ? confinement.wrap(List.of(scanRoot, trivy.getParent()), List.of(cache, home), stale)
                 : stale,
-            scanRoot, toolchain.environment(home, extra), TIMEOUT, OUTPUT_LIMIT, "trivy");
+            scanRoot, toolchain.environment(home, extra, Map.of(), host.projectId()), TIMEOUT, OUTPUT_LIMIT, "trivy");
         DatabaseInfo used = cachedDatabase();
         note = "The vulnerability database could not be refreshed, so the scan used the one that "
             + "is available" + (used.updatedAt() == null ? "" : " (built " + used.updatedAt() + ")")
@@ -201,7 +225,7 @@ public class TrivyScanService {
             confinement.available()
                 ? confinement.wrap(List.of(scanRoot, trivy.getParent()), List.of(cache, home), offline)
                 : offline,
-            scanRoot, toolchain.environment(home, extra), TIMEOUT, OUTPUT_LIMIT, "trivy");
+            scanRoot, toolchain.environment(home, extra, Map.of(), host.projectId()), TIMEOUT, OUTPUT_LIMIT, "trivy");
         note = "The remote Maven repository refused the lookup of transitive dependencies, so Java "
             + "results list only dependencies that are declared or already cached. Run again later "
             + "for the full tree.";

@@ -104,6 +104,22 @@
                 }
             }
         },
+        "kubernetesWorkspaces": {
+            "type": "object",
+            "properties": {
+                "rbac": {
+                    "type": "object",
+                    "properties": {
+                        "create": {
+                            "type": "boolean"
+                        },
+                        "namespace": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "livenessProbe": {
             "type": "object",
             "properties": {

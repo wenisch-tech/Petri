@@ -21,9 +21,11 @@ import java.util.Set;
 import java.util.stream.Stream;
 import org.springframework.stereotype.Service;
 import tech.wenisch.petri.config.PetriProperties;
+import tech.wenisch.petri.workspace.RawFile;
+import tech.wenisch.petri.workspace.WorkspaceFiles;
 
 @Service
-public class WorkspaceFileService {
+public class WorkspaceFileService implements WorkspaceFiles {
   private static final int MAX_DEPTH = 20;
   private static final int MAX_QUERY_LENGTH = 500;
   private static final int MAX_PREVIEW_CHARACTERS = 500;
@@ -39,6 +41,7 @@ public class WorkspaceFileService {
     configuredMaxSearchResults = properties.workspace().maxSearchResults();
   }
 
+  @Override
   public ListFilesResult list(Path worktree, String requestedPath, int maxDepth) {
     if (maxDepth < 1 || maxDepth > MAX_DEPTH) {
       throw new IllegalArgumentException("maxDepth must be between 1 and " + MAX_DEPTH);
@@ -74,6 +77,7 @@ public class WorkspaceFileService {
     return new ListFilesResult(List.copyOf(entries), truncated);
   }
 
+  @Override
   public ReadFileResult read(Path worktree, String requestedPath) {
     Path file = resolve(worktree, requestedPath);
     if (!Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) {
@@ -87,6 +91,7 @@ public class WorkspaceFileService {
     return new ReadFileResult(relative(worktree, file), content, sha256(bytes), bytes.length);
   }
 
+  @Override
   public WorkspaceEntryMutation metadata(Path worktree, String requestedPath) {
     Path path = resolve(worktree, requestedPath);
     String kind = type(path);
@@ -94,6 +99,7 @@ public class WorkspaceFileService {
         relative(worktree, path), kind, "FILE".equals(kind) ? fileSha256(path) : null, fileSize(path));
   }
 
+  @Override
   public SearchFilesResult search(
       Path worktree, String requestedPath, String query, int requestedMaxResults) {
     if (query == null || query.isEmpty()) throw new IllegalArgumentException("query is required");
@@ -145,6 +151,7 @@ public class WorkspaceFileService {
     return new SearchFilesResult(List.copyOf(matches), truncated);
   }
 
+  @Override
   public ReplacementPreview previewReplacement(
       Path worktree, String requestedPath, String expectedSha256, String replacementContent) {
     requireSha256(expectedSha256);
@@ -159,6 +166,7 @@ public class WorkspaceFileService {
         current.path(), expectedSha256, sha256(replacement), diff);
   }
 
+  @Override
   public ReplacementPreview previewCreation(
       Path worktree, String requestedPath, String content) {
     byte[] replacement = replacementBytes(content);
@@ -168,6 +176,7 @@ public class WorkspaceFileService {
     return new ReplacementPreview(path, null, sha256(replacement), diff);
   }
 
+  @Override
   public ReadFileResult applyReplacement(
       Path worktree, String requestedPath, String expectedSha256, String replacementContent) {
     ReplacementPreview preview =
@@ -206,6 +215,7 @@ public class WorkspaceFileService {
     }
   }
 
+  @Override
   public ReadFileResult applyCreation(
       Path worktree, String requestedPath, String content) {
     ReplacementPreview preview = previewCreation(worktree, requestedPath, content);
@@ -238,6 +248,7 @@ public class WorkspaceFileService {
     }
   }
 
+  @Override
   public WorkspaceEntryMutation createDirectory(Path worktree, String requestedPath) {
     Path directory = resolveNonExisting(worktree, requestedPath, false);
     try {
@@ -248,6 +259,7 @@ public class WorkspaceFileService {
     }
   }
 
+  @Override
   public WorkspaceEntryMutation move(
       Path worktree, String sourcePath, String targetPath, String expectedSha256) {
     Path source = resolve(worktree, sourcePath);
@@ -273,6 +285,7 @@ public class WorkspaceFileService {
     }
   }
 
+  @Override
   public void delete(
       Path worktree, String requestedPath, String expectedSha256, boolean recursive) {
     Path target = resolve(worktree, requestedPath);
@@ -307,6 +320,55 @@ public class WorkspaceFileService {
     } catch (IOException exception) {
       throw new IllegalStateException("Could not delete workspace entry", exception);
     }
+  }
+
+  @Override
+  public RawFile readRaw(Path worktree, String requestedPath, long maxBytes) {
+    try {
+      Path file = worktree.resolve(requestedPath).normalize();
+      if (!file.startsWith(worktree) || Files.isSymbolicLink(file)
+          || !Files.isRegularFile(file, LinkOption.NOFOLLOW_LINKS)) return RawFile.absent();
+      if (Files.size(file) > maxBytes) return RawFile.oversized();
+      byte[] bytes = Files.readAllBytes(file);
+      if (bytes.length > maxBytes) return RawFile.oversized();
+      return new RawFile(bytes, false);
+    } catch (IOException exception) {
+      throw new IllegalStateException("Could not read changed workspace file", exception);
+    }
+  }
+
+  @Override
+  public boolean copyTree(Path source, Path destination, Set<String> skipDirectories, long maxBytes,
+      int maxFiles) throws IOException {
+    long[] total = {0, 0};
+    boolean[] tooLarge = {false};
+    Files.walkFileTree(source, new java.nio.file.SimpleFileVisitor<>() {
+      @Override
+      public java.nio.file.FileVisitResult preVisitDirectory(
+          Path dir, java.nio.file.attribute.BasicFileAttributes attributes) throws IOException {
+        if (!dir.equals(source) && skipDirectories.contains(dir.getFileName().toString())) {
+          return java.nio.file.FileVisitResult.SKIP_SUBTREE;
+        }
+        Files.createDirectories(destination.resolve(source.relativize(dir).toString()));
+        return java.nio.file.FileVisitResult.CONTINUE;
+      }
+
+      @Override
+      public java.nio.file.FileVisitResult visitFile(
+          Path file, java.nio.file.attribute.BasicFileAttributes attributes) throws IOException {
+        if (!attributes.isRegularFile()) return java.nio.file.FileVisitResult.CONTINUE;
+        total[0] += attributes.size();
+        total[1]++;
+        if (total[0] > maxBytes || total[1] > maxFiles) {
+          tooLarge[0] = true;
+          return java.nio.file.FileVisitResult.TERMINATE;
+        }
+        Files.copy(file, destination.resolve(source.relativize(file).toString()),
+            StandardCopyOption.COPY_ATTRIBUTES);
+        return java.nio.file.FileVisitResult.CONTINUE;
+      }
+    });
+    return !tooLarge[0];
   }
 
   private Path resolve(Path worktree, String requestedPath) {
@@ -415,7 +477,7 @@ public class WorkspaceFileService {
     }
   }
 
-  private static String sha256(byte[] bytes) {
+  public static String sha256(byte[] bytes) {
     try {
       return HexFormat.of().formatHex(MessageDigest.getInstance("SHA-256").digest(bytes));
     } catch (NoSuchAlgorithmException exception) {
@@ -452,7 +514,7 @@ public class WorkspaceFileService {
     }
   }
 
-  private static String unifiedReplacementDiff(
+  public static String unifiedReplacementDiff(
       String path, String current, String replacement, int maxOutputBytes) {
     StringBuilder diff = new StringBuilder()
         .append("--- a/").append(path).append('\n')
@@ -469,7 +531,7 @@ public class WorkspaceFileService {
     return diff.toString();
   }
 
-  private static String unifiedCreationDiff(String path, String content, int maxOutputBytes) {
+  public static String unifiedCreationDiff(String path, String content, int maxOutputBytes) {
     String[] newLines = content.split("\\R", -1);
     StringBuilder diff = new StringBuilder()
         .append("--- /dev/null\n")
