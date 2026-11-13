@@ -15,17 +15,19 @@ RUN gcc -O2 -static -o /petri-confine /src/petri-confine.c
 # database is downloaded at scan time into Petri's data volume, so the image never ships a stale one.
 FROM aquasec/trivy:0.76.0@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222 AS trivy
 
-# Trivy v0.76.1 still embeds oras.land/oras-go/v2 v2.6.2, which has open advisories fixed in v2.6.4.
-# Until upstream bumps it, the shipped binary is built from the release tag with oras-go raised.
+# Trivy v0.76.1 still embeds oras.land/oras-go/v2 v2.6.2 (open advisories, fixed in v2.6.4), golang.org/x/net v0.60.0 (fixed in v0.62.0) and go-jose v4.1.5 (fixed in v4.1.7).
+# Until upstream bumps them, the shipped binary is built from the release tag with them raised.
 FROM golang:1.27-alpine AS trivy-build
 ARG TRIVY_VERSION=0.76.1
 ARG ORAS_GO_VERSION=2.6.4
+ARG X_NET_VERSION=0.62.0
+ARG GO_JOSE_VERSION=4.1.7
 ARG APK_MIRROR
 RUN if [ -n "$APK_MIRROR" ]; then sed -i "s#https\?://[^/]*/alpine#${APK_MIRROR%/}#" /etc/apk/repositories; fi \
  && apk add --no-cache git
 RUN git clone --depth 1 --branch "v${TRIVY_VERSION}" https://github.com/aquasecurity/trivy.git /src
 WORKDIR /src
-RUN go get "oras.land/oras-go/v2@v${ORAS_GO_VERSION}" \
+RUN go get "oras.land/oras-go/v2@v${ORAS_GO_VERSION}" "golang.org/x/net@v${X_NET_VERSION}" "github.com/go-jose/go-jose/v4@v${GO_JOSE_VERSION}" \
  && CGO_ENABLED=0 go build -trimpath \
       -ldflags "-s -w -X github.com/aquasecurity/trivy/pkg/version/app.ver=${TRIVY_VERSION}" \
       -o /trivy ./cmd/trivy

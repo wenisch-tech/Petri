@@ -26,6 +26,7 @@
              Boot release in use ships a version at least this recent. -->
         <tomcat.version>11.0.27</tomcat.version>
         <jackson-bom.version>3.1.8</jackson-bom.version>
+        <thymeleaf.version>3.1.6.RELEASE</thymeleaf.version>
         <!-- Kubernetes client for workspaces that live in a pod. It still uses Jackson 2 internally
              (a different package than the Jackson 3 used by Petri), so both coexist. -->
         <fabric8.version>8.0.0</fabric8.version>
