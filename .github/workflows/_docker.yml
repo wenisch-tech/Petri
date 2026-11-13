@@ -70,8 +70,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # The classic builder reads the base image from the local Docker daemon.
-          docker build --file Dockerfile.tools \
+          # The Buildx builder set up above runs in its own container and cannot see the image that was just
+          # loaded into the Docker daemon, so this build uses the daemon's own builder.
+          docker buildx build --builder default --load --file Dockerfile.tools \
             --build-arg BASE_IMAGE="${{ inputs.image }}:${{ inputs.version }}" \
             --tag "${{ inputs.image }}:${{ inputs.version }}-tools" .
 

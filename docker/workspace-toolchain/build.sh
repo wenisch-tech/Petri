@@ -25,6 +25,7 @@ WORK="${WORK:-/tmp/workspace-toolchain}"
 APK_CACHE="${APK_CACHE:-/var/cache/workspace-toolchain-apk}"
 SELF="$(cd "$(dirname "$0")" && pwd)/$(basename "$0")"
 
+mkdir -p "$APK_CACHE"
 apk add --no-cache patchelf tar gzip >/dev/null
 
 # Rewrites "#!/usr/bin/python3" and "#!/usr/bin/env node" to the bundled interpreter by absolute
