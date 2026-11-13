@@ -4,7 +4,7 @@
 
 <!-- How Petri reaches the cluster. `cfg` is a KubernetesWorkspaceConfig; secrets are never rendered. -->
 <th:block th:fragment="clusterFields(cfg)">
-  <div x-data="{ mode: '[[${cfg.authMode == null ? 'KUBECONFIG' : cfg.authMode}]]' }" class="space-y-4">
+  <div th:attr="x-data=|{ mode: '${cfg.authMode == null ? 'KUBECONFIG' : cfg.authMode}' }|" class="space-y-4">
     <div>
       <span class="label">Access to the cluster</span>
       <div class="flex flex-wrap gap-4">
