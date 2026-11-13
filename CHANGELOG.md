@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.24.3 - 2026-11-13
+
+### [0.24.3](https://github.com/wenisch-tech/Petri/compare/v0.24.2...v0.24.3) (2026-11-13)
+
+
+### Bug Fixes
+
+* fixed UI Display of kubernetes workspace config ([fb4f99e](https://github.com/wenisch-tech/Petri/commit/fb4f99ecca3c20e47f8585db3e9c0c0236672ffd))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.24.3
+
+
 ## v0.24.2 - 2026-11-13
 
 ### [0.24.2](https://github.com/wenisch-tech/Petri/compare/v0.24.1...v0.24.2) (2026-11-13)
