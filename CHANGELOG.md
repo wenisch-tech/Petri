@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.24.1 - 2026-11-13
+
+### [0.24.1](https://github.com/wenisch-tech/Petri/compare/v0.24.0...v0.24.1) (2026-11-13)
+
+
+### Bug Fixes
+
+* updated build ([c7927bb](https://github.com/wenisch-tech/Petri/commit/c7927bb7cece39d7a16ffdec1939eb2c0f5a3a59))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.24.1
+
+
 ## v0.23.2 - 2026-10-27
 
 ### [0.23.2](https://github.com/wenisch-tech/Petri/compare/v0.23.1...v0.23.2) (2026-10-27)
