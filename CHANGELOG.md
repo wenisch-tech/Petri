@@ -1,5 +1,19 @@
 # Changelog
 
+## v0.24.4 - 2026-11-17
+
+### [0.24.4](https://github.com/wenisch-tech/Petri/compare/v0.24.3...v0.24.4) (2026-11-17)
+
+
+### Bug Fixes
+
+* update cves ([dea0d14](https://github.com/wenisch-tech/Petri/commit/dea0d147d85275127e1b28b82a2bd523633e8753))
+
+
+
+Docker image: ghcr.io/wenisch-tech/petri:0.24.4
+
+
 ## v0.24.3 - 2026-11-13
 
 ### [0.24.3](https://github.com/wenisch-tech/Petri/compare/v0.24.2...v0.24.3) (2026-11-13)
