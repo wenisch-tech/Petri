@@ -22,12 +22,18 @@ ARG TRIVY_VERSION=0.76.1
 ARG ORAS_GO_VERSION=2.6.4
 ARG X_NET_VERSION=0.62.0
 ARG GO_JOSE_VERSION=4.1.7
+ARG OTEL_TRACE_VERSION=1.47.0
+ARG CONTAINERD_VERSION=2.4.2
+ARG AWS_EBS_VERSION=1.33.3
+ARG REGEXP2_VERSION=1.12.0
 ARG APK_MIRROR
 RUN if [ -n "$APK_MIRROR" ]; then sed -i "s#https\?://[^/]*/alpine#${APK_MIRROR%/}#" /etc/apk/repositories; fi \
  && apk add --no-cache git
 RUN git clone --depth 1 --branch "v${TRIVY_VERSION}" https://github.com/aquasecurity/trivy.git /src
 WORKDIR /src
 RUN go get "oras.land/oras-go/v2@v${ORAS_GO_VERSION}" "golang.org/x/net@v${X_NET_VERSION}" "github.com/go-jose/go-jose/v4@v${GO_JOSE_VERSION}" \
+      "go.opentelemetry.io/otel/trace@v${OTEL_TRACE_VERSION}" "go.opentelemetry.io/otel/log@v${OTEL_TRACE_VERSION}" "github.com/containerd/containerd/v2@v${CONTAINERD_VERSION}" \
+      "github.com/aws/aws-sdk-go-v2/service/ebs@v${AWS_EBS_VERSION}" "github.com/dlclark/regexp2@v${REGEXP2_VERSION}" \
  && CGO_ENABLED=0 go build -trimpath \
       -ldflags "-s -w -X github.com/aquasecurity/trivy/pkg/version/app.ver=${TRIVY_VERSION}" \
       -o /trivy ./cmd/trivy

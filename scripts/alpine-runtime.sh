@@ -29,6 +29,11 @@ apk add --no-cache --upgrade 'libpng>=1.6.59-r0' 'zlib>=1.3.2-r1'
 # step a no-op once the base image already carries a fixed version.
 apk add --no-cache --repository "${ALPINE_BASE}/edge/main" 'libexpat>=2.9.0-r0'
 
+# openssl/libcrypto3/libssl3: security floor 3.5.9-r1. Alpine v3.24 still ships 3.5.9-r0, so these come
+# from edge/main until v3.24 has caught up (same 3.5.9 source, same libcrypto.so.3 soname, so a
+# drop-in). A no-op once the base image already carries the fixed version.
+apk add --no-cache --upgrade --repository "${ALPINE_BASE}/edge/main" 'openssl>=3.5.9-r1' 'libcrypto3>=3.5.9-r1' 'libssl3>=3.5.9-r1'
+
 # curl/libcurl: security floor 8.23.0-r0. Alpine v3.24 still ships 8.22.0-r0, so both come from
 # edge/main until v3.24 has caught up; the constraint makes this a no-op once the base is fixed.
 apk add --no-cache --upgrade --repository "${ALPINE_BASE}/edge/main" 'curl>=8.23.0-r0' 'libcurl>=8.23.0-r0'
