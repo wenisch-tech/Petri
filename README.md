@@ -31,6 +31,7 @@ PostgreSQL, and works with OpenAI, LiteLLM, Ollama and any OpenAI-compatible end
   <img src="docs/images/petri-tour.gif" alt="A tour of Petri: the project dashboard, the vulnerability view with Trivy findings and one-click fixes, pipeline runs, open pull requests and the browser workspace" width="900">
 </p>
 
+
 <p align="center"><sub>
   A tour of Petri: the project dashboard, vulnerability scanning with fixes, pipelines, pull
   requests and the workspace.
