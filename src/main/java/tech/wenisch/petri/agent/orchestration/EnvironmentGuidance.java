@@ -67,7 +67,7 @@ class EnvironmentGuidance {
         """.formatted(image);
     if (toolchain != null && toolchain.enabled()) {
       text += """
-          In addition, git, curl, python3 with pip, go, node and npm come from a bundle that is on
+          In addition, git, curl, python3 with pip, go, node, npm and podman come from a bundle that is on
           the PATH, so they exist even if the image does not have them.
           """;
     }

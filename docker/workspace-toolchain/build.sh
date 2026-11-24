@@ -10,13 +10,13 @@
 #
 # Runs in an alpine container as root. Environment:
 #   PREFIX     installation directory inside the pod         (/petri/workspace/toolchain)
-#   PACKAGES   Alpine packages to bundle                     (git curl python3 py3-pip go nodejs npm ...)
+#   PACKAGES   Alpine packages to bundle                     (git curl python3 py3-pip go nodejs npm podman ...)
 #   ARCHES     Alpine architectures to build                 (x86_64 aarch64)
 #   OUT        output directory: <OUT>/<amd64|arm64>/toolchain.tar.gz and toolchain.version
 set -eu
 
 PREFIX="${PREFIX:-/petri/workspace/toolchain}"
-PACKAGES="${PACKAGES:-git curl python3 py3-pip go nodejs npm ca-certificates-bundle}"
+PACKAGES="${PACKAGES:-git curl python3 py3-pip go nodejs npm podman ca-certificates-bundle}"
 ARCHES="${ARCHES:-x86_64 aarch64}"
 OUT="${OUT:-/out}"
 REPOSITORIES="${REPOSITORIES:-/etc/apk/repositories}"
@@ -89,6 +89,10 @@ wrapper() {
           echo ": \"\${NODE_ICU_DATA:=\$R$ICU_DIRECTORY}\""
           echo 'export NODE_ICU_DATA'
         fi ;;
+      podman)
+        # Podman looks for conmon, crun, netavark ... in fixed system directories; point it at the bundle.
+        echo ': "${CONTAINERS_HELPER_BINARY_DIRS:=$R/usr/bin:$R/usr/libexec/podman:$R/usr/lib/podman}"'
+        echo 'export CONTAINERS_HELPER_BINARY_DIRS' ;;
       go|gofmt)
         echo ': "${GOROOT:=$R/usr/lib/go}"'
         echo ': "${GOTOOLCHAIN:=local}"'

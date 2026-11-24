@@ -17,7 +17,7 @@ ARG BASE_IMAGE=ghcr.io/wenisch-tech/petri:latest
 # The bundle is built from the Alpine release of this build, for both architectures.
 FROM alpine:3.24 AS workspace-toolchain
 ARG APK_MIRROR
-ARG WORKSPACE_TOOLCHAIN_PACKAGES="git curl python3 py3-pip go nodejs npm ca-certificates-bundle"
+ARG WORKSPACE_TOOLCHAIN_PACKAGES="git curl python3 py3-pip go nodejs npm podman ca-certificates-bundle"
 COPY docker/workspace-toolchain/build.sh /build/build.sh
 RUN if [ -n "$APK_MIRROR" ]; then sed -i "s#https\?://[^/]*/alpine#${APK_MIRROR%/}#" /etc/apk/repositories; fi \
  && PACKAGES="$WORKSPACE_TOOLCHAIN_PACKAGES" sh /build/build.sh

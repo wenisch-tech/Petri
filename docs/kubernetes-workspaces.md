@@ -106,7 +106,7 @@ docker build -f Dockerfile.tools --build-arg BASE_IMAGE=petri \
 | Build argument | Effect |
 | --- | --- |
 | `BASE_IMAGE` | The regular Petri image to build on. |
-| `WORKSPACE_TOOLCHAIN_PACKAGES` | The Alpine packages to bundle. Default: `git curl python3 py3-pip go nodejs npm ca-certificates-bundle`. Add more, for example `openjdk25 maven`; the commands of every listed package get a wrapper. |
+| `WORKSPACE_TOOLCHAIN_PACKAGES` | The Alpine packages to bundle. Default: `git curl python3 py3-pip go nodejs npm podman ca-certificates-bundle`. Add more, for example `openjdk25 maven`; the commands of every listed package get a wrapper. |
 | `APK_MIRROR` | The Alpine mirror the build uses. |
 
 Alternatively mount a bundle built by `scripts/build-workspace-toolchain.sh` at that directory. For development
