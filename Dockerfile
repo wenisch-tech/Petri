@@ -1,4 +1,4 @@
-# syntax=docker/dockerfile:1.27@sha256:4edf897a3ffa55b89f906fc8cc78afdb3f1834cc9c7083565e611a8a7d5fe99e
+# syntax=docker/dockerfile:1.29@sha256:572cebbc2b15e6f84c077742952674889cb63cd5e9b80abdffcbe587b6f19183
 
 # petri-confine: a tiny static Landlock helper that confines terminal and test commands to the
 # worktree for any UID, without root or setuid.
@@ -13,7 +13,7 @@ RUN gcc -O2 -static -o /petri-confine /src/petri-confine.c
 # binary taken from the official image, pinned by digest; Renovate keeps the pin current. The binary
 # was scanned with Trivy itself (HIGH and CRITICAL: none) before it was added. The vulnerability
 # database is downloaded at scan time into Petri's data volume, so the image never ships a stale one.
-FROM aquasec/trivy:0.76.0@sha256:2416d1f74045b57274df1a340eee6b510cacd73c66a6ccb8da092b117eb7d222 AS trivy
+FROM aquasec/trivy:0.76.2@sha256:8f6bb947dbc528902e11f2f5be52f7b519f6a39d5d148f41166f2040499768fb AS trivy
 
 # Trivy v0.76.1 still embeds oras.land/oras-go/v2 v2.6.2 (open advisories, fixed in v2.6.4), golang.org/x/net v0.60.0 (fixed in v0.62.0) and go-jose v4.1.5 (fixed in v4.1.7).
 # Until upstream bumps them, the shipped binary is built from the release tag with them raised.
